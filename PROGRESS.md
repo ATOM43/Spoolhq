@@ -11,3 +11,9 @@ Newest entries at the bottom. One entry per merged ticket.
 - GitHub Actions CI on Linux, macOS and Windows, with pinned action SHAs and uv/pnpm caching.
 - Contributor docs, issue forms, PR template, Apache-2.0 licence, and the decision log.
 - Only placeholders exist: `spoolhq.__version__` and `appName()`, each with one test. No application code yet.
+
+## T01 follow-ups
+
+- Planning docs (`task.md`, `Plan.md`) renamed from the working name "orch" / "Agent Orchestrator" to SpoolHQ: CLI `spool`, paths under `~/.spoolhq/` and `~/spoolhq-projects/`.
+- GitHub repo renamed from `ATOM43/Spool` to `ATOM43/spoolhq`.
+- T01 tooling decisions recorded in `DECISIONS.md` (entries 11–16).

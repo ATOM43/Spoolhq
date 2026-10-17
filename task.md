@@ -1,7 +1,7 @@
-# Agent Orchestrator — Task
+# SpoolHQ — Task
 
-Working name: `orch` (placeholder until the first public commit).
-Status: planning. Ticket plan: "Agent Orchestrator — Ticket Plan" (26 tickets, 6 phases, ~70 h).
+Name: SpoolHQ (package `spoolhq`, CLI `spool`).
+Status: planning. Ticket plan: "SpoolHQ — Ticket Plan" (26 tickets, 6 phases, ~70 h).
 
 This file is the root context for the project. It states what to build and why. The ticket plan states the order to build it in. Once the tool reaches milestone M1, this file becomes the `CONTEXT.md` the orchestrator itself reads while implementing its own remaining tickets.
 
@@ -118,7 +118,7 @@ Only three roles are LLM agents. Everything else is plain, testable code.
 ### Application
 
 - **Daemon** (Python, FastAPI): owns projects, the run loop, git and the tracker. Keeps running when the window is closed; can run headless on a server.
-- **CLI** (`orch`, Typer): every action is available without the UI.
+- **CLI** (`spool`, Typer): every action is available without the UI.
 - **Desktop app** (Tauri 2, React, TypeScript): projects sidebar, ticket board, plan review, live run console, settings. It talks only to the daemon's API.
 - Installers for macOS, Windows and Linux, with the daemon bundled as a sidecar.
 
@@ -141,14 +141,14 @@ Only three roles are LLM agents. Everything else is plain, testable code.
 Project workspace (outside the repo):
 
 ```text
-~/orch-projects/<project>/
+~/spoolhq-projects/<project>/
   project.yaml        # settings: repo, branch, stack commands, agent, limits, merge policy, remote, tracker
   CONTEXT.md          # the spec
   tickets/
     T01-repo-tooling.md
     T02-daemon-scaffold.md
   runs/<ticket>/<attempt>/   # transcript, gate output, diff, review verdict
-  .orch/state.db      # runs, attempts, events, costs
+  .spoolhq/state.db   # runs, attempts, events, costs
 ```
 
 In the code repo, because agents read them with the code:
@@ -174,11 +174,11 @@ tracker_ref: null
 ---
 
 ## Scope
-- `orch init <name> --repo <path>` creates the workspace folder.
+- `spool init <name> --repo <path>` creates the workspace folder.
 - `project.yaml` validated by Pydantic; errors name the field.
 
 ## Done when
-- [ ] `orch init` on an existing repo creates a valid workspace
+- [ ] `spool init` on an existing repo creates a valid workspace
 - [ ] `just test` passes
 ```
 
@@ -251,7 +251,7 @@ Planned as later phases, with v1 interfaces designed so they slot in:
 
 ## Open questions
 
-- Should tickets live in the workspace (no commit noise) or in the repo under `.orch/` (they travel with the code)? Current assumption: workspace.
+- Should tickets live in the workspace (no commit noise) or in the repo under `.spoolhq/` (they travel with the code)? Current assumption: workspace.
 - Default merge policy: merge directly unless a rule triggers, or open a PR unless a ticket is marked trivial?
 - Should the reviewer use a different model from the implementer to reduce shared blind spots?
 - Project and CLI name before the first public commit.

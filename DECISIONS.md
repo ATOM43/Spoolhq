@@ -12,3 +12,9 @@ Each entry is one decision and the reason for it. Add new entries at the bottom;
 8. **Only the planner, implementer and reviewer are LLM agents; everything else is plain code.** Gates, git, merging and tracker sync must be deterministic and testable.
 9. **Local git first, GitHub optional.** The tool must work offline and without an account; GitHub adds pull requests on top.
 10. **Licence: Apache-2.0.** Permissive, with an explicit patent grant, and compatible with the prior art we may borrow from.
+11. **TypeScript pinned to 6.0.3, not 7.x.** typescript-eslint 8.71 supports TypeScript < 6.1; revisit when typescript-eslint supports 7.
+12. **`.gitattributes` forces LF line endings.** Windows checkouts would otherwise get CRLF and fail the Prettier and ruff format checks.
+13. **ruff's `S` (security) rules are on.** `shell=True` and similar unsafe calls are caught in CI rather than in review.
+14. **`uv sync --locked` everywhere.** CI fails if `uv.lock` is out of date instead of silently re-resolving.
+15. **The justfile's Windows shell is `powershell.exe`, not `pwsh`.** Windows PowerShell is always installed; PowerShell 7 is not.
+16. **The GitHub repo is `ATOM43/spoolhq`.** It matches the package name, so there is one name to search for.
