@@ -1,0 +1,41 @@
+[project]
+name = "spoolhq"
+version = "0.0.0"
+description = "SpoolHQ daemon: turns a written spec into a ticket plan and runs a coding agent on it."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy==2.4.0",
+    "pytest==9.1.1",
+    "ruff==0.17.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# Default rules plus import sorting, pyupgrade, bugbear and the security checks
+# (flake8-bandit) that catch shell=True and similar.
+select = ["E", "F", "W", "I", "UP", "B", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# Plain assert is how pytest tests are written.
+"tests/**" = ["S101"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "--strict-config"]
