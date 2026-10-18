@@ -19,7 +19,7 @@ Linux, macOS and Windows are all supported. On Windows, `just` runs recipes in P
 | Command | What it does |
 | --- | --- |
 | `just install` | Installs Python and Node dependencies exactly as locked |
-| `just lint` | ruff, ruff format check, mypy, import-linter, ESLint (including the Feature-Sliced Design boundaries), Prettier check, `tsc --noEmit`, `cargo fmt --check`, `cargo clippy -- -D warnings` |
+| `just lint` | ruff, ruff format check, mypy, import-linter, the 500-line limit on source files (`scripts/check_line_limit.py`), ESLint (including the Feature-Sliced Design boundaries), Prettier check, `tsc --noEmit`, `cargo fmt --check`, `cargo clippy -- -D warnings` |
 | `just test` | pytest and Vitest with coverage (daemon floor 85%), and `cargo test` — see [docs/testing.md](docs/testing.md) |
 | `just dev` | Starts the daemon (`spool serve`) and the desktop app (`pnpm tauri dev`) |
 | `just daemon` / `just desktop` | Starts only one of them |
@@ -34,6 +34,7 @@ Run `just lint && just test` before you push.
 - **CI must pass** on Linux, macOS and Windows; if a push turns it red, fix it with a follow-up commit on `main`.
 - Never force-push `main`.
 - Code goes where [docs/architecture.md](docs/architecture.md) says; `just lint` enforces the layer rules.
+- No source file over 500 lines (tests are exempt); split it along its responsibilities. An exception goes in `ALLOWED` in `scripts/check_line_limit.py`, with the reason.
 - Commit in small, logical steps with clear messages.
 - Never commit secrets, tokens or machine-specific paths.
 

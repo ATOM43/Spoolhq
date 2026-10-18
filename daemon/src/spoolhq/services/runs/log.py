@@ -31,35 +31,19 @@ from spoolhq.services.runs.model import (
     RunStatus,
     Usage,
 )
+from spoolhq.services.runs.rows import (
+    ATTEMPT_COLUMNS,
+    EVENT_COLUMNS,
+    RUN_COLUMNS,
+    encode_payload,
+    event_kind,
+    fetch_run,
+    to_event,
+    to_run,
+)
 
-MAX_PAYLOAD_BYTES = 64 * 1024
 RUNS_DIR = "runs"
 READ_ONLY_INSTANCE = "read-only"
-
-_RUN_COLUMNS = "id, ticket_id, status, reason, daemon_instance, started_at, ended_at"
-_ATTEMPT_COLUMNS = (
-    "id, run_id, ticket_id, number, kind, status, dir, backend, model, input_tokens, "
-    "output_tokens, cost_micro_usd, started_at, ended_at"
-)
-_EVENT_COLUMNS = "id, run_id, attempt_id, ts, kind, payload"
-
-
-def encode_payload(payload: Any) -> str:
-    """The payload as compact JSON; ValueError if it is not a JSON-serialisable dict
-    or is larger than MAX_PAYLOAD_BYTES once encoded."""
-    if not isinstance(payload, dict):
-        raise ValueError(f"event payload must be a dict, got {type(payload).__name__}")
-    try:
-        text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"event payload is not JSON-serialisable: {exc}") from exc
-    size = len(text.encode("utf-8"))
-    if size > MAX_PAYLOAD_BYTES:
-        raise ValueError(
-            f"event payload is {size} bytes, over the {MAX_PAYLOAD_BYTES}-byte limit; "
-            "put large content in the attempt's files"
-        )
-    return text
 
 
 def _check_count(name: str, value: int) -> None:
@@ -101,7 +85,7 @@ class Transaction:
         payload: Mapping[str, Any],
         attempt_id: int | None = None,
     ) -> Event:
-        kind = _event_kind(kind)
+        kind = event_kind(kind)
         text = encode_payload(payload)
         ts = self.now()
         cursor = self.conn.execute(
@@ -119,14 +103,6 @@ class Transaction:
         )
         self.events.append(event)
         return event
-
-
-def _event_kind(kind: EventKind | str) -> EventKind:
-    try:
-        return EventKind(kind)
-    except ValueError:
-        known = ", ".join(k.value for k in EventKind)
-        raise ValueError(f"unknown event kind {kind!r}; expected one of {known}") from None
 
 
 class RunLog:
@@ -235,7 +211,7 @@ class RunLog:
 
     def _attempt(self, conn: sqlite3.Connection, attempt_id: int) -> Attempt:
         row = conn.execute(
-            f"SELECT {_ATTEMPT_COLUMNS} FROM attempts WHERE id = ?",  # noqa: S608 - constant columns
+            f"SELECT {ATTEMPT_COLUMNS} FROM attempts WHERE id = ?",  # noqa: S608 - constant columns
             (attempt_id,),
         ).fetchone()
         if row is None:
@@ -419,7 +395,7 @@ class RunLog:
     ) -> Event:
         """Append an event. ``payload`` must be a JSON-serialisable dict of at most
         64 KiB once encoded; large content belongs in the attempt's files."""
-        _event_kind(kind)
+        event_kind(kind)
         encode_payload(payload)
         with self.transaction() as tx:
             if attempt_id is not None:
@@ -444,18 +420,18 @@ class RunLog:
             check_ticket_id(ticket_id)
         with self._reading() as conn:
             rows = conn.execute(
-                f"SELECT {_RUN_COLUMNS} FROM runs WHERE ? IS NULL OR ticket_id = ? "  # noqa: S608 - constant columns
+                f"SELECT {RUN_COLUMNS} FROM runs WHERE ? IS NULL OR ticket_id = ? "  # noqa: S608 - constant columns
                 "ORDER BY id DESC LIMIT ?",
                 (ticket_id, ticket_id, limit),
             ).fetchall()
-        return [_to_run(row) for row in rows]
+        return [to_run(row) for row in rows]
 
     def list_attempts(self, run_id: int) -> list[Attempt]:
         """A run's attempts in order. Raises KeyError for an unknown run."""
         with self._reading() as conn:
             self._run(conn, run_id)
             rows = conn.execute(
-                f"SELECT {_ATTEMPT_COLUMNS} FROM attempts WHERE run_id = ? ORDER BY number",  # noqa: S608 - constant columns
+                f"SELECT {ATTEMPT_COLUMNS} FROM attempts WHERE run_id = ? ORDER BY number",  # noqa: S608 - constant columns
                 (run_id,),
             ).fetchall()
         return [self._to_attempt(row) for row in rows]
@@ -483,19 +459,11 @@ class RunLog:
         """Events with an id above ``after_id`` in id order, optionally of one run."""
         with self._reading() as conn:
             rows = conn.execute(
-                f"SELECT {_EVENT_COLUMNS} FROM events WHERE id > ? "  # noqa: S608 - constant columns
+                f"SELECT {EVENT_COLUMNS} FROM events WHERE id > ? "  # noqa: S608 - constant columns
                 "AND (? IS NULL OR run_id = ?) ORDER BY id LIMIT ?",
                 (after_id, run_id, run_id, limit),
             ).fetchall()
-        return [_to_event(row) for row in rows]
-
-
-def fetch_run(conn: sqlite3.Connection, run_id: int) -> Run:
-    """The run with ``run_id``, read on ``conn``; KeyError if there is none."""
-    row = conn.execute(f"SELECT {_RUN_COLUMNS} FROM runs WHERE id = ?", (run_id,)).fetchone()  # noqa: S608 - constant columns
-    if row is None:
-        raise KeyError(f"run {run_id} not found")
-    return _to_run(row)
+        return [to_event(row) for row in rows]
 
 
 def _make_attempt_dir(folder: Path) -> None:
@@ -508,26 +476,3 @@ def _make_attempt_dir(folder: Path) -> None:
             raise
         os.rmdir(folder)
         folder.mkdir(exist_ok=False)
-
-
-def _to_run(row: tuple[Any, ...]) -> Run:
-    return Run(
-        id=row[0],
-        ticket_id=row[1],
-        status=RunStatus(row[2]),
-        reason=row[3],
-        daemon_instance=row[4],
-        started_at=row[5],
-        ended_at=row[6],
-    )
-
-
-def _to_event(row: tuple[Any, ...]) -> Event:
-    return Event(
-        id=row[0],
-        run_id=row[1],
-        attempt_id=row[2],
-        ts=row[3],
-        kind=EventKind(row[4]),
-        payload=json.loads(row[5]),
-    )

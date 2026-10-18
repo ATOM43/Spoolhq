@@ -1,13 +1,12 @@
 """The Claude Code adapter: drives the user's own ``claude`` CLI in headless mode.
 
 SpoolHQ does not enforce the policy itself; it builds Claude Code's configuration
-(``build_argv``, ``sandbox_settings``, ``child_env``), checks that it took effect (the
-``init`` message, through ``ClaudeStreamParser``) and stops the run if it didn't. The
-four layers are described in ``docs/agents.md``. Every process call is an argument
-list; the prompt goes to stdin only.
+(``claude_config``: ``build_argv``, ``sandbox_settings``, ``child_env``), checks that it
+took effect (the ``init`` message, through ``ClaudeStreamParser``) and stops the run if
+it didn't. The four layers are described in ``docs/agents.md``. Every process call is
+an argument list; the prompt goes to stdin only.
 """
 
-import dataclasses
 import json
 import os
 import queue
@@ -25,10 +24,18 @@ from dataclasses import replace
 from pathlib import Path
 from typing import IO, Any
 
+from spoolhq.services.agents.claude_config import (
+    API_KEY_VAR,
+    PERMISSION_MODES,
+    build_argv,
+    check_worktree,
+    child_env,
+    existing_stubs,
+    remove_new_stubs,
+    with_config_dir,
+)
 from spoolhq.services.agents.claude_stream import (
     BACKEND_NAME,
-    CLAUDE_TOOLS,
-    FILE_TOOLS,
     ClaudeStreamParser,
     PolicyViolation,
 )
@@ -38,7 +45,6 @@ from spoolhq.services.agents.model import (
     Billing,
     Budget,
     Outcome,
-    PolicyError,
     RunResult,
 )
 from spoolhq.services.agents.runner import (
@@ -55,74 +61,6 @@ POLL_S = 0.1
 EXIT_WAIT_S = 10.0
 INTERRUPT_WAIT_S = 10.0
 TERMINATE_WAIT_S = 5.0
-
-ENV_ALLOWED = frozenset(
-    {
-        "PATH",
-        "HOME",
-        "USER",
-        "LOGNAME",
-        "LANG",
-        "TMPDIR",
-        "TMP",
-        "TEMP",
-        "XDG_CONFIG_HOME",
-        "XDG_DATA_HOME",
-        "XDG_CACHE_HOME",
-        "XDG_RUNTIME_DIR",
-        "DBUS_SESSION_BUS_ADDRESS",
-        "CLAUDE_CONFIG_DIR",
-        "HTTPS_PROXY",
-        "HTTP_PROXY",
-        "NO_PROXY",
-        "https_proxy",
-        "http_proxy",
-        "no_proxy",
-        # A corporate proxy's CA, so Claude Code can reach the API through it.
-        "NODE_EXTRA_CA_CERTS",
-        "SSL_CERT_FILE",
-    }
-)
-ENV_ALLOWED_WINDOWS = frozenset(
-    {"SYSTEMROOT", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "COMSPEC", "PATHEXT"}
-)
-ENV_ALLOWED_PREFIXES = ("LC_",)
-API_KEY_VAR = "ANTHROPIC_API_KEY"
-ENV_SET = {
-    # Claude Code removes its own credentials from the environment of the commands
-    # the agent runs.
-    "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
-    "DISABLE_AUTOUPDATER": "1",
-}
-# With CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1, Claude Code 2.1.302 reports (and uses) the
-# "default" mode instead of dontAsk. With --permission-prompts none, every call that
-# would prompt there is denied, as in dontAsk; any other mode stops the run.
-PERMISSION_MODES = frozenset({"dontAsk", "default"})
-
-# Empty files and folders Claude Code 2.1.302 creates in its working folder when
-# CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1 is set (mount points that write-protect them in the
-# sandbox), and leaves behind. Removed after a run if they are new and still empty.
-SCRUB_STUBS = (
-    ".env",
-    ".env.development",
-    ".env.development.local",
-    ".env.local",
-    ".env.production",
-    ".env.production.local",
-    ".env.test",
-    ".env.test.local",
-    ".gitmodules",
-    ".npmrc",
-    ".yarnrc",
-    ".yarnrc.yml",
-    "bunfig.toml",
-    "package-lock.json",
-    "package.json",
-    "pnpm-lock.yaml",
-    "yarn.lock",
-    ".claude",
-    "node_modules",
-)
 
 SUBSCRIPTION_METHODS = frozenset({"claude.ai", "oauth_token"})
 API_METHODS = frozenset({"api_key", "api_key_helper"})
@@ -163,156 +101,6 @@ def billing_for(auth_method: str | None) -> Billing:
     if auth_method in API_METHODS:
         return "api"
     return "unknown"
-
-
-def child_env(parent: Mapping[str, str], *, billing: Billing, platform: str) -> dict[str, str]:
-    """The only environment the ``claude`` process gets: an allowlist, plus ENV_SET.
-
-    ``ANTHROPIC_API_KEY`` is passed only for API billing; with it, Claude Code would
-    bill the API instead of the subscription.
-    """
-    windows = platform == "win32"
-    allowed = ENV_ALLOWED | ENV_ALLOWED_WINDOWS if windows else ENV_ALLOWED
-    if billing == "api":
-        allowed = allowed | {API_KEY_VAR}
-    env: dict[str, str] = {}
-    for name, value in parent.items():
-        key = name.upper() if windows else name  # Windows names ignore case
-        if key in allowed or key.startswith(ENV_ALLOWED_PREFIXES):
-            env[name] = value
-    env.update(ENV_SET)
-    return env
-
-
-def with_config_dir(policy: AgentPolicy, env: Mapping[str, str]) -> AgentPolicy:
-    """``policy`` that also denies ``CLAUDE_CONFIG_DIR`` when ``env`` moves Claude Code's
-    config folder away from ``~/.claude``."""
-    config_dir = next(
-        (value for name, value in env.items() if name.upper() == "CLAUDE_CONFIG_DIR"), None
-    )
-    if not config_dir or config_dir in policy.denied_read_paths:
-        return policy
-    return dataclasses.replace(policy, denied_read_paths=(*policy.denied_read_paths, config_dir))
-
-
-def sandbox_settings(policy: AgentPolicy) -> dict[str, Any]:
-    """The ``--settings`` object: a required OS sandbox, no network, no hooks."""
-    return {
-        "sandbox": {
-            "enabled": True,
-            "failIfUnavailable": True,
-            "allowUnsandboxedCommands": False,
-            # The default (true) would approve every sandboxed command, allowlist or not.
-            "autoAllowBashIfSandboxed": False,
-            "network": {
-                "allowedDomains": list(policy.network_domains),
-                "strictAllowlist": True,
-            },
-            "credentials": {
-                "files": [{"path": path, "mode": "deny"} for path in policy.denied_read_paths]
-            },
-        },
-        "disableAllHooks": True,
-    }
-
-
-def build_argv(
-    claude_cmd: Sequence[str],
-    policy: AgentPolicy,
-    budget: Budget,
-    *,
-    billing: Billing,
-    model: str | None = None,
-) -> list[str]:
-    """The full ``claude`` command line. The prompt is never part of it."""
-    argv = [
-        *claude_cmd,
-        "-p",
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        "--restricted",
-        "--permission-mode",
-        "dontAsk",
-        "--permission-prompts",
-        "none",
-        "--tools",
-        ",".join(CLAUDE_TOOLS),
-        "--allowedTools",
-        *FILE_TOOLS,
-        *policy.bash_rules(),
-        "--disallowedTools",
-        "WebFetch",
-        "WebSearch",
-        "mcp__*",
-        "--strict-mcp-config",
-        "--no-session-persistence",
-        "--max-turns",
-        str(budget.max_turns),
-    ]
-    if billing == "api" and budget.max_usd is not None:
-        argv += ["--max-budget-usd", str(budget.max_usd)]
-    if model is not None:
-        argv += ["--model", model]
-    argv += ["--settings", json.dumps(sandbox_settings(policy), separators=(",", ":"))]
-    return argv
-
-
-def existing_stubs(folder: Path) -> frozenset[str]:
-    return frozenset(name for name in SCRUB_STUBS if os.path.lexists(folder / name))
-
-
-def remove_new_stubs(folder: Path, existed: frozenset[str]) -> list[str]:
-    """Remove the scrub stubs that weren't in ``folder`` before and are still empty.
-
-    A stub with content, or a folder with any file in it, is the agent's work and kept.
-    Returns the names removed.
-    """
-    removed: list[str] = []
-    for name in SCRUB_STUBS:
-        path = folder / name
-        if name in existed or path.is_symlink():
-            continue
-        try:
-            if path.is_file() and path.stat().st_size == 0:
-                path.unlink()
-                removed.append(name)
-            elif path.is_dir() and _remove_empty_tree(path):
-                removed.append(name)
-        except OSError:
-            continue
-    return removed
-
-
-def _remove_empty_tree(path: Path) -> bool:
-    """Remove ``path`` if it holds only (nested) empty folders; otherwise touch nothing."""
-    walked = list(os.walk(path, topdown=False))
-    for root, dirs, files in walked:
-        if files or any(Path(root, name).is_symlink() for name in dirs):
-            return False
-    for root, _, _ in walked:
-        os.rmdir(root)
-    return True
-
-
-def expand_home(path: str, home: Path) -> Path:
-    return home / path[2:] if path.startswith("~/") else Path(path)
-
-
-def check_worktree(policy: AgentPolicy, home: Path) -> None:
-    """Refuse a worktree that would let the agent write the home folder or a denied path.
-
-    Sandboxed commands may write anywhere in the worktree, so it must not be the home
-    folder, contain it, or overlap a path whose reads are denied.
-    """
-    worktree = policy.worktree.resolve()
-    home = home.resolve()
-    if worktree == home or worktree in home.parents:
-        raise PolicyError(f"worktree {worktree} must not contain the home folder {home}")
-    for denied in policy.denied_read_paths:
-        target = expand_home(denied, home).resolve()
-        if target == worktree or worktree in target.parents or target in worktree.parents:
-            raise PolicyError(f"worktree {worktree} overlaps {denied}, which agents may not read")
 
 
 class ClaudeCliRunner:

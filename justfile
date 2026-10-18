@@ -20,6 +20,7 @@ lint:
     uv run --directory daemon ruff format --check
     uv run --directory daemon mypy
     uv run --directory daemon lint-imports
+    uv run --directory daemon python ../scripts/check_line_limit.py
     pnpm --dir desktop exec eslint .
     pnpm --dir desktop exec prettier --check .
     pnpm --dir desktop exec tsc --noEmit

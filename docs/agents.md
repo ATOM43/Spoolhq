@@ -4,7 +4,7 @@ A coding agent implements one ticket in its own worktree. SpoolHQ talks to agent
 
 This is the security core of SpoolHQ: the agent must not be able to touch anything outside its worktree. SpoolHQ does not enforce that itself. Claude Code does, in four layers that SpoolHQ configures and then checks took effect.
 
-The code is `services/agents/`: the policy, budget, events and result in `model.py`, the interface in `runner.py`, the stream parser in `claude_stream.py`, the Claude Code adapter in `claude_cli.py`, the fake runner in `fake.py` and the list of backends in `backends.py`. It imports no other service package (an import-linter contract checks this); callers pass plain values in.
+The code is `services/agents/`: the policy, budget, events and result in `model.py`, the interface in `runner.py`, the stream parser in `claude_stream.py`, the Claude Code adapter in `claude_cli.py`, with its command line, settings and environment in `claude_config.py`, the fake runner in `fake.py` and the list of backends in `backends.py`. It imports no other service package (an import-linter contract checks this); callers pass plain values in.
 
 ## The interface
 

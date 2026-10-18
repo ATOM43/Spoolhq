@@ -2,7 +2,7 @@
 
 The run log is the record of everything the loop does: every run, every attempt inside it, and an append-only stream of events. It lives in the project workspace, next to the tickets, and survives daemon restarts. The run loop that drives it comes in T13; the WebSocket that streams events to the desktop app comes in T19.
 
-The code is `services/runs/`: the database in `db.py`, `RunLog` in `log.py`, statuses and records in `model.py`, attempt files in `files.py`, the event bus in `bus.py`, crash recovery in `recovery.py` and the daemon's per-workspace registry in `registry.py`.
+The code is `services/runs/`: the database in `db.py`, `RunLog` in `log.py`, the stored columns, rows and event payloads in `rows.py`, statuses and records in `model.py`, attempt files in `files.py`, the event bus in `bus.py`, crash recovery in `recovery.py` and the daemon's per-workspace registry in `registry.py`.
 
 ## Runs and attempts
 

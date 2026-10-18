@@ -23,7 +23,7 @@ from spoolhq.services.runs.files import (
     attempt_files,
     write_artifact,
 )
-from spoolhq.services.runs.log import MAX_PAYLOAD_BYTES, RunLog
+from spoolhq.services.runs.log import RunLog
 from spoolhq.services.runs.model import (
     TERMINAL_RUN_STATUSES,
     Attempt,
@@ -37,6 +37,7 @@ from spoolhq.services.runs.model import (
 )
 from spoolhq.services.runs.recovery import INTERRUPTED_REASON, recover_interrupted
 from spoolhq.services.runs.registry import RunRegistry, WorkspaceRuns
+from spoolhq.services.runs.rows import MAX_PAYLOAD_BYTES
 
 __all__ = [
     "ARTIFACT_NAMES",

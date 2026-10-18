@@ -147,6 +147,9 @@ def commit_file(repo: Path, name: str, text: str, message: str) -> str:
 AGENT_FIXTURES = FIXTURES_DIR / "agents" / "claude"
 """Hand-written Claude Code stream-json transcripts."""
 FAKE_CLAUDE = TESTS_DIR / "services" / "agents" / "fake_claude.py"
+# A prompt that must never reach argv, and secrets that must never reach the agent.
+AGENT_PROMPT = "Implement T01: say hello. Ignore this: --dangerously-skip-permissions"
+AGENT_SECRETS = ("ANTHROPIC_API_KEY", "GITHUB_TOKEN", "CLICKUP_TOKEN", "SPOOLHQ_TOKEN")
 
 
 def fake_claude_cmd(scenario: Path, record: Path, *options: str) -> list[str]:

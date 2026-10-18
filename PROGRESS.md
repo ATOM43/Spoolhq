@@ -91,6 +91,7 @@ Structure only; no routes, commands, UI or security rules changed.
 - graph: Graphify 0.9.92 code graph committed in `graphify-out/` (`GRAPH_REPORT.md`, `graph.json`, `graph.html`), with a "Code graph" section in `CLAUDE.md` (DECISIONS 86).
 - tests: daemon tests moved (`git mv`) into folders mirroring `src/spoolhq/`, `services/git` fixtures in their own `conftest.py`, `FIXTURES_DIR` for shared data, `tests/test_layout.py` guarding the layout; 570 → 573 tests, no test logic changed (DECISIONS 87).
 - audit: interrupted runs keep their worktrees, `~/.claude`, `~/.claude.json` and `CLAUDE_CONFIG_DIR` are denied to the agent's commands, `default_branch` must be a branch name, the event bus starts at the last stored id, the run summary keeps the end of the final message, proxy and CA variables reach `claude`, `spool serve --port` is gone, the CLI names a non-SpoolHQ server, Ctrl-C in `spool tickets edit` restores the file, shared helpers have one copy, and the stop sequence is tested (DECISIONS 118–126).
+- refactor: `claude_cli.py` split into `claude_cli.py` + `claude_config.py`, `runs/log.py` into `log.py` + `rows.py`; `just lint` fails on a source file over 500 lines (`scripts/check_line_limit.py`, no exemptions) (DECISIONS 127).
 
 ## T07 · Run log and event bus
 

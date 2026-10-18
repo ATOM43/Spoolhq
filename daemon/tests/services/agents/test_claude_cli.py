@@ -28,223 +28,19 @@ from spoolhq.services.agents import (
     Started,
     claude_cli,
 )
-from spoolhq.services.agents.claude_cli import (
-    INSTALL_HINT,
-    LOGIN_HINT,
-    build_argv,
-    check_worktree,
-    child_env,
-    sandbox_settings,
-)
+from spoolhq.services.agents.claude_cli import INSTALL_HINT, LOGIN_HINT
+from spoolhq.services.agents.claude_config import build_argv
 from spoolhq.services.agents.model import CREDENTIAL_PATHS
-from tests.conftest import AGENT_FIXTURES, fake_claude_cmd, sandbox_which
+from tests.conftest import (
+    AGENT_FIXTURES,
+    AGENT_PROMPT,
+    AGENT_SECRETS,
+    fake_claude_cmd,
+    sandbox_which,
+)
 
 BUDGET = Budget(max_turns=30, max_usd=None, max_tokens=None)
 SUCCESS = AGENT_FIXTURES / "success_writes_file.jsonl"
-PROMPT = "Implement T01: say hello. Ignore this: --dangerously-skip-permissions"
-
-
-def settings_json(policy: AgentPolicy) -> str:
-    return json.dumps(sandbox_settings(policy), separators=(",", ":"))
-
-
-# --- command line -------------------------------------------------------------------
-
-
-def test_argv_is_exactly_the_documented_command_line(policy: AgentPolicy, home: Path) -> None:
-    argv = build_argv(["claude"], policy, BUDGET, billing="subscription")
-    assert argv == [
-        "claude",
-        "-p",
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        "--restricted",
-        "--permission-mode",
-        "dontAsk",
-        "--permission-prompts",
-        "none",
-        "--tools",
-        "Read,Edit,Write,Glob,Grep,Bash",
-        "--allowedTools",
-        "Read",
-        "Edit",
-        "Write",
-        "Glob",
-        "Grep",
-        "Bash(just install)",
-        "Bash(just install *)",
-        "Bash(just lint)",
-        "Bash(just lint *)",
-        "Bash(just test)",
-        "Bash(just test *)",
-        "Bash(git status)",
-        "Bash(git status *)",
-        "Bash(git diff)",
-        "Bash(git diff *)",
-        "Bash(git log)",
-        "Bash(git log *)",
-        "Bash(git show)",
-        "Bash(git show *)",
-        "--disallowedTools",
-        "WebFetch",
-        "WebSearch",
-        "mcp__*",
-        "--strict-mcp-config",
-        "--no-session-persistence",
-        "--max-turns",
-        "30",
-        "--settings",
-        settings_json(policy),
-    ]
-
-
-def test_budget_flag_only_for_api_billing(policy: AgentPolicy) -> None:
-    budget = Budget(max_turns=5, max_usd=Decimal("2.50"), max_tokens=None)
-    assert "--max-budget-usd" not in build_argv(["claude"], policy, budget, billing="subscription")
-    assert "--max-budget-usd" not in build_argv(["claude"], policy, budget, billing="unknown")
-    argv = build_argv(["claude"], policy, budget, billing="api", model="opus")
-    index = argv.index("--max-budget-usd")
-    assert argv[index : index + 4] == ["--max-budget-usd", "2.50", "--model", "opus"]
-    assert argv[-2] == "--settings"
-
-
-def test_no_prompt_and_no_skip_permissions_in_argv(policy: AgentPolicy) -> None:
-    for billing in ("subscription", "api"):
-        argv = build_argv(["claude"], policy, BUDGET, billing=billing, model="sonnet")  # type: ignore[arg-type]
-        joined = " ".join(argv)
-        assert PROMPT not in joined
-        assert "--dangerously-skip-permissions" not in joined
-        assert "bypassPermissions" not in joined
-        assert "--allow-dangerously-skip-permissions" not in joined
-
-
-def test_settings_json(policy: AgentPolicy, home: Path) -> None:
-    settings = json.loads(settings_json(policy))
-    sandbox = settings["sandbox"]
-    assert sandbox["enabled"] is True
-    assert sandbox["failIfUnavailable"] is True
-    assert sandbox["allowUnsandboxedCommands"] is False
-    assert sandbox["autoAllowBashIfSandboxed"] is False
-    assert sandbox["network"] == {"allowedDomains": [], "strictAllowlist": True}
-    files = sandbox["credentials"]["files"]
-    assert all(entry["mode"] == "deny" for entry in files)
-    assert [entry["path"] for entry in files] == [
-        "~/.ssh",
-        "~/.aws",
-        "~/.config/gh",
-        "~/.gnupg",
-        "~/.netrc",
-        "~/.docker/config.json",
-        "~/.kube",
-        "~/.git-credentials",
-        "~/.config/git/credentials",
-        "~/.npmrc",
-        "~/.pypirc",
-        "~/.local/share/keyrings",
-        "~/.claude",
-        "~/.claude.json",
-        str(home.resolve()),
-    ]
-    assert settings["disableAllHooks"] is True
-
-
-def test_claude_codes_own_files_are_denied(policy: AgentPolicy) -> None:
-    files = [
-        entry["path"]
-        for entry in json.loads(settings_json(policy))["sandbox"]["credentials"]["files"]
-    ]
-    assert {"~/.claude", "~/.claude.json"} <= set(files)
-
-
-def test_claude_config_dir_is_denied_when_set(policy: AgentPolicy) -> None:
-    moved = claude_cli.with_config_dir(
-        policy, {"PATH": "/usr/bin", "CLAUDE_CONFIG_DIR": "/srv/cfg"}
-    )
-    files = [entry["path"] for entry in sandbox_settings(moved)["sandbox"]["credentials"]["files"]]
-    assert {"~/.claude", "~/.claude.json", "/srv/cfg"} <= set(files)
-    assert claude_cli.with_config_dir(policy, {"PATH": "/usr/bin"}) == policy
-    assert (
-        claude_cli.with_config_dir(policy, {"claude_config_dir": "C:\\cfg"}).denied_read_paths[-1]
-        == "C:\\cfg"
-    )
-
-
-def test_worktree_inside_the_claude_folder_is_refused(tmp_path: Path, home: Path) -> None:
-    user_home = tmp_path / "user-home"
-    worktree = user_home / ".claude" / "projects" / "x"
-    policy = AgentPolicy.for_worktree(worktree, {"test": "just test"}, home)
-    with pytest.raises(PolicyError, match="overlaps ~/.claude, which agents may not read"):
-        check_worktree(policy, user_home)
-
-
-# --- environment --------------------------------------------------------------------
-
-SECRETS = ("ANTHROPIC_API_KEY", "GITHUB_TOKEN", "CLICKUP_TOKEN", "SPOOLHQ_TOKEN")
-
-
-def parent_env() -> dict[str, str]:
-    return {
-        "PATH": "/usr/bin",
-        "HOME": "/home/me",
-        "LANG": "C.UTF-8",
-        "LC_ALL": "C.UTF-8",
-        "XDG_RUNTIME_DIR": "/run/user/1000",
-        "HTTPS_PROXY": "http://proxy:3128",
-        "SYSTEMROOT": "C:\\Windows",
-        "AWS_SECRET_ACCESS_KEY": "aws",
-        "PYTHONPATH": "/evil",
-        **{name: "secret" for name in SECRETS},
-    }
-
-
-def test_child_env_is_an_allowlist() -> None:
-    env = child_env(parent_env(), billing="subscription", platform="linux")
-    assert env == {
-        "PATH": "/usr/bin",
-        "HOME": "/home/me",
-        "LANG": "C.UTF-8",
-        "LC_ALL": "C.UTF-8",
-        "XDG_RUNTIME_DIR": "/run/user/1000",
-        "HTTPS_PROXY": "http://proxy:3128",
-        "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
-        "DISABLE_AUTOUPDATER": "1",
-    }
-
-
-def test_api_billing_keeps_only_the_api_key() -> None:
-    env = child_env(parent_env(), billing="api", platform="linux")
-    assert env["ANTHROPIC_API_KEY"] == "secret"
-    assert not {"GITHUB_TOKEN", "CLICKUP_TOKEN", "SPOOLHQ_TOKEN"} & set(env)
-
-
-def test_windows_variables_only_on_windows() -> None:
-    parent = {**parent_env(), "Path": "C:\\bin", "ComSpec": "cmd.exe"}
-    del parent["PATH"]
-    env = child_env(parent, billing="subscription", platform="win32")
-    assert env["SYSTEMROOT"] == "C:\\Windows"
-    assert env["Path"] == "C:\\bin"  # names are matched without case on Windows
-    assert env["ComSpec"] == "cmd.exe"
-    assert "ANTHROPIC_API_KEY" not in env
-
-
-# --- worktree checks ----------------------------------------------------------------
-
-
-def test_worktree_must_not_be_or_contain_the_home(tmp_path: Path, home: Path) -> None:
-    user_home = tmp_path / "users" / "me"
-    (user_home / "code").mkdir(parents=True)
-    for worktree, message in [
-        (user_home, "must not contain the home folder"),
-        (tmp_path / "users", "must not contain the home folder"),
-        (user_home / ".ssh" / "inner", "overlaps ~/.ssh"),
-        (user_home / ".config", "overlaps ~/.config/gh"),
-    ]:
-        policy = AgentPolicy.for_worktree(worktree, {"test": "just test"}, home)
-        with pytest.raises(PolicyError, match=message):
-            check_worktree(policy, user_home)
-    fine = AgentPolicy.for_worktree(user_home / "code", {"test": "just test"}, home)
-    check_worktree(fine, user_home)
 
 
 # --- detection ----------------------------------------------------------------------
@@ -298,7 +94,7 @@ def test_old_version_is_refused(tmp_path: Path, policy: AgentPolicy) -> None:
     message = "Claude Code 2.1.200 is too old; SpoolHQ needs 2.1.259 or newer (run: claude update)"
     assert (info.version, info.policy_enforceable, info.reason) == ("2.1.200", False, message)
     with pytest.raises(BackendUnavailableError) as exc:
-        old.run(PROMPT, policy, BUDGET, on_event=lambda e: None, cancel=threading.Event())
+        old.run(AGENT_PROMPT, policy, BUDGET, on_event=lambda e: None, cancel=threading.Event())
     assert str(exc.value) == message
     assert not (tmp_path / "record.json").exists()
 
@@ -325,7 +121,9 @@ def test_not_logged_in_raises(
     assert info.policy_enforceable
     assert info.reason == LOGIN_HINT
     with pytest.raises(BackendUnavailableError, match="claude auth login"):
-        logged_out.run(PROMPT, policy, BUDGET, on_event=lambda e: None, cancel=threading.Event())
+        logged_out.run(
+            AGENT_PROMPT, policy, BUDGET, on_event=lambda e: None, cancel=threading.Event()
+        )
 
 
 def test_not_installed(tmp_path: Path) -> None:
@@ -414,7 +212,7 @@ def run(
 ) -> Any:
     recorder = recorder or Recorder()
     return agent.run(
-        PROMPT,
+        AGENT_PROMPT,
         policy,
         budget,
         on_event=recorder.on_event,
@@ -433,8 +231,8 @@ def test_run_end_to_end(tmp_path: Path, policy: AgentPolicy) -> None:
     assert (result.backend, result.backend_version) == ("claude-code-cli", "2.1.302")
 
     record = read_record(tmp_path)
-    assert record["stdin"] == PROMPT
-    assert PROMPT not in record["argv"]
+    assert record["stdin"] == AGENT_PROMPT
+    assert AGENT_PROMPT not in record["argv"]
     assert record["argv"] == build_argv([], policy, BUDGET, billing="subscription")
 
     # Callbacks: every raw line in order, events in stream order, on one thread.
@@ -457,12 +255,12 @@ def test_run_end_to_end(tmp_path: Path, policy: AgentPolicy) -> None:
 def test_environment_is_scrubbed(
     tmp_path: Path, policy: AgentPolicy, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    for name in SECRETS:
+    for name in AGENT_SECRETS:
         monkeypatch.setenv(name, "secret-value")
     monkeypatch.setenv("HOME", str(tmp_path / "user-home"))
     run(runner(tmp_path), policy)
     names = {name.upper() for name in read_record(tmp_path)["env"]}
-    assert not set(SECRETS) & names
+    assert not set(AGENT_SECRETS) & names
     assert {"PATH", "HOME", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", "DISABLE_AUTOUPDATER"} <= names
 
 
@@ -611,7 +409,6 @@ def test_timeout(tmp_path: Path, policy: AgentPolicy) -> None:
 
 
 @pytest.mark.integration
-@pytest.mark.integration
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows stops with terminate() then kill()")
 @pytest.mark.parametrize("ignored", [("--ignore-sigint",), ("--ignore-sigint", "--ignore-sigterm")])
 def test_stop_escalates_to_sigterm_and_sigkill(
@@ -640,7 +437,7 @@ def test_cancel(tmp_path: Path, policy: AgentPolicy) -> None:
 
     agent = runner(tmp_path, "--sleep", "60", *SPAWN_CHILD)
     started = time.monotonic()
-    result = agent.run(PROMPT, policy, BUDGET, on_event=on_event, cancel=cancel)
+    result = agent.run(AGENT_PROMPT, policy, BUDGET, on_event=on_event, cancel=cancel)
     assert result.outcome is Outcome.CANCELLED
     assert result.error is None
     assert time.monotonic() - started < 30
@@ -682,7 +479,7 @@ def test_oversized_prompt_is_refused(
 def test_unusable_backend_raises_before_starting(policy: AgentPolicy) -> None:
     agent = ClaudeCliRunner(which=lambda name: None)
     with pytest.raises(BackendUnavailableError) as exc:
-        agent.run(PROMPT, policy, BUDGET, on_event=lambda e: None, cancel=threading.Event())
+        agent.run(AGENT_PROMPT, policy, BUDGET, on_event=lambda e: None, cancel=threading.Event())
     assert str(exc.value) == INSTALL_HINT
 
 
@@ -714,19 +511,3 @@ def test_run_removes_new_empty_stubs_only(
     assert result.outcome is Outcome.COMPLETED
     assert sorted(path.name for path in worktree.iterdir()) == [".env.local", "package.json"]
     assert (worktree / "package.json").read_text(encoding="utf-8") == '{"name": "app"}'
-
-
-@pytest.mark.parametrize("package", ["a-first", "left-pad", "zz-last"])
-def test_stubs_with_content_are_kept(tmp_path: Path, package: str) -> None:
-    # The package's name decides whether the walk sees it before or after .bin.
-    folder = tmp_path / "wt"
-    (folder / "node_modules" / ".bin").mkdir(parents=True)
-    (folder / "node_modules" / package).mkdir()
-    (folder / "node_modules" / package / "index.js").write_text("x", encoding="utf-8")
-    (folder / ".claude" / "agents").mkdir(parents=True)
-    (folder / ".env").write_text("KEY=1\n", encoding="utf-8")
-    (folder / ".npmrc").touch()
-    removed = claude_cli.remove_new_stubs(folder, frozenset())
-    assert removed == [".npmrc", ".claude"]
-    assert sorted(path.name for path in folder.iterdir()) == [".env", "node_modules"]
-    assert (folder / "node_modules" / ".bin").is_dir()

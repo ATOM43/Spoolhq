@@ -4,8 +4,9 @@ Only the database changes here. Ticket file statuses are reconciled by the run l
 (T13) and worktrees are cleaned up by T08.
 """
 
-from spoolhq.services.runs.log import RunLog, fetch_run
+from spoolhq.services.runs.log import RunLog
 from spoolhq.services.runs.model import AttemptStatus, EventKind, Run, RunStatus
+from spoolhq.services.runs.rows import fetch_run
 
 INTERRUPTED_REASON = "the daemon stopped while this run was active"
 RECOVERABLE = (RunStatus.RUNNING, RunStatus.PAUSED)

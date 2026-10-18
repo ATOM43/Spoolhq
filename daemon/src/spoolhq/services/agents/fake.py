@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from spoolhq.services.agents.claude_cli import PERMISSION_MODES
+from spoolhq.services.agents.claude_config import PERMISSION_MODES
 from spoolhq.services.agents.claude_stream import ClaudeStreamParser, PolicyViolation
 from spoolhq.services.agents.model import (
     AgentPolicy,
