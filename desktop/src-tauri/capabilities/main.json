@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "The main window may only ask for daemon info and GET daemon API paths.",
+  "windows": ["main"],
+  "permissions": ["allow-daemon-info", "allow-daemon-get"]
+}

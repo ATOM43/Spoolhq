@@ -45,6 +45,20 @@ jobs:
         with:
           just-version: "1.59.0"
 
+      # Headers and libraries Tauri compiles against on Linux (no installer packages).
+      - name: Install Tauri system packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      # rustup is preinstalled on every runner; this installs the toolchain pinned in
+      # rust-toolchain.toml, with clippy and rustfmt.
+      - name: Install Rust
+        run: rustup toolchain install
+
       - run: just install
       - run: just lint
       - run: just test

@@ -1,0 +1,29 @@
+[package]
+name = "spoolhq-desktop"
+version = "0.0.0"
+description = "SpoolHQ desktop app"
+license = "Apache-2.0"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+
+[lib]
+# The _lib suffix keeps the library's name apart from the binary's (a Windows
+# requirement for Cargo, see https://github.com/rust-lang/cargo/issues/8519).
+name = "spoolhq_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.7.3", features = [] }
+
+[dependencies]
+dirs = "=6.0.0"
+# Plain HTTP to 127.0.0.1 only: no TLS, no proxy support, HTTP/1.1.
+reqwest = { version = "=0.13.5", default-features = false }
+serde = { version = "=1.0.229", features = ["derive"] }
+tauri = { version = "=2.12.4", features = [] }
+toml = "=1.1.8"
+
+[dev-dependencies]
+serde_json = "=1.0.154"
+tempfile = "=3.27.0"

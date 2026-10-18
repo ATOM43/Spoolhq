@@ -1,0 +1,5 @@
+# Pins the Rust toolchain for desktop/src-tauri so clippy and rustfmt agree everywhere.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

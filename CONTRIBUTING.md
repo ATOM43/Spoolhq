@@ -8,6 +8,8 @@ Thanks for helping. SpoolHQ is pre-alpha, so expect things to move.
 - [Node.js](https://nodejs.org/) 24 LTS
 - [pnpm](https://pnpm.io/) — the exact version is pinned in `desktop/package.json` (`packageManager`)
 - [just](https://just.systems/)
+- [Rust](https://rustup.rs/) via rustup — the toolchain is pinned in `rust-toolchain.toml`
+- Tauri's system packages for your platform — see [Run the desktop app](README.md#run-the-desktop-app)
 - git
 
 Linux, macOS and Windows are all supported. On Windows, `just` runs recipes in PowerShell.
@@ -17,9 +19,10 @@ Linux, macOS and Windows are all supported. On Windows, `just` runs recipes in P
 | Command | What it does |
 | --- | --- |
 | `just install` | Installs Python and Node dependencies exactly as locked |
-| `just lint` | ruff, ruff format check, mypy, ESLint, Prettier check, `tsc --noEmit` |
-| `just test` | pytest and Vitest |
-| `just dev` | Starts the daemon (`spool serve`) |
+| `just lint` | ruff, ruff format check, mypy, ESLint, Prettier check, `tsc --noEmit`, `cargo fmt --check`, `cargo clippy -- -D warnings` |
+| `just test` | pytest, Vitest and `cargo test` |
+| `just dev` | Starts the daemon (`spool serve`) and the desktop app (`pnpm tauri dev`) |
+| `just daemon` / `just desktop` | Starts only one of them |
 
 Run `just lint && just test` before you open a pull request.
 
