@@ -80,3 +80,7 @@ Structure only; no routes, commands, UI or security rules changed.
 - CLI: `spool plan check|next|summary <project>` (new `cli/plan.py`) and `spool tickets set-status <project> <id> <status>`; non-zero exit on problems or refused moves.
 - Docs: `docs/scheduler.md`, "Scheduler" in `docs/architecture.md`, README commands, DECISIONS 52–57.
 - Tests: validation (unknown dep, 3-ticket cycle, separate and overlapping cycles, duplicates, numeric order), every allowed and disallowed transition, same-status no-op, dependency rule, status-line-only saves, the dashboard's next-ready order, remaining hours and critical path, one test per idle reason, and the CLI output and exit codes.
+
+## Fixes
+
+- CLI forces UTF-8 on stdout/stderr: `spool` no longer crashes with `UnicodeEncodeError` on Windows when output is redirected (`spool plan check > out.txt`); the console script now points at `spoolhq.cli:main`, which reconfigures the streams before Typer runs (DECISIONS 58). Subprocess tests run the real CLI with `PYTHONIOENCODING=cp1252`.

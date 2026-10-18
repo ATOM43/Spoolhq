@@ -1,5 +1,5 @@
 """Allow `python -m spoolhq`, the same as the `spool` command."""
 
-from spoolhq.cli import app
+from spoolhq.cli import main
 
-app(prog_name="spool")
+main()

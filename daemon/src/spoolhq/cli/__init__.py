@@ -1,5 +1,5 @@
 """Command-line interface (`spool`)."""
 
-from spoolhq.cli.main import app
+from spoolhq.cli.main import app, main
 
-__all__ = ["app"]
+__all__ = ["app", "main"]

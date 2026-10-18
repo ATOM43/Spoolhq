@@ -1,6 +1,7 @@
 """The `spool` command."""
 
 import logging
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -127,3 +128,30 @@ def validate_project(
     except ProjectError as exc:
         _fail(str(exc))
     typer.echo("valid")
+
+
+def _force_utf8_streams() -> None:
+    """Make stdout and stderr write UTF-8 whatever the console code page.
+
+    Messages contain arrows (``blocked → done``), which a Windows code page such as
+    cp1252 cannot encode once output is redirected to a file or pipe. Streams that are
+    missing or cannot be reconfigured (replaced by a test harness) are left alone.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        encoding = str(getattr(stream, "encoding", "")).lower().replace("_", "-")
+        if encoding in {"utf-8", "utf8"}:
+            continue
+        try:
+            # `errors` is passed on, or reconfigure would reset it to "strict".
+            reconfigure(encoding="utf-8", errors=getattr(stream, "errors", None))
+        except (ValueError, OSError):
+            continue
+
+
+def main() -> None:
+    """Entry point of the `spool` console script and `python -m spoolhq`."""
+    _force_utf8_streams()
+    app(prog_name="spool")

@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-spool = "spoolhq.cli:app"
+spool = "spoolhq.cli:main"
 
 [dependency-groups]
 dev = [
