@@ -152,13 +152,20 @@ def tickets_dir(project: str, *, projects_dir: Path) -> Path:
 
 
 def _ticket_files(directory: Path) -> list[Path]:
-    """The ``*.md`` files in ``tickets/``, ignoring hidden ones (``.T04-x.md.bak``)."""
+    """The ``*.md`` files in ``tickets/``, ignoring hidden ones (``.T04-x.md.bak``).
+
+    Sorted by file name as a string: ``Path`` ordering ignores case on Windows, which
+    would order the files differently there.
+    """
     if not directory.is_dir():
         return []
     return sorted(
-        path
-        for path in directory.iterdir()
-        if path.suffix == ".md" and not path.name.startswith(".") and path.is_file()
+        (
+            path
+            for path in directory.iterdir()
+            if path.suffix == ".md" and not path.name.startswith(".") and path.is_file()
+        ),
+        key=lambda path: path.name,
     )
 
 

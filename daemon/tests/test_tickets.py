@@ -1,3 +1,4 @@
+import re
 import shutil
 from pathlib import Path
 
@@ -561,8 +562,17 @@ def test_project_without_tickets_folder(projects_dir: Path) -> None:
 
 
 def test_missing_project(projects_dir: Path) -> None:
-    with pytest.raises(TicketError, match=f"no project 'nope' in {projects_dir}"):
+    # re.escape: a Windows path (C:\Users\...) is not a valid regex as it stands.
+    with pytest.raises(TicketError, match=re.escape(f"no project 'nope' in {projects_dir}")):
         list_tickets("nope", projects_dir=projects_dir)
+
+
+def test_invalid_files_are_ordered_by_case_sensitive_name(projects_dir: Path) -> None:
+    # Regression: sorting Path objects ignores case on Windows, so "notes.md" came
+    # before "T02-bad.md" there and after it everywhere else.
+    make_project(projects_dir, {"notes.md": "no frontmatter\n", "T02-bad.md": "nor here\n"})
+    listing = list_tickets("demo", projects_dir=projects_dir)
+    assert [entry.file_name for entry in listing.invalid] == ["T02-bad.md", "notes.md"]
 
 
 def test_bad_project_name(projects_dir: Path) -> None:
