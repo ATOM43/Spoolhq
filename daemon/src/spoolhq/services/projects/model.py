@@ -17,6 +17,7 @@ from pydantic import (
     field_validator,
 )
 
+from spoolhq.services.gates import DEFAULT_TIMEOUTS, check_gate_command
 from spoolhq.services.git import GitError, has_local_branch, is_branch_name, is_work_tree
 
 AgentBackend = Literal["claude-code-cli", "codex-cli", "gemini-cli", "claude-agent-sdk"]
@@ -57,6 +58,8 @@ def _check_not_blank(value: str) -> str:
 
 
 NonEmptyStr = Annotated[str, AfterValidator(_check_not_blank)]
+# Run by the gates without a shell, so shell syntax is refused (docs/gates.md).
+GateCommand = Annotated[NonEmptyStr, AfterValidator(check_gate_command)]
 
 
 class _Strict(BaseModel):
@@ -64,9 +67,9 @@ class _Strict(BaseModel):
 
 
 class Commands(_Strict):
-    install: NonEmptyStr
-    lint: NonEmptyStr
-    test: NonEmptyStr
+    install: GateCommand
+    lint: GateCommand
+    test: GateCommand
 
 
 class Budget(_Strict):
@@ -114,6 +117,18 @@ class ContextSettings(_Strict):
     max_chars: int = Field(default=120_000, ge=20_000, le=2_000_000)
 
 
+class GateTimeouts(_Strict):
+    """Seconds each gate may run before its process tree is stopped (docs/gates.md)."""
+
+    install: int = Field(default=DEFAULT_TIMEOUTS["install"], ge=10, le=7_200)
+    lint: int = Field(default=DEFAULT_TIMEOUTS["lint"], ge=10, le=7_200)
+    test: int = Field(default=DEFAULT_TIMEOUTS["test"], ge=10, le=7_200)
+
+
+class GatesSettings(_Strict):
+    timeouts: GateTimeouts = Field(default_factory=GateTimeouts)
+
+
 class Tracker(_Strict):
     kind: Literal["clickup"] = "clickup"
     list_id: NonEmptyStr
@@ -131,6 +146,7 @@ class Project(_Strict):
     git: GitSettings = Field(default_factory=GitSettings)
     tracker: Tracker | None = None
     context: ContextSettings = Field(default_factory=ContextSettings)
+    gates: GatesSettings = Field(default_factory=GatesSettings)
 
     @property
     def repo_path(self) -> Path:

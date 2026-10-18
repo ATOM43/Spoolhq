@@ -24,6 +24,7 @@ daemon/tests/
     git/           # conftest.py: wt_repo, wt_root, manager
     agents/        # conftest.py: worktree, user_home, policy; fake_claude.py
     context/       # conftest.py: fixture_inputs, assert_snapshot (SPOOLHQ_UPDATE_SNAPSHOTS=1)
+    gates/         # fake_tool.py (run it with fake_tool_cmd from tests/conftest.py)
 ```
 
 - **New tests go in the folder that mirrors the code they test:** `src/spoolhq/services/runs/bus.py` → `tests/services/runs/test_bus.py`, `src/spoolhq/cli/plan.py` → `tests/cli/test_plan.py`. Don't repeat the folder in the file name (`tests/cli/test_plan.py`, not `test_cli_plan.py`). Only `test_layout.py` sits directly in `tests/`.

@@ -35,6 +35,11 @@ tracker:
   list_id: "<list id>"
 context:
   max_chars: 120000                           # optional: the prompt's size budget
+gates:
+  timeouts:                                   # optional, in seconds
+    install: 600
+    lint: 300
+    test: 900
 ```
 
 ## Fields
@@ -45,9 +50,9 @@ context:
 | `repo` | yes | | Absolute path or a path starting with `~`. Must exist and be a git work tree. |
 | `default_branch` | no | `main` | A branch name (not a revision such as `main~1` or `main@{0}`) that exists in `repo` (with at least one commit). |
 | `template` | no | | Name of the stack template the project came from. |
-| `commands.install` | yes | | Non-empty shell command the gates run to install dependencies. |
-| `commands.lint` | yes | | Non-empty lint command. |
-| `commands.test` | yes | | Non-empty test command. |
+| `commands.install` | yes | | Non-empty command the gates run to install dependencies. It runs without a shell ([gates](gates.md#no-shell)): no `&&`, `\|\|`, `\|`, `;`, `>`, `<`, `` ` `` or `$(`; put anything longer in a justfile recipe. |
+| `commands.lint` | yes | | Non-empty lint command; same rules. |
+| `commands.test` | yes | | Non-empty test command; same rules. |
 | `agents.default` | no | `claude-code-cli` | One of `claude-code-cli`, `codex-cli`, `gemini-cli`, `claude-agent-sdk`. |
 | `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override; same values as `agents.default`. |
 | `agents.budget_per_ticket.usd` | no | | Positive number: spending cap per ticket for API backends. |
@@ -59,6 +64,7 @@ context:
 | `merge_policy.always_pr` | no | `false` | `true` sends every ticket through a pull request. |
 | `git.remote` | no | | A GitHub URL: `https://github.com/<owner>/<repo>` (optionally ending in `.git`) or `git@github.com:<owner>/<repo>.git`. The owner is 1–39 letters, digits or hyphens; the repository is 1–100 letters, digits, `.`, `_` or `-`; neither may start with `-` or `.`. |
 | `context.max_chars` | no | `120000` | Whole number from 20,000 to 2,000,000: the most characters the implementer's prompt may have ([context](context.md)). |
+| `gates.timeouts.install`, `gates.timeouts.lint`, `gates.timeouts.test` | no | `600`, `300`, `900` | Whole number of seconds from 10 to 7,200. When it passes, the gate's whole process tree is stopped ([gates](gates.md#timeouts)). |
 | `tracker.kind` | no | `clickup` | Only `clickup` for now. |
 | `tracker.list_id` | when `tracker` is set | | Non-empty string; quote it (`"901"`) if it is all digits. |
 
@@ -85,6 +91,9 @@ Every problem is reported at once, one line each, as `project.yaml: <dotted.path
 | Budget not positive | `project.yaml: agents.budget_per_ticket.usd: must be greater than 0` |
 | Retries out of range | `project.yaml: limits.gate_retries: must be at most 10` (or `must be at least 0`) |
 | Empty command | `project.yaml: commands.lint: must not be empty` |
+| Shell syntax in a command | `project.yaml: commands.test: shell syntax isn't supported; put it in a justfile recipe` |
+| Unclosed quote in a command | `project.yaml: commands.test: can't be split into arguments: No closing quotation` |
+| Gate timeout out of range | `project.yaml: gates.timeouts.test: must be at least 10` (or `must be at most 7200`) |
 | Wrong type | `project.yaml: merge_policy.always_pr: input should be a valid boolean, unable to interpret input` |
 | YAML syntax error | `project.yaml: line 3, column 1: expected the node content, but found '<stream end>'` |
 | Duplicate key | `project.yaml: line 2, column 1: found duplicate key "name" with value "again" (original value: "demo")` |

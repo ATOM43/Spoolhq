@@ -122,6 +122,21 @@ forbidden_modules = [
     "spoolhq.services.tracker",
 ]
 
+[[tool.importlinter.contracts]]
+name = "services.gates imports no other service package"
+type = "forbidden"
+source_modules = ["spoolhq.services.gates"]
+forbidden_modules = [
+    "spoolhq.services.agents",
+    "spoolhq.services.context",
+    "spoolhq.services.git",
+    "spoolhq.services.projects",
+    "spoolhq.services.runs",
+    "spoolhq.services.scheduler",
+    "spoolhq.services.tickets",
+    "spoolhq.services.tracker",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--strict-markers", "--strict-config"]

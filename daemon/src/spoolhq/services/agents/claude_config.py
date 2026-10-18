@@ -13,40 +13,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from spoolhq.core.agent_policy import allowed_env
 from spoolhq.services.agents.claude_stream import CLAUDE_TOOLS, FILE_TOOLS
 from spoolhq.services.agents.model import AgentPolicy, Billing, Budget, PolicyError
 
-ENV_ALLOWED = frozenset(
-    {
-        "PATH",
-        "HOME",
-        "USER",
-        "LOGNAME",
-        "LANG",
-        "TMPDIR",
-        "TMP",
-        "TEMP",
-        "XDG_CONFIG_HOME",
-        "XDG_DATA_HOME",
-        "XDG_CACHE_HOME",
-        "XDG_RUNTIME_DIR",
-        "DBUS_SESSION_BUS_ADDRESS",
-        "CLAUDE_CONFIG_DIR",
-        "HTTPS_PROXY",
-        "HTTP_PROXY",
-        "NO_PROXY",
-        "https_proxy",
-        "http_proxy",
-        "no_proxy",
-        # A corporate proxy's CA, so Claude Code can reach the API through it.
-        "NODE_EXTRA_CA_CERTS",
-        "SSL_CERT_FILE",
-    }
-)
-ENV_ALLOWED_WINDOWS = frozenset(
-    {"SYSTEMROOT", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "COMSPEC", "PATHEXT"}
-)
-ENV_ALLOWED_PREFIXES = ("LC_",)
 API_KEY_VAR = "ANTHROPIC_API_KEY"
 ENV_SET = {
     # Claude Code removes its own credentials from the environment of the commands
@@ -91,15 +61,7 @@ def child_env(parent: Mapping[str, str], *, billing: Billing, platform: str) -> 
     ``ANTHROPIC_API_KEY`` is passed only for API billing; with it, Claude Code would
     bill the API instead of the subscription.
     """
-    windows = platform == "win32"
-    allowed = ENV_ALLOWED | ENV_ALLOWED_WINDOWS if windows else ENV_ALLOWED
-    if billing == "api":
-        allowed = allowed | {API_KEY_VAR}
-    env: dict[str, str] = {}
-    for name, value in parent.items():
-        key = name.upper() if windows else name  # Windows names ignore case
-        if key in allowed or key.startswith(ENV_ALLOWED_PREFIXES):
-            env[name] = value
+    env = allowed_env(parent, platform=platform, extra={API_KEY_VAR} if billing == "api" else ())
     env.update(ENV_SET)
     return env
 

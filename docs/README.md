@@ -9,4 +9,5 @@ User and developer documentation will live here: architecture, the daemon API, t
 - [runs.md](runs.md): the run log and event bus
 - [git.md](git.md): worktrees, branches and git recovery
 - [agents.md](agents.md): the agent runner, the Claude Code backend and its policy
+- [gates.md](gates.md): the install, lint and test gates
 - [testing.md](testing.md): running and writing tests

@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 import socket
 import subprocess
@@ -168,3 +169,12 @@ def fake_claude_cmd(scenario: Path, record: Path, *options: str) -> list[str]:
 def sandbox_which(name: str) -> str | None:
     """A ``which`` that finds the Linux sandbox packages (bwrap, socat) and nothing else."""
     return f"/usr/bin/{name}" if name in {"bwrap", "socat"} else None
+
+
+FAKE_TOOL = TESTS_DIR / "services" / "gates" / "fake_tool.py"
+
+
+def fake_tool_cmd(*args: str) -> str:
+    """A gate command string that runs ``fake_tool.py`` (forward slashes, so it splits the
+    same on Windows)."""
+    return shlex.join([Path(sys.executable).as_posix(), FAKE_TOOL.as_posix(), *args])

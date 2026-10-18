@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from spoolhq.services.gates import SHELL_SYNTAX_ERROR as SHELL_SYNTAX
 from spoolhq.services.projects import (
     AGENT_BACKENDS,
     Project,
@@ -69,6 +70,7 @@ def test_valid_project_loads(projects_dir: Path, git_repo: Path) -> None:
     assert project.merge_policy.always_pr is False
     assert project.git.remote is None
     assert project.context.max_chars == 120_000
+    assert project.gates.timeouts.model_dump() == {"install": 600, "lint": 300, "test": 900}
 
 
 def test_example_from_task_md_is_valid(projects_dir: Path, git_repo: Path) -> None:
@@ -173,6 +175,16 @@ def test_missing_required_field_is_named(projects_dir: Path, git_repo: Path, fie
         ("tracker.kind", "jira", "must be one of 'clickup'"),
         ("context.max_chars", 10000, "must be at least 20000"),
         ("context.max_chars", 2_000_001, "must be at most 2000000"),
+        ("gates.timeouts.test", 5, "must be at least 10"),
+        ("gates.timeouts.install", 7_201, "must be at most 7200"),
+        ("commands.test", "just test && rm -rf /", SHELL_SYNTAX),
+        ("commands.test", "just test | tee x", SHELL_SYNTAX),
+        ("commands.lint", "echo `id`", SHELL_SYNTAX),
+        (
+            "commands.install",
+            'pip install "x',
+            "can't be split into arguments: No closing quotation",
+        ),
         ("limits.gate_retires", 3, "unknown key (did you mean 'gate_retries'?)"),
         ("colour", "blue", "unknown key"),
     ],

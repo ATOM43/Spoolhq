@@ -2,7 +2,7 @@
 
 SpoolHQ is an open-source, local-first desktop app that turns a written spec into a ticket plan, then has a coding agent implement the tickets one at a time, with tests and review before each merge. A Python daemon runs the loop, a `spool` CLI drives it, and a Tauri desktop app shows what is happening.
 
-**Status: pre-alpha, not usable yet.** The daemon serves a minimal authenticated API and the desktop app shows whether it is running. The CLI can create a project, read and edit its tickets, check the plan and change ticket statuses, and show the run log and worktrees. The daemon records runs and manages the git worktree each run works in, and can drive Claude Code under a locked-down policy, but nothing starts agent runs yet.
+**Status: pre-alpha, not usable yet.** The daemon serves a minimal authenticated API and the desktop app shows whether it is running. The CLI can create a project, read and edit its tickets, check the plan and change ticket statuses, and show the run log and worktrees. The daemon records runs and manages the git worktree each run works in, can drive Claude Code under a locked-down policy and can run a project's quality gates, but nothing starts agent runs yet.
 
 ## Development quickstart
 
@@ -56,6 +56,12 @@ To see the prompt an agent would start a ticket with ([context](docs/context.md)
 
 ```sh
 uv run --directory daemon spool prompt show my-app T04
+```
+
+To run a project's quality gates (`install`, then `lint` and `test`) in a folder, without a shell and in a scrubbed environment ([gates](docs/gates.md)); it prints one line per gate, each failing gate's excerpt and the failing tests, and exits 1 unless all pass:
+
+```sh
+uv run --directory daemon spool gates run my-app [--path <dir>]   # default: the project's repository
 ```
 
 ## Run the daemon
