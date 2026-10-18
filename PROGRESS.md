@@ -86,6 +86,10 @@ Structure only; no routes, commands, UI or security rules changed.
 - git: SpoolHQ's git calls never run repository hooks (`-c core.hooksPath=<home>/hooks-disabled`, which must stay empty) and never sign (`commit.gpgsign`, `tag.gpgsign`, `tag.forceSignAnnotated` all false), closing a sandbox escape through a tracked hooks folder the agent can edit and a hang on signing prompts (DECISIONS 84–85).
 - CLI forces UTF-8 on stdout/stderr: `spool` no longer crashes with `UnicodeEncodeError` on Windows when output is redirected (`spool plan check > out.txt`); the console script now points at `spoolhq.cli:main`, which reconfigures the streams before Typer runs (DECISIONS 58). Subprocess tests run the real CLI with `PYTHONIOENCODING=cp1252`.
 
+## Chores
+
+- graph: Graphify 0.9.92 code graph committed in `graphify-out/` (`GRAPH_REPORT.md`, `graph.json`, `graph.html`), with a "Code graph" section in `CLAUDE.md` (DECISIONS 86).
+
 ## T07 · Run log and event bus
 
 - `services/runs/`: the run log in `<workspace>/.spoolhq/state.db` (stdlib `sqlite3`, WAL, `synchronous=NORMAL`, foreign keys, 5 s busy timeout, one locked connection per `RunLog`, `BEGIN IMMEDIATE` per operation). Schema v1 (`runs`, `attempts`, `events`, append-only triggers, indexes) via `PRAGMA user_version` migrations; newer schemas and non-SQLite files are refused with the documented messages.

@@ -9,6 +9,15 @@ Conventions for coding agents (and humans) changing SpoolHQ.
 - **Work directly on main. No branches, no pull requests.** See `CONTRIBUTING.md`.
 - Record notable choices in `DECISIONS.md` and add a `PROGRESS.md` entry for each finished ticket.
 
+## Code graph
+
+`graphify-out/` holds a [Graphify](https://github.com/Graphify-Labs/graphify) knowledge graph of the repo, committed for agent context.
+
+- Read `graphify-out/GRAPH_REPORT.md` before exploring the code.
+- The graph can be stale. Trust the code when they disagree.
+- If Graphify is installed, `graphify query` and `graphify path` may be used read-only.
+- Don't regenerate or commit the graph as part of a ticket unless the ticket says so.
+
 ## Testing
 
 How to run and lay out tests: [docs/testing.md](docs/testing.md).
