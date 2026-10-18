@@ -4,8 +4,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from spoolhq.cli import app
-
-FIXTURES = Path(__file__).parent / "fixtures"
+from tests.conftest import FIXTURES_DIR
 
 runner = CliRunner()
 
@@ -67,7 +66,7 @@ def test_list_prints_a_table(projects_dir: Path) -> None:
 
 
 def test_list_dashboard_plan(projects_dir: Path) -> None:
-    shutil.copytree(FIXTURES / "dashboard", projects_dir / "dashboard")
+    shutil.copytree(FIXTURES_DIR / "dashboard", projects_dir / "dashboard")
     result = runner.invoke(app, ["tickets", "list", "dashboard"])
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
@@ -155,7 +154,7 @@ def test_list_only_invalid_files(projects_dir: Path) -> None:
 
 
 def test_show_prints_fields_checklist_and_body(projects_dir: Path) -> None:
-    shutil.copytree(FIXTURES / "dashboard", projects_dir / "dashboard")
+    shutil.copytree(FIXTURES_DIR / "dashboard", projects_dir / "dashboard")
     result = runner.invoke(app, ["tickets", "show", "dashboard", "T07"])
     assert result.exit_code == 0, result.output
     assert result.output == (
@@ -183,7 +182,7 @@ def test_show_prints_fields_checklist_and_body(projects_dir: Path) -> None:
 
 
 def test_show_checked_items_and_tracker_ref(projects_dir: Path) -> None:
-    shutil.copytree(FIXTURES / "tickets", projects_dir / "rt" / "tickets")
+    shutil.copytree(FIXTURES_DIR / "tickets", projects_dir / "rt" / "tickets")
     result = runner.invoke(app, ["tickets", "show", "rt", "T08"])
     assert result.exit_code == 0, result.output
     assert "review_required: false\ntracker_ref:     CU-8x2\n" in result.output
@@ -195,7 +194,7 @@ def test_show_checked_items_and_tracker_ref(projects_dir: Path) -> None:
 
 
 def test_show_warns_without_done_when(projects_dir: Path) -> None:
-    shutil.copytree(FIXTURES / "tickets", projects_dir / "rt" / "tickets")
+    shutil.copytree(FIXTURES_DIR / "tickets", projects_dir / "rt" / "tickets")
     result = runner.invoke(app, ["tickets", "show", "rt", "T11"])
     assert result.exit_code == 0, result.output
     assert "Done when:\n  (none)\n" in result.stdout

@@ -6,9 +6,29 @@
 
 | Package | Tests live in | Notes |
 | --- | --- | --- |
-| Daemon (`daemon/`) | `daemon/tests/test_*.py` | Shared fixtures in `daemon/tests/conftest.py`. |
+| Daemon (`daemon/`) | `daemon/tests/<package>/test_*.py`, mirroring `src/spoolhq/` | See [Daemon test layout](#daemon-test-layout). |
 | Desktop UI (`desktop/src/`) | next to the code, `*.test.ts` / `*.test.tsx` | jsdom, setup in `src/shared/lib/test-setup.ts`; Tauri calls are mocked. |
 | Desktop Rust (`desktop/src-tauri/`) | `#[cfg(test)] mod tests` in the same file | Uses a temp `SPOOLHQ_HOME`. |
+
+### Daemon test layout
+
+```text
+daemon/tests/
+  conftest.py      # autouse home/projects_dir, fixtures used by more than one folder, FIXTURES_DIR
+  test_layout.py   # guards this layout
+  fixtures/        # shared data: ticket files and the dashboard plan
+  core/  api/  cli/
+  services/
+    projects/  tickets/  scheduler/  runs/
+    git/           # conftest.py: wt_repo, wt_root, manager
+```
+
+- **New tests go in the folder that mirrors the code they test:** `src/spoolhq/services/runs/bus.py` → `tests/services/runs/test_bus.py`, `src/spoolhq/cli/plan.py` → `tests/cli/test_plan.py`. Don't repeat the folder in the file name (`tests/cli/test_plan.py`, not `test_cli_plan.py`). Only `test_layout.py` sits directly in `tests/`.
+- **Every test folder has an empty `__init__.py`**, `tests/` included, so files with the same name in different folders (`runs/test_recovery.py`, `git/test_recovery.py`) don't collide. Import shared helpers as `from tests.conftest import run_git`.
+- **Fixtures live in the `conftest.py` of the only folder that uses them**; a fixture or helper used by more than one folder stays in `tests/conftest.py`. When unsure, keep it at the top.
+- **Shared data stays in `tests/fixtures/`**; find it through `FIXTURES_DIR` from `tests/conftest.py`, never relative to a test file.
+- **Integration tests are marked, not foldered:** `@pytest.mark.integration` wherever the test belongs.
+- `tests/test_layout.py` fails on a test file directly in `tests/`, a test folder with no matching package under `src/spoolhq/`, or a test folder without `__init__.py`.
 
 ### Daemon fixtures
 
@@ -20,7 +40,7 @@
 
 ### Unit and integration tests
 
-Unit tests never use the network, a real model or the real home folder. Tests that start a subprocess or are slow are marked `@pytest.mark.integration` (or `pytestmark = pytest.mark.integration` for a whole file, as in `test_serve_integration.py`). `just test` and CI run both.
+Unit tests never use the network, a real model or the real home folder. Tests that start a subprocess or are slow are marked `@pytest.mark.integration` (or `pytestmark = pytest.mark.integration` for a whole file, as in `tests/cli/test_serve.py`). `just test` and CI run both.
 
 ## Running tests
 
@@ -30,7 +50,7 @@ Unit tests never use the network, a real model or the real home folder. Tests th
 | Daemon only | `uv run --directory daemon pytest` |
 | Daemon unit tests only | `uv run --directory daemon pytest -m "not integration"` |
 | Daemon integration tests only | `uv run --directory daemon pytest -m integration` |
-| One daemon file or test | `uv run --directory daemon pytest tests/test_auth.py::test_token_is_created_once_and_reused` |
+| One daemon file or test | `uv run --directory daemon pytest tests/core/test_auth.py::test_token_is_created_once_and_reused` |
 | Desktop UI only | `pnpm --dir desktop exec vitest run` |
 | One desktop file | `pnpm --dir desktop exec vitest run src/entities/daemon/model/status.test.ts` |
 | Desktop UI in watch mode | `pnpm --dir desktop exec vitest` |

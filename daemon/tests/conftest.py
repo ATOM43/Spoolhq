@@ -11,8 +11,11 @@ from fastapi.testclient import TestClient
 
 from spoolhq.api import create_app
 from spoolhq.core.config import load_settings
-from spoolhq.services.git import WorktreeManager
 from spoolhq.services.projects import init_project
+
+TESTS_DIR = Path(__file__).parent
+FIXTURES_DIR = TESTS_DIR / "fixtures"
+"""Shared fixture data: ticket files and the dashboard plan."""
 
 
 @pytest.fixture(autouse=True)
@@ -138,26 +141,3 @@ def commit_file(repo: Path, name: str, text: str, message: str) -> str:
     run_git(repo, "add", "--", name)
     run_git(repo, "commit", "--quiet", "--no-verify", "-m", message)
     return run_git(repo, "rev-parse", "HEAD").strip()
-
-
-@pytest.fixture
-def wt_repo(tmp_path: Path, isolated_git: None) -> Path:
-    """A repository on ``main`` with a local identity and one commit holding README.md."""
-    repo = tmp_path / "main-repo"
-    repo.mkdir()
-    run_git(repo, "init", "--quiet", "-b", "main")
-    run_git(repo, "config", "user.name", "SpoolHQ Tests")
-    run_git(repo, "config", "user.email", "tests@example.invalid")
-    run_git(repo, "config", "commit.gpgsign", "false")
-    commit_file(repo, "README.md", "# demo\n", "initial commit")
-    return repo
-
-
-@pytest.fixture
-def wt_root(tmp_path: Path) -> Path:
-    return tmp_path / "worktrees"
-
-
-@pytest.fixture
-def manager(wt_repo: Path, wt_root: Path) -> WorktreeManager:
-    return WorktreeManager(wt_repo, "demo", "main", wt_root)

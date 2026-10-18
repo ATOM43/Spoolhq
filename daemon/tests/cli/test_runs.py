@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-from conftest import FixedClock
 from typer.testing import CliRunner
 
 from spoolhq.cli import app
 from spoolhq.services.runs import AttemptKind, AttemptStatus, RunLog, RunStatus, state_db_path
+from tests.conftest import FixedClock
 
 runner = CliRunner()
 

@@ -18,9 +18,9 @@ from spoolhq.services.tickets import (
     save_ticket,
 )
 from spoolhq.services.tickets import document as ticket_document
+from tests.conftest import FIXTURES_DIR
 
-FIXTURES = Path(__file__).parent / "fixtures"
-ROUND_TRIP = sorted(path.name for path in (FIXTURES / "tickets").glob("*.md"))
+ROUND_TRIP = sorted(path.name for path in (FIXTURES_DIR / "tickets").glob("*.md"))
 
 VALID_FRONTMATTER = """\
 id: T04
@@ -93,7 +93,7 @@ def errors_for(projects_dir: Path, text: str, file_name: str = FILE_NAME) -> lis
 def round_trip_tickets(projects_dir: Path) -> Path:
     """A copy of the round-trip fixtures as the tickets of project ``rt``."""
     tickets = projects_dir / "rt" / "tickets"
-    shutil.copytree(FIXTURES / "tickets", tickets)
+    shutil.copytree(FIXTURES_DIR / "tickets", tickets)
     return tickets
 
 
@@ -114,7 +114,7 @@ def test_unchanged_ticket_saves_identical_bytes(
     assert save_ticket("rt", ticket, projects_dir=projects_dir) == path
     assert path.read_bytes() == before
     # Fixtures are copied byte for byte, so this also checks git kept them intact.
-    assert before == (FIXTURES / "tickets" / file_name).read_bytes()
+    assert before == (FIXTURES_DIR / "tickets" / file_name).read_bytes()
 
 
 @pytest.mark.parametrize("file_name", ROUND_TRIP)
@@ -322,7 +322,7 @@ def test_save_without_tickets_folder(projects_dir: Path) -> None:
 
 
 def test_dashboard_plan_loads() -> None:
-    listing = list_tickets("dashboard", projects_dir=FIXTURES)
+    listing = list_tickets("dashboard", projects_dir=FIXTURES_DIR)
     assert listing.invalid == []
     assert [ticket.id for ticket in listing.tickets] == list(DASHBOARD)
     for ticket in listing.tickets:
@@ -353,13 +353,13 @@ def test_dashboard_plan_loads() -> None:
     ],
 )
 def test_dashboard_filters(status: str | None, phase: int | None, expected: list[str]) -> None:
-    listing = list_tickets("dashboard", projects_dir=FIXTURES, status=status, phase=phase)
+    listing = list_tickets("dashboard", projects_dir=FIXTURES_DIR, status=status, phase=phase)
     assert [ticket.id for ticket in listing.tickets] == expected
 
 
 def test_unknown_status_filter() -> None:
     with pytest.raises(TicketError, match="unknown status 'doing'; expected one of: draft"):
-        list_tickets("dashboard", projects_dir=FIXTURES, status="doing")
+        list_tickets("dashboard", projects_dir=FIXTURES_DIR, status="doing")
 
 
 # Frontmatter rules --------------------------------------------------------------------

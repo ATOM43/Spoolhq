@@ -6,9 +6,9 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from conftest import FixedClock
 
 from spoolhq.services.runs import Event, EventBus, EventKind, RunLog, Subscription
+from tests.conftest import FixedClock
 
 
 @pytest.fixture

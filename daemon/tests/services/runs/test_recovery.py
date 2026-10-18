@@ -6,7 +6,6 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from conftest import FixedClock
 from typer.testing import CliRunner
 
 from spoolhq.cli import app
@@ -19,6 +18,7 @@ from spoolhq.services.runs import (
     RunStatus,
     recover_interrupted,
 )
+from tests.conftest import FixedClock
 
 runner = CliRunner()
 

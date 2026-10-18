@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 
 import pytest
-from conftest import commit_file, run_git
 from fastapi.testclient import TestClient
 
 from spoolhq.api import create_app
@@ -13,6 +12,7 @@ from spoolhq.core.config import load_settings
 from spoolhq.services.git import GitError, RecoveryReport, WorktreeManager
 from spoolhq.services.projects import init_project
 from spoolhq.services.runs import RunLog, RunStatus
+from tests.conftest import commit_file, run_git
 
 
 def make_repo(path: Path) -> Path:

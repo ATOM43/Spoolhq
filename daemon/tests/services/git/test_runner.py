@@ -4,7 +4,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from conftest import commit_file, run_git
 
 from spoolhq.services.git import (
     DirtyRepoError,
@@ -21,6 +20,7 @@ from spoolhq.services.git import (
     slugify,
 )
 from spoolhq.services.git.repo import status_entries
+from tests.conftest import commit_file, run_git
 
 # Runner -------------------------------------------------------------------------------
 

@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from conftest import FixedClock
 
 from spoolhq.services.runs import (
     ARTIFACT_NAMES,
@@ -18,6 +17,7 @@ from spoolhq.services.runs import (
     state_db_path,
     write_artifact,
 )
+from tests.conftest import FixedClock
 
 
 @pytest.fixture

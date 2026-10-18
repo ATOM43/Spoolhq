@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from conftest import FixedClock
 
 from spoolhq.services.runs import (
     MAX_PAYLOAD_BYTES,
@@ -23,6 +22,7 @@ from spoolhq.services.runs import (
     format_ts,
     state_db_path,
 )
+from tests.conftest import FixedClock
 
 
 @pytest.fixture

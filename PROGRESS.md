@@ -89,6 +89,7 @@ Structure only; no routes, commands, UI or security rules changed.
 ## Chores
 
 - graph: Graphify 0.9.92 code graph committed in `graphify-out/` (`GRAPH_REPORT.md`, `graph.json`, `graph.html`), with a "Code graph" section in `CLAUDE.md` (DECISIONS 86).
+- tests: daemon tests moved (`git mv`) into folders mirroring `src/spoolhq/`, `services/git` fixtures in their own `conftest.py`, `FIXTURES_DIR` for shared data, `tests/test_layout.py` guarding the layout; 570 → 573 tests, no test logic changed (DECISIONS 87).
 
 ## T07 · Run log and event bus
 

@@ -22,6 +22,7 @@ Conventions for coding agents (and humans) changing SpoolHQ.
 
 How to run and lay out tests: [docs/testing.md](docs/testing.md).
 
+- Daemon tests mirror `src/spoolhq/` (`tests/services/runs/test_bus.py` tests `services/runs/bus.py`); layout and fixture placement in [docs/testing.md](docs/testing.md#daemon-test-layout).
 - Every new function, route or CLI command gets tests in the same change.
 - Every bug fix adds a regression test that fails without the fix.
 - Unit tests never use the network, a real model, or the real home folder. The autouse `home` and `projects_dir` fixtures in `daemon/tests/conftest.py` point `SPOOLHQ_HOME` and `SPOOLHQ_PROJECTS_DIR` at tmp dirs for every test; don't bypass them.

@@ -30,9 +30,9 @@ from spoolhq.services.tickets import (
     load_ticket,
     parse_ticket,
 )
+from tests.conftest import FIXTURES_DIR, TESTS_DIR
 
-FIXTURES = Path(__file__).parent / "fixtures"
-DOCS = Path(__file__).parents[2] / "docs"
+DOCS = TESTS_DIR.parents[1] / "docs"
 
 
 def make(
@@ -58,7 +58,7 @@ def make(
 
 
 def dashboard(done: tuple[str, ...] = ()) -> list[Ticket]:
-    tickets = list_tickets("dashboard", projects_dir=FIXTURES).tickets
+    tickets = list_tickets("dashboard", projects_dir=FIXTURES_DIR).tickets
     for ticket in tickets:
         if ticket.id in done:
             ticket.meta.status = "done"
@@ -262,7 +262,7 @@ def test_running_needs_a_valid_plan() -> None:
 
 
 def copy_dashboard(projects_dir: Path) -> Path:
-    shutil.copytree(FIXTURES / "dashboard", projects_dir / "dashboard")
+    shutil.copytree(FIXTURES_DIR / "dashboard", projects_dir / "dashboard")
     return projects_dir / "dashboard" / "tickets"
 
 

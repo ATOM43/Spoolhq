@@ -5,11 +5,11 @@ import time
 from pathlib import Path
 
 import pytest
-from conftest import run_git
 
 from spoolhq.services.git import WorktreeManager
 from spoolhq.services.git import run_git as spool_git
 from spoolhq.services.git.runner import git_executable
+from tests.conftest import run_git
 
 TITLE = "Hooks"
 HOOKS = ("post-checkout", "prepare-commit-msg", "post-commit", "pre-commit")

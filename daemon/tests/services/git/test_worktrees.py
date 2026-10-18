@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import commit_file, run_git
 
 from spoolhq.services.git import (
     BranchConflictError,
@@ -26,6 +25,7 @@ from spoolhq.services.git import (
 from spoolhq.services.git import worktrees as worktrees_module
 from spoolhq.services.git.runner import git_executable
 from spoolhq.services.git.worktrees import parse_worktree_list, remove_path
+from tests.conftest import commit_file, run_git
 
 TITLE = 'Say "hi"; echo bad'
 BRANCH = "feat/T04-say-hi-echo-bad"

@@ -7,10 +7,10 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import run_git
 
 from spoolhq.services.git import RecoveryAction, WorktreeManager, recover_worktrees
 from spoolhq.services.git.worktrees import parse_worktree_list, remove_path
+from tests.conftest import run_git
 
 
 def branches(repo: Path) -> list[str]:

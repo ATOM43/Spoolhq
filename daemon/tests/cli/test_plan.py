@@ -4,8 +4,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from spoolhq.cli import app
-
-FIXTURES = Path(__file__).parent / "fixtures"
+from tests.conftest import FIXTURES_DIR
 
 runner = CliRunner()
 
@@ -37,7 +36,7 @@ def make_project(projects_dir: Path, name: str = "demo") -> Path:
 
 
 def copy_dashboard(projects_dir: Path) -> Path:
-    shutil.copytree(FIXTURES / "dashboard", projects_dir / "dashboard")
+    shutil.copytree(FIXTURES_DIR / "dashboard", projects_dir / "dashboard")
     return projects_dir / "dashboard" / "tickets"
 
 
