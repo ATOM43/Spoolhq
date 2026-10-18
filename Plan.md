@@ -1,10 +1,10 @@
-# SpoolHQ — Ticket Plan
+# Agent Orchestrator — Ticket Plan
 
 Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **26 tickets in 6 phases, about 68 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **27 tickets in 6 phases, about 71 hours** for one developer.
 
 **What v1 includes**
 
@@ -20,9 +20,9 @@ The app turns a written task spec into an approved ticket plan, then has one cod
 **The parts**
 
 - **Daemon** (Python, FastAPI): owns projects, the run loop, git and the tracker. Keeps running when the window closes, and runs headless on a server.
-- **CLI** (`spool`, Typer): every action without the UI. It is how the tool builds itself from Phase 3 on.
+- **CLI** (`orch`, Typer): every action without the UI. It is how the tool builds itself from Phase 3 on.
 - **Desktop app** (Tauri 2, React, TypeScript): a view and control panel over the daemon's API.
-- **Agent runtime**: Claude Agent SDK behind an `AgentRunner` interface, so other coding agents can plug in later.
+- **Agent runtime**: an `AgentRunner` interface, with adapters for the coding CLIs people already pay for (Claude Code by default, Codex, Gemini), so a subscription is enough; the Claude Agent SDK covers API keys.
 
 **How the tickets are sliced** (same rules as the dashboard plan)
 
@@ -70,7 +70,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T06 | Dependency graph and scheduler | 1 Project model | T05 | 2 |
 | T07 | Run log and event bus | 1 Project model | T02 | 2 |
 | T08 | Git workspace manager | 2 Run loop | T04 | 2.5 |
-| T09 | Agent runner | 2 Run loop | T02 | 3 |
+| T09 | Agent runner and Claude Code CLI | 2 Run loop | T02 | 3 |
 | T10 | Context pack and prompts | 2 Run loop | T05, T09 | 2 |
 | T11 | Quality gates | 2 Run loop | T04 | 2 |
 | T12 | Reviewer agent | 2 Run loop | T09, T11 | 2.5 |
@@ -80,6 +80,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T16 | Template library | 3 Planner and Git | T04, T11 | 3.5 |
 | T17 | GitHub delivery | 3 Planner and Git | T14 | 3.5 |
 | T18 | Merge policy | 3 Planner and Git | T12, T17 | 1.5 |
+| T27 | More agent backends | 3 Planner and Git | T09, T14 | 3.5 |
 | T19 | Live API | 4 Desktop UI | T07, T13 | 2.5 |
 | T20 | Home, project panel and dialogs | 4 Desktop UI | T03, T19 | 3 |
 | T21 | Tickets tab and drawer | 4 Desktop UI | T15, T20 | 3 |
@@ -88,7 +89,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T22 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
-|  | **Total** |  |  | **67.5** |
+|  | **Total** |  |  | **71** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T22 → T23 → T26 (27.5 h).
 
@@ -115,14 +116,14 @@ Done when:
 
 A daemon that starts and answers, and a CLI that talks to it. *Depends on: T01 · 1.5 h*
 
-- FastAPI app with `GET /api/health`; settings from `~/.spoolhq/config.toml` and environment variables.
-- Typer CLI `spool` with `spool serve` and `spool version`; other commands call the daemon's API.
+- FastAPI app with `GET /api/health`; settings from `~/.orch/config.toml` and environment variables.
+- Typer CLI `orch` with `orch serve` and `orch version`; other commands call the daemon's API.
 - Binds to 127.0.0.1 only and requires a random token stored in the config folder.
-- Structured logs in `~/.spoolhq/logs/`.
+- Structured logs in `~/.orch/logs/`.
 
 Done when:
 
-- [ ] `spool serve` starts the API and `/docs` shows it
+- [ ] `orch serve` starts the API and `/docs` shows it
 - [ ] A request without the token is rejected
 
 ### T03 · Desktop shell
@@ -147,14 +148,14 @@ Four tickets define what a project and a ticket are, on disk and in the database
 
 One folder per project, with validated settings. *Depends on: T02 · 2 h*
 
-- `spool init <name> --repo <path>` creates `~/spoolhq-projects/<name>/` with `project.yaml`, `CONTEXT.md`, `tickets/` and `runs/`.
+- `orch init <name> --repo <path>` creates `~/orch-projects/<name>/` with `project.yaml`, `CONTEXT.md`, `tickets/` and `runs/`.
 - `project.yaml` validated by Pydantic: repo path, default branch, stack commands (`install`, `test`, `lint`), agent model and budget, retry limits, merge policy, optional GitHub remote, optional tracker.
 - Errors name the field, for example `project.yaml: git.remote: not a GitHub URL`.
 - Code-facing notes (`PROGRESS.md`, `DECISIONS.md`, `CLAUDE.md`) live in the repo, because agents read them alongside the code.
 
 Done when:
 
-- [ ] `spool init` on an existing repo creates a valid workspace
+- [ ] `orch init` on an existing repo creates a valid workspace
 - [ ] One test per required field shows a readable error when it is missing
 
 ### T05 · Ticket file format and store
@@ -164,7 +165,7 @@ Tickets as markdown files people and agents can both read. *Depends on: T04 · 2
 - One file per ticket: YAML frontmatter (`id`, `title`, `phase`, `depends_on`, `status`, `estimate_h`, `review_required`, `tracker_ref`) and a body with scope and "Done when".
 - Read and write back without reordering the body or losing text the user added.
 - Statuses: draft, ready, running, awaiting\_approval, blocked, done.
-- `spool tickets list | show | edit`, filtered by status and phase.
+- `orch tickets list | show | edit`, filtered by status and phase.
 
 Done when:
 
@@ -189,7 +190,7 @@ Done when:
 
 A record of every attempt that survives crashes. *Depends on: T02 · 2 h*
 
-- SQLite in the workspace (`.spoolhq/state.db`): runs, attempts, append-only events, token cost.
+- SQLite in the workspace (`.orch/state.db`): runs, attempts, append-only events, token cost.
 - Each attempt keeps its transcript, gate output, diff and review verdict under `runs/<ticket>/<attempt>/`.
 - An in-process event bus; the API streams it from T19.
 - On startup, runs left running by a crash are marked interrupted.
@@ -212,7 +213,7 @@ Gates and review each loop back to the implementer with their findings; only a t
 A clean, disposable working copy per attempt. *Depends on: T04 · 2.5 h*
 
 - Refuse to start when the main repo has uncommitted changes, and list the files.
-- One worktree per attempt from the latest default branch, on `feat/T04-<slug>`, under `~/.spoolhq/worktrees/<project>/`.
+- One worktree per attempt from the latest default branch, on `feat/T04-<slug>`, under `~/.orch/worktrees/<project>/`.
 - Every git call as an argument list, never through a shell; ticket text can contain anything.
 - Teardown always runs; on startup, worktrees left by a crash are listed and pruned.
 
@@ -221,19 +222,21 @@ Done when:
 - [ ] Tests on a temporary repo: create, commit, teardown, and recovery after a simulated crash
 - [ ] A ticket title containing quotes and `;` produces a valid branch name
 
-### T09 · Agent runner
+### T09 · Agent runner and Claude Code CLI
 
-One interface for running a coding agent, with the Claude Agent SDK behind it. *Depends on: T02 · 3 h*
+One interface for running a coding agent, with the user's own Claude Code CLI as the first backend, so a subscription is enough. *Depends on: T02 · 3 h*
 
-- `AgentRunner.run(prompt, cwd, tools, max_turns, budget_usd)` streams events and returns a summary, files changed and cost.
-- The working directory is the worktree; file tools refuse paths outside it.
-- No blanket skip-permissions: shell commands come from an allowlist (the stack commands plus read-only git), and a hook denies the rest.
-- Timeout and cancel. A fake runner replays recorded transcripts for tests.
+- `AgentRunner.run(prompt, cwd, policy, max_turns, budget)` streams normalised events (message, tool call, file edit, usage) and returns a summary, files changed and usage.
+- First adapter drives the installed `claude` CLI in headless mode with streaming JSON output, started with an argument list inside the worktree. Check the current flags in its docs.
+- Policy translation: worktree-only file access and the shell allowlist (stack commands plus read-only git) are written into the CLI's own permission settings for that run. A backend that cannot enforce the policy is refused; never skip-permissions.
+- Usage: subscription runs report tokens and turn a usage-limit error into a pause until the reset time; API runs report cost.
+- `spool agents` lists detected backends, versions and login status. Timeout and cancel. A fake runner replays recorded transcripts for tests.
 
 Done when:
 
-- [ ] A real run creates a file in a scratch repo; the same run passes in CI with the fake runner
+- [ ] A real run through the `claude` CLI creates a file in a scratch repo; the same run passes in CI with the fake runner
 - [ ] A command outside the allowlist is denied and logged
+- [ ] A usage-limit error pauses the run with the reset time instead of failing the ticket
 
 ### T10 · Context pack and prompts
 
@@ -284,7 +287,7 @@ The state machine that ties T08 to T12 together. *Depends on: T06, T07, T08, T10
 - Worktree → implementer → gates → retry with the errors (up to 3) → reviewer → fix with the review notes (up to 2) → integrate.
 - Limits used up, or a needs\_human verdict: the ticket is blocked and its worktree kept for inspection.
 - One run at a time per project, enforced by a lock; pause, resume and cancel.
-- `spool run next` and `spool run all`, which stops at the first blocked ticket.
+- `orch run next` and `orch run all`, which stops at the first blocked ticket.
 
 Done when:
 
@@ -308,7 +311,7 @@ Done when:
 
 ## Phase 3 — Planner, templates and GitHub delivery
 
-Four tickets add the parts around the loop: turning a spec into tickets, starting projects from templates, and delivering through GitHub. From here the orchestrator implements its own tickets while you review.
+Five tickets add the parts around the loop: turning a spec into tickets, starting projects from templates, delivering through GitHub, and more agent backends. From here the orchestrator implements its own tickets while you review.
 
 ### T15 · Planner agent
 
@@ -316,7 +319,7 @@ From a spec to a ticket plan you approve. *Depends on: T06, T09 · 3.5 h*
 
 - Reads `CONTEXT.md` and the chosen template's description; writes draft tickets with scope, dependencies, estimate, "Done when" and `review_required`.
 - Output is JSON checked against the ticket schema and the graph rules from T06, then written as draft files.
-- Nothing runs until `spool plan approve`. Re-planning keeps tickets the user has edited.
+- Nothing runs until `orch plan approve`. Re-planning keeps tickets the user has edited.
 - Planning rules (ticket size, one branch per ticket, tests in every ticket) live in an editable prompt file.
 
 Done when:
@@ -329,7 +332,7 @@ Done when:
 The same proven structure for every new project, instead of regenerating boilerplate. *Depends on: T04, T11 · 3.5 h*
 
 - Templates are Copier projects from a local folder or a git URL. Unlike cookiecutter, Copier can update a project when its template improves.
-- `spool init --template fastapi-react` generates the repo and fills the stack commands in `project.yaml`.
+- `orch init --template fastapi-react` generates the repo and fills the stack commands in `project.yaml`.
 - First template: FastAPI, SQLAlchemy and pytest; React, Vite and TypeScript; a `justfile` with `install`, `dev`, `test`, `lint`; a `CLAUDE.md` with conventions; CI.
 - Contract check: a template must declare its commands, and they must pass on a freshly generated project.
 - The planner treats "apply template" as already done, so plans start at real work.
@@ -366,6 +369,22 @@ Done when:
 - [ ] Tests: each rule on its own sends a ticket to a PR
 - [ ] The run log names the rule behind each PR
 
+### T27 · More agent backends
+
+Codex CLI, Gemini CLI and the Claude Agent SDK behind the same interface, chosen per project and per role. Numbered T27 so existing IDs stay fixed. *Depends on: T09, T14 · 3.5 h*
+
+- Codex CLI adapter (exec mode, JSON events) and Gemini CLI adapter (headless, JSON output), each mapping the policy onto that CLI's own sandbox and approval settings.
+- Claude Agent SDK adapter for users with an API key, with the allowlist enforced by a hook.
+- `project.yaml` picks a backend per role (planner, implementer, reviewer), so the reviewer can run on a different model from the implementer.
+- One contract test suite every adapter must pass: against the fake runner in CI, against installed CLIs locally.
+- Before release, check each vendor's terms for driving its CLI from a third-party tool with a subscription login, and record the result in DECISIONS.md.
+
+Done when:
+
+- [ ] The same ticket fixture runs end to end on each installed backend
+- [ ] A backend that cannot enforce the policy is refused with a clear message
+- [ ] Planner, implementer and reviewer can each use a different backend
+
 ## Phase 4 — Desktop UI (v0 screens)
 
 Five tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
@@ -389,7 +408,7 @@ The two screens and the setup dialogs. *Depends on: T03, T19 · 3 h*
 
 - Home: project list with progress and status, a "Needs you" section, and an empty state that opens New project.
 - New project dialog: name, repo path or template, the three stack commands with **Test**.
-- Settings dialog: Anthropic key, GitHub and ClickUp tokens, stored in the keychain. Opens on first run when no key is set.
+- Settings dialog: agent backend (detected CLIs with their login status, or an API key), GitHub and ClickUp tokens; secrets in the keychain. Opens on first run when no backend is ready.
 - Project panel shell: header with progress line and run controls that change with state (disabled controls say why); tabs Spec, Tickets, Run.
 - Spec tab: markdown editor with autosave and **Generate plan**.
 - A daemon-not-running state on both screens instead of a blank window.
@@ -495,7 +514,7 @@ Not estimated yet; each gets its own ticket plan after v0.1.0. The v1 interfaces
 | 6 Docker execution | The agent runs in a container with the worktree bind-mounted, so code changes stay on your machine; network allowlist; secrets from an env file, not the command line | AgentRunner (T09) |
 | 7 Parallel agents | Several independent ready tickets at once; a merge queue integrates one at a time; a conflict re-runs the ticket on the new main | Scheduler (T06), integration (T14) |
 | 8 Trackers | Two-way ClickUp sync, a Jira adapter, and webhook intake so a new tracker task can start a run | TrackerAdapter (T24) |
-| 9 More agents | Other coding agents (Codex CLI, Aider) behind the same runner interface | AgentRunner (T09) |
+| 9 More agents | Aider and other coding agents behind the same runner interface | AgentRunner (T09) |
 | 10 Template registry | A shared index of community templates, versioned and contract-checked | Template library (T16) |
 | 11 Full desktop UI | The 16-screen design in screens-prompt.md: Inbox, Overview, History, plan graph, Templates and Settings screens, global run bar | v0 screens (T20–T22) |
 
@@ -515,16 +534,16 @@ Not estimated yet; each gets its own ticket plan after v0.1.0. The v1 interfaces
 | The agent loops on a ticket it cannot solve | Cost rises, nothing merges | Per-ticket budget and retry limits in `project.yaml`; blocked when they run out |
 | The agent runs a harmful command before Docker exists | Damage outside the worktree | Command allowlist and path hook (T09); Docker in Phase 6 |
 | Planner tickets are too large or vague | The implementer fails repeatedly | Size rules in the planner prompt; the approval gate (T21); split tickets from the board |
-| The PyInstaller sidecar breaks on one OS | T23 overruns | Ship the daemon as a pip package with `spool serve` and let the app connect to it |
+| The PyInstaller sidecar breaks on one OS | T23 overruns | Ship the daemon as a pip package with `orch serve` and let the app connect to it |
 | The Kontora spike shows Phase 2 already exists | Duplicate work | Build on Kontora; contribute the planner, templates, merge policy and UI |
 | Running short of time | The release slips | Cut in this order: past-runs list in the Run tab, tray icon, Windows build. Never cut gates, the reviewer, the merge policy or crash recovery |
 
 **Open questions**
 
-- Should tickets live in the workspace folder (no commit noise) or inside the repo under `.spoolhq/` (they travel with the code)? The plan assumes the workspace.
+- Should tickets live in the workspace folder (no commit noise) or inside the repo under `.orch/` (they travel with the code)? The plan assumes the workspace.
 - Default merge policy: merge directly unless a rule triggers, or open a PR unless the ticket is marked trivial?
 - Should the reviewer use a different model from the implementer, to reduce shared blind spots?
-- Project and CLI name before the first public commit. Resolved: SpoolHQ (package `spoolhq`, CLI `spool`).
+- Project and CLI name before the first public commit; `orch` is a placeholder.
 - Licence: Apache-2.0 is assumed. AGPL would keep forks open but slows adoption.
 
 ## Sources
