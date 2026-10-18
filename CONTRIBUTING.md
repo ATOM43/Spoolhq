@@ -19,7 +19,7 @@ Linux, macOS and Windows are all supported. On Windows, `just` runs recipes in P
 | `just install` | Installs Python and Node dependencies exactly as locked |
 | `just lint` | ruff, ruff format check, mypy, ESLint, Prettier check, `tsc --noEmit` |
 | `just test` | pytest and Vitest |
-| `just dev` | Starts the app (a placeholder for now) |
+| `just dev` | Starts the daemon (`spool serve`) |
 
 Run `just lint && just test` before you open a pull request.
 

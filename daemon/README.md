@@ -1,8 +1,9 @@
 # spoolhq (daemon)
 
-The Python daemon for SpoolHQ. Today it is only a package skeleton; the FastAPI service arrives in T02.
+The Python daemon for SpoolHQ. It serves a local FastAPI API (`spool serve`); see the root README.
 
 ```sh
 uv sync
 uv run pytest
+uv run spool serve
 ```

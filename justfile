@@ -26,6 +26,6 @@ test:
     uv run --directory daemon pytest
     pnpm --dir desktop exec vitest run
 
-# Start the app (nothing to start yet).
+# Start the daemon on 127.0.0.1 (the desktop app arrives in T03).
 dev:
-    @echo "nothing to run yet (see T02, T03)"
+    uv run --directory daemon spool serve

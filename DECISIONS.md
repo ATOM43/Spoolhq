@@ -18,3 +18,10 @@ Each entry is one decision and the reason for it. Add new entries at the bottom;
 14. **`uv sync --locked` everywhere.** CI fails if `uv.lock` is out of date instead of silently re-resolving.
 15. **The justfile's Windows shell is `powershell.exe`, not `pwsh`.** Windows PowerShell is always installed; PowerShell 7 is not.
 16. **The GitHub repo is `ATOM43/spoolhq`.** It matches the package name, so there is one name to search for.
+17. **The daemon binds to 127.0.0.1 only, with no override.** It runs agents on your code; nothing off the machine should reach it. A non-loopback `host` in config or env is a validation error.
+18. **Local auth is a bearer token in `~/.spoolhq/token` (mode 0600, folder 0700).** Other local users and web pages cannot read it, and the CLI and desktop app need no login; it is compared with `secrets.compare_digest`.
+19. **`GET /api/health` needs no token.** Clients use it to detect a running daemon, and it reveals nothing; every other `/api/*` route is protected by a middleware, so new routes are protected by default.
+20. **Requests whose `Host` is not `127.0.0.1:<port>` or `localhost:<port>` get 400.** This blocks DNS-rebinding attacks from web pages, which send their own domain in `Host`.
+21. **Logs are JSON lines from stdlib `logging` with a small formatter, no logging dependency.** One rotating file (10 MB × 5) that tools can parse; the token is redacted from every line as a backstop.
+22. **Runtime dependencies are pinned exactly in `pyproject.toml`, like the dev tools.** SpoolHQ is an application, not a library; revisit if it is ever installed alongside other packages.
+23. **The CLI's HTTP client ignores proxy environment variables (`trust_env=False`).** The daemon is always local; a user's `HTTP_PROXY` must not route CLI calls through a proxy.

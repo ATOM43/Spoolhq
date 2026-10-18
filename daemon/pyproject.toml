@@ -5,7 +5,17 @@ description = "SpoolHQ daemon: turns a written spec into a ticket plan and runs 
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi==0.143.3",
+    "httpx==0.28.1",
+    "pydantic==2.14.1",
+    "pydantic-settings==2.16.0",
+    "typer==0.27.3",
+    "uvicorn==0.54.0",
+]
+
+[project.scripts]
+spool = "spoolhq.cli:app"
 
 [dependency-groups]
 dev = [
@@ -39,3 +49,6 @@ files = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--strict-markers", "--strict-config"]
+markers = [
+    "integration: starts a real daemon in a subprocess (runs in CI on Linux, macOS and Windows)",
+]
