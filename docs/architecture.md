@@ -47,6 +47,24 @@ cli    api        thin entry points: validate input, call a service, return the 
 
 New routes are token-protected by default (`api/security.py`); add a route to `PUBLIC_ROUTES` only if it must work without the token.
 
+## Projects
+
+A project is one workspace folder plus the git repository it works on. Workspaces live in `~/spoolhq-projects/` (the `projects_dir` setting: `config.toml` or `SPOOLHQ_PROJECTS_DIR`), one folder per project, named after the project's slug:
+
+```text
+~/spoolhq-projects/<name>/
+  project.yaml   # settings: repo, branch, stack commands, agents, limits, merge policy, remote, tracker
+  CONTEXT.md     # the spec the planner reads
+  tickets/       # one markdown file per ticket (T05)
+  runs/          # per-ticket attempts: transcripts, gate output, diffs, reviews (later tickets)
+```
+
+`spool init <name> --repo <path>` creates it; `spool project validate <name>` checks it. The `project.yaml` format and its error messages are in [project-yaml.md](project-yaml.md).
+
+**Code-facing notes live in the repository, not the workspace.** `PROGRESS.md`, `DECISIONS.md` and `CLAUDE.md` sit next to the code because agents read them with the code, and they travel with the repo. `spool init` never writes into the repository; it only says which of these files are missing.
+
+The code is `services/projects/` (the model in `model.py`, YAML handling in `yaml_io.py`, the workspace in `workspace.py`), with read-only repository checks in `services/git/`. Nothing outside `services/projects/` reads or writes YAML: callers use `load_project`, `save_project` and `init_project`. Because these are local file operations, the `spool init` and `spool project validate` commands call the service directly instead of going through the daemon.
+
 ## Frontend: `desktop/src/` (Feature-Sliced Design)
 
 ```text

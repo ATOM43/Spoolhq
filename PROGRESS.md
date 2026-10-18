@@ -48,3 +48,14 @@ Structure only; no routes, commands, UI or security rules changed.
 - Frontend: Feature-Sliced Design under `desktop/src/` — `app/` (entry, Query provider, router, global styles), `pages/home` and `pages/project-panel`, `widgets/top-bar` and `widgets/daemon-down-panel`, `features/daemon-status` and `features/open-settings`, `entities/daemon` (plus empty `project`, `ticket`, `run`), and `shared/` (`api`, `ui`, `lib`, `config`, `styles`). Every slice has an `index.ts`; tests sit next to their code.
 - `eslint-plugin-boundaries` (dev only) enforces public-API-only, downward-only and no-sideways imports in `just lint`.
 - Docs: `docs/architecture.md`; "Code structure" in `CLAUDE.md`; work directly on `main` (no branches or pull requests) in `CLAUDE.md` and `CONTRIBUTING.md`.
+
+## T04 · Project workspace and settings
+
+- `projects_dir` setting in `core/config` (default `~/spoolhq-projects`, `config.toml` or `SPOOLHQ_PROJECTS_DIR`, `~` expanded).
+- `services/projects/`: Pydantic model of `project.yaml` (`name`, `repo`, `default_branch`, `template`, `commands`, `agents`, `limits`, `merge_policy`, `git.remote`, `tracker`) with `extra="forbid"` throughout; the repo must be a git work tree and the branch must exist. Every error at once as `project.yaml: <dotted.path>: <message>` (unknown keys suggest the closest field); YAML syntax errors give line and column.
+- ruamel.yaml round-trip loading and saving (`load_project`, `save_project`): comments and formatting survive, only changed values are rewritten, writes are atomic.
+- `services/git/`: read-only `is_work_tree` and `branch_exists` (`git -C <repo> rev-parse …`, argument lists only).
+- `spool init <name> --repo <path> [--branch] [--remote]` creates `project.yaml` (defaults plus placeholder `just` commands), `CONTEXT.md` (Objective, Background, Requirements, Deliverables), `tickets/` and `runs/`, atomically; refuses an existing folder and bad input without creating anything; notes missing `PROGRESS.md` / `DECISIONS.md` / `CLAUDE.md` in the repo without writing them.
+- `spool project validate <name>` prints `valid` or every error, exiting 1 on errors.
+- Docs: "Projects" in `docs/architecture.md`, `docs/project-yaml.md`, DECISIONS 39–43.
+- Tests: init then validate, each required field missing, documented messages for bad values (remote, backend, budget, retries, typos, slugs), repo/branch refusals that create nothing, existing folder, failures mid-init, comment-preserving round-trip, YAML line/column, unsafe tags. Temp `SPOOLHQ_HOME`, `SPOOLHQ_PROJECTS_DIR` and git repos in fixtures.

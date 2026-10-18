@@ -1,6 +1,7 @@
 """The `spool` command."""
 
 import logging
+from pathlib import Path
 from typing import Annotated, Any, NoReturn
 
 import typer
@@ -12,6 +13,12 @@ from spoolhq.cli.client import ApiClient, ApiError, DaemonNotRunning
 from spoolhq.core.auth import load_or_create_token, token_path
 from spoolhq.core.config import ConfigError, Settings, ensure_home, load_settings
 from spoolhq.core.logs import configure_logging
+from spoolhq.services.projects import (
+    ProjectError,
+    ProjectValidationError,
+    init_project,
+    load_project,
+)
 
 app = typer.Typer(
     name="spool",
@@ -19,6 +26,13 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+project_app = typer.Typer(
+    name="project",
+    help="Check and manage projects.",
+    no_args_is_help=True,
+)
+app.add_typer(project_app)
 
 logger = logging.getLogger("spoolhq.daemon")
 
@@ -77,3 +91,45 @@ def version() -> None:
         typer.echo("daemon not running (start it with `spool serve`)")
     except ApiError as exc:
         _fail(f"error: {exc}")
+
+
+@app.command()
+def init(
+    name: Annotated[str, typer.Argument(help="Project name: lowercase letters, digits, hyphens.")],
+    repo: Annotated[Path, typer.Option(help="The existing git repository to work on.")],
+    branch: Annotated[str, typer.Option(help="Branch that tickets merge into.")] = "main",
+    remote: Annotated[
+        str | None, typer.Option(help="GitHub URL of the repository (optional).")
+    ] = None,
+) -> None:
+    """Create a project workspace for an existing git repository."""
+    settings = _settings()
+    try:
+        result = init_project(
+            name, repo, projects_dir=settings.projects_dir, branch=branch, remote=remote
+        )
+    except ProjectValidationError as exc:
+        _fail("\n".join(f"error: {line}" for line in exc.errors))
+    except ProjectError as exc:
+        _fail(f"error: {exc}")
+    typer.echo(f"Created project '{result.project.name}' at {result.path}")
+    if result.missing_notes:
+        missing = ", ".join(result.missing_notes)
+        typer.echo(f"note: {result.project.repo_path} has no {missing} (agents read them there)")
+    typer.echo(
+        f"Next: write your spec in {result.path / 'CONTEXT.md'}, "
+        "and check the commands in project.yaml."
+    )
+
+
+@project_app.command("validate")
+def validate_project(
+    name: Annotated[str, typer.Argument(help="Project to check.")],
+) -> None:
+    """Check a project's project.yaml and print every problem."""
+    settings = _settings()
+    try:
+        load_project(name, projects_dir=settings.projects_dir)
+    except ProjectError as exc:
+        _fail(str(exc))
+    typer.echo("valid")

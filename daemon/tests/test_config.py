@@ -79,3 +79,21 @@ def test_non_loopback_host_is_refused(
         write_config(home, f'host = "{all_interfaces}"\n')
     with pytest.raises(ConfigError, match="'host'.*only listens on 127.0.0.1"):
         load_settings()
+
+
+def test_projects_dir_defaults_to_home_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SPOOLHQ_PROJECTS_DIR")
+    assert load_settings().projects_dir == Path.home() / "spoolhq-projects"
+
+
+def test_projects_dir_from_config_expands_user(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SPOOLHQ_PROJECTS_DIR")
+    write_config(home, 'projects_dir = "~/work/spool"\n')
+    assert load_settings().projects_dir == Path.home() / "work" / "spool"
+
+
+def test_projects_dir_env_wins(
+    home: Path, projects_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(home, 'projects_dir = "/elsewhere"\n')
+    assert load_settings().projects_dir == projects_dir

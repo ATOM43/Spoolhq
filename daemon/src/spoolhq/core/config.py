@@ -2,6 +2,8 @@
 
 Settings come from ``<home>/config.toml`` and then from ``SPOOLHQ_*`` environment
 variables, which win. The home folder is ``~/.spoolhq`` unless ``SPOOLHQ_HOME`` is set.
+Projects live in ``~/spoolhq-projects`` unless ``projects_dir`` (``SPOOLHQ_PROJECTS_DIR``)
+says otherwise.
 """
 
 import os
@@ -35,6 +37,10 @@ def home_dir() -> Path:
     return Path(override) if override else Path.home() / ".spoolhq"
 
 
+def default_projects_dir() -> Path:
+    return Path.home() / "spoolhq-projects"
+
+
 def config_path() -> Path:
     return home_dir() / "config.toml"
 
@@ -58,6 +64,7 @@ class Settings(BaseSettings):
     host: str = LOOPBACK_HOST
     port: int = Field(default=8765, ge=1, le=65535)
     log_level: LogLevel = "INFO"
+    projects_dir: Path = Field(default_factory=default_projects_dir)
 
     @field_validator("host")
     @classmethod
@@ -72,6 +79,11 @@ class Settings(BaseSettings):
     @classmethod
     def _upper_log_level(cls, value: Any) -> Any:
         return value.upper() if isinstance(value, str) else value
+
+    @field_validator("projects_dir")
+    @classmethod
+    def _expand_projects_dir(cls, value: Path) -> Path:
+        return value.expanduser()
 
     @classmethod
     def settings_customise_sources(

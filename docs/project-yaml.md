@@ -1,0 +1,94 @@
+# `project.yaml` reference
+
+Each project's settings live in `~/spoolhq-projects/<name>/project.yaml` (see [Projects](architecture.md#projects)). `spool init` writes one with the defaults filled in; `spool project validate <name>` checks it.
+
+Unknown keys are errors, so a typo never silently falls back to a default.
+
+## Example
+
+```yaml
+name: sim-dashboard
+repo: ~/code/sim-dashboard
+default_branch: main
+template: fastapi-react
+commands:
+  install: just install
+  lint: just lint
+  test: just test
+agents:
+  default: claude-code-cli        # claude-code-cli | codex-cli | gemini-cli | claude-agent-sdk
+  reviewer: codex-cli             # optional per-role override
+  budget_per_ticket:
+    usd: 5                        # API backends
+    tokens: 2000000               # subscription backends
+limits:
+  gate_retries: 3
+  review_retries: 2
+merge_policy:
+  max_direct_diff_lines: 400
+  protected_paths: ["**/migrations/**", ".github/**", "**/auth/**"]
+  always_pr: false
+git:
+  remote: https://github.com/<owner>/<repo>   # optional
+tracker:
+  kind: clickup                               # optional
+  list_id: "<list id>"
+```
+
+## Fields
+
+| Key | Required | Default | Rules |
+| --- | --- | --- | --- |
+| `name` | yes | | Slug: `^[a-z0-9][a-z0-9-]{0,62}$` (lowercase letters, digits, hyphens; 1–63 characters). Must match the project's folder name. |
+| `repo` | yes | | Absolute path or a path starting with `~`. Must exist and be a git work tree. |
+| `default_branch` | no | `main` | Must exist in `repo` (with at least one commit). |
+| `template` | no | | Name of the stack template the project came from. |
+| `commands.install` | yes | | Non-empty shell command the gates run to install dependencies. |
+| `commands.lint` | yes | | Non-empty lint command. |
+| `commands.test` | yes | | Non-empty test command. |
+| `agents.default` | no | `claude-code-cli` | One of `claude-code-cli`, `codex-cli`, `gemini-cli`, `claude-agent-sdk`. |
+| `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override; same values as `agents.default`. |
+| `agents.budget_per_ticket.usd` | no | | Positive number: spending cap per ticket for API backends. |
+| `agents.budget_per_ticket.tokens` | no | | Positive whole number: token cap per ticket for subscription backends. |
+| `limits.gate_retries` | no | `3` | Whole number from 0 to 10. |
+| `limits.review_retries` | no | `2` | Whole number from 0 to 10. |
+| `merge_policy.max_direct_diff_lines` | no | `400` | Whole number above 0. Larger diffs wait for approval in a pull request. |
+| `merge_policy.protected_paths` | no | `["**/migrations/**", ".github/**", "**/auth/**"]` | List of globs. A ticket touching one of these waits for approval. |
+| `merge_policy.always_pr` | no | `false` | `true` sends every ticket through a pull request. |
+| `git.remote` | no | | A GitHub URL: `https://github.com/<owner>/<repo>` (optionally ending in `.git`) or `git@github.com:<owner>/<repo>.git`. |
+| `tracker.kind` | no | `clickup` | Only `clickup` for now. |
+| `tracker.list_id` | when `tracker` is set | | Non-empty string; quote it (`"901"`) if it is all digits. |
+
+The commands written by `spool init` are placeholders (`just install`, `just lint`, `just test`); check them before the first run.
+
+## Errors
+
+Every problem is reported at once, one line each, as `project.yaml: <dotted.path>: <message>`. List items are shown with their index, as in `merge_policy.protected_paths[1]`.
+
+| Problem | Message |
+| --- | --- |
+| A required key is missing | `project.yaml: commands.test: field required` |
+| Unknown key | `project.yaml: limits.gate_retires: unknown key (did you mean 'gate_retries'?)` |
+| Bad name | `project.yaml: name: must be 1-63 lowercase letters, digits or hyphens, starting with a letter or digit` |
+| Name differs from the folder | `project.yaml: name: 'other' does not match the project folder name 'demo'` |
+| Repo path is relative | `project.yaml: repo: must be an absolute path (or start with ~), got 'code/app'` |
+| Repo path missing | `project.yaml: repo: path does not exist: /home/me/code/app` |
+| Not a git repository | `project.yaml: repo: not a git work tree: /home/me/code/app` |
+| Branch missing | `project.yaml: default_branch: branch 'develop' not found in /home/me/code/app` |
+| git not installed | `project.yaml: repo: git was not found on PATH` |
+| Bad remote | `project.yaml: git.remote: not a GitHub URL` |
+| Unknown backend | `project.yaml: agents.default: unknown backend 'copilot'; expected one of: claude-code-cli, codex-cli, gemini-cli, claude-agent-sdk` |
+| Budget not positive | `project.yaml: agents.budget_per_ticket.usd: must be greater than 0` |
+| Retries out of range | `project.yaml: limits.gate_retries: must be at most 10` (or `must be at least 0`) |
+| Empty command | `project.yaml: commands.lint: must not be empty` |
+| Wrong type | `project.yaml: merge_policy.always_pr: input should be a valid boolean, unable to interpret input` |
+| YAML syntax error | `project.yaml: line 3, column 1: expected the node content, but found '<stream end>'` |
+| Duplicate key | `project.yaml: line 2, column 1: found duplicate key "name" with value "again" (original value: "demo")` |
+
+`spool init` checks its arguments the same way and reports problems without the file prefix, for example `error: repo: not a git work tree: /tmp/x`. It creates nothing unless every check passes.
+
+## How the file is read and written
+
+- The file is parsed with ruamel.yaml's round-trip loader, which never constructs Python objects: a tag such as `!!python/object` is plain data and fails validation.
+- When SpoolHQ saves the file, it rewrites only values that changed. Comments, key order and quoting are kept, and settings you left out stay out.
+- Saves are atomic (temp file and rename), so a crash never leaves a half-written file.
