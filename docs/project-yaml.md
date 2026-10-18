@@ -33,6 +33,8 @@ git:
 tracker:
   kind: clickup                               # optional
   list_id: "<list id>"
+context:
+  max_chars: 120000                           # optional: the prompt's size budget
 ```
 
 ## Fields
@@ -56,6 +58,7 @@ tracker:
 | `merge_policy.protected_paths` | no | `["**/migrations/**", ".github/**", "**/auth/**"]` | List of globs. A ticket touching one of these waits for approval. |
 | `merge_policy.always_pr` | no | `false` | `true` sends every ticket through a pull request. |
 | `git.remote` | no | | A GitHub URL: `https://github.com/<owner>/<repo>` (optionally ending in `.git`) or `git@github.com:<owner>/<repo>.git`. The owner is 1–39 letters, digits or hyphens; the repository is 1–100 letters, digits, `.`, `_` or `-`; neither may start with `-` or `.`. |
+| `context.max_chars` | no | `120000` | Whole number from 20,000 to 2,000,000: the most characters the implementer's prompt may have ([context](context.md)). |
 | `tracker.kind` | no | `clickup` | Only `clickup` for now. |
 | `tracker.list_id` | when `tracker` is set | | Non-empty string; quote it (`"901"`) if it is all digits. |
 

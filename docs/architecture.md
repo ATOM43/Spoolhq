@@ -99,6 +99,12 @@ A coding agent implements a ticket in its worktree through one interface, `Agent
 
 The code is `services/agents/`: `AgentPolicy`, `Budget`, the events and `RunResult` in `model.py`, the `AgentRunner` protocol in `runner.py`, the pure `ClaudeStreamParser` in `claude_stream.py`, `ClaudeCliRunner` (command line, settings, environment, process handling) in `claude_cli.py`, `FakeRunner` (replays recorded transcripts for tests) in `fake.py` and `available_runners` in `backends.py`. It imports no other service package, which an import-linter contract checks; the run loop (T13) will pass in the worktree path and `project.yaml`'s commands. `spool agents` (in `cli/agents.py`) lists the backends; nothing runs an agent yet.
 
+## Context
+
+The implementer agent starts from one prompt, built by `build_implementer_prompt(ContextInputs)`: the rules and commands, on a retry what went wrong last time (failing tests, gate output, review notes, conflicts, a user note), the ticket, and as much of the repository's `CLAUDE.md`, the workspace's `CONTEXT.md` and the repository's `PROGRESS.md` and `DECISIONS.md` as fits in `context.max_chars` (default 120,000 characters). Every untrusted value is a variable in a sandboxed Jinja2 template, never template source, and sits in its own tag block whose closing tag is escaped inside it. The agent hands back a `<progress>` note in its final message, which T14 will append to `PROGRESS.md`. The rules are in [context.md](context.md).
+
+The code is `services/context/`: the frozen input values in `model.py`, the trimming rules in `budget.py`, the sandboxed loading and rendering (`build_implementer_prompt`, `render_template`) in `render.py`, `extract_progress_note` and `format_progress_entry` in `progress.py`, and the default template in `prompts/implementer.md.j2` (package data, loaded with `importlib.resources`). A project can override the template in `<workspace>/prompts/`. It imports no other service package, which an import-linter contract checks; `spool prompt show` (in `cli/prompt.py`) builds the inputs from the ticket store and `project.yaml` and prints the prompt.
+
 ## Frontend: `desktop/src/` (Feature-Sliced Design)
 
 ```text

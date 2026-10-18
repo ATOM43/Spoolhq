@@ -108,6 +108,12 @@ class GitSettings(_Strict):
     remote: Annotated[str, AfterValidator(check_github_url)] | None = None
 
 
+class ContextSettings(_Strict):
+    """The implementer prompt's size budget, in characters (see docs/context.md)."""
+
+    max_chars: int = Field(default=120_000, ge=20_000, le=2_000_000)
+
+
 class Tracker(_Strict):
     kind: Literal["clickup"] = "clickup"
     list_id: NonEmptyStr
@@ -124,6 +130,7 @@ class Project(_Strict):
     merge_policy: MergePolicy = Field(default_factory=MergePolicy)
     git: GitSettings = Field(default_factory=GitSettings)
     tracker: Tracker | None = None
+    context: ContextSettings = Field(default_factory=ContextSettings)
 
     @property
     def repo_path(self) -> Path:

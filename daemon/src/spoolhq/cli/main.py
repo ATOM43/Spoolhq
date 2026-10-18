@@ -15,6 +15,7 @@ from spoolhq.cli.client import ApiClient, ApiError, DaemonNotRunning
 from spoolhq.cli.common import fail as _fail
 from spoolhq.cli.common import settings as _settings
 from spoolhq.cli.plan import plan_app
+from spoolhq.cli.prompt import prompt_app
 from spoolhq.cli.runs import runs_app
 from spoolhq.cli.tickets import tickets_app
 from spoolhq.cli.worktrees import worktrees_app
@@ -44,6 +45,7 @@ project_app = typer.Typer(
 app.add_typer(project_app)
 app.add_typer(tickets_app)
 app.add_typer(plan_app)
+app.add_typer(prompt_app)
 app.add_typer(runs_app)
 app.add_typer(worktrees_app)
 app.command("agents")(agents_command)

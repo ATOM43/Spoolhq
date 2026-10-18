@@ -1,5 +1,8 @@
 # Keep LF everywhere so formatters agree on Windows checkouts.
 * text=auto eol=lf
 
+# Test fixtures and golden files are compared byte for byte: always LF.
+daemon/tests/fixtures/** text eol=lf
+
 # Round-trip fixtures must keep their exact bytes (CRLF, no final newline, BOM).
 daemon/tests/fixtures/tickets/** -text

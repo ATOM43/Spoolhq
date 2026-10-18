@@ -52,6 +52,12 @@ Agents run through your own installed [Claude Code](https://code.claude.com/docs
 uv run --directory daemon spool agents      # installed, version, login and billing, policy enforceable
 ```
 
+To see the prompt an agent would start a ticket with ([context](docs/context.md)); its size and anything trimmed to fit `context.max_chars` (`project.yaml`, default 120,000 characters) go to stderr:
+
+```sh
+uv run --directory daemon spool prompt show my-app T04
+```
+
 ## Run the daemon
 
 ```sh
