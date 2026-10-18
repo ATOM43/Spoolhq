@@ -511,3 +511,20 @@ def test_run_removes_new_empty_stubs_only(
     assert result.outcome is Outcome.COMPLETED
     assert sorted(path.name for path in worktree.iterdir()) == [".env.local", "package.json"]
     assert (worktree / "package.json").read_text(encoding="utf-8") == '{"name": "app"}'
+
+
+@pytest.mark.integration
+def test_read_only_run_through_the_binary(tmp_path: Path, worktree: Path, home: Path) -> None:
+    from tests.conftest import REVIEW_FIXTURES
+
+    policy = AgentPolicy.read_only_for(worktree, home)
+    agent = runner(tmp_path, scenario=REVIEW_FIXTURES / "approve.jsonl")
+    assert run(agent, policy).outcome is Outcome.COMPLETED
+    argv = read_record(tmp_path)["argv"]
+    assert argv[argv.index("--tools") + 1] == "Read,Glob,Grep"
+
+    agent = runner(tmp_path, scenario=REVIEW_FIXTURES / "init_with_edit.jsonl")
+    result = run(agent, policy)
+    assert result.outcome is Outcome.ERROR
+    assert result.error is not None
+    assert result.error.startswith("policy not enforced: init lists tools that were not requested")

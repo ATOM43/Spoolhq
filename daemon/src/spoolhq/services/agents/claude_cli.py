@@ -32,6 +32,7 @@ from spoolhq.services.agents.claude_config import (
     child_env,
     existing_stubs,
     remove_new_stubs,
+    requested_tools,
     with_config_dir,
 )
 from spoolhq.services.agents.claude_stream import (
@@ -261,6 +262,8 @@ class ClaudeCliRunner:
         parser = ClaudeStreamParser(
             policy.worktree,
             billing=info.billing,
+            requested_tools=requested_tools(policy),
+            exact_tools=policy.read_only,
             permission_modes=PERMISSION_MODES,
             backend_version=info.version or "",
         )

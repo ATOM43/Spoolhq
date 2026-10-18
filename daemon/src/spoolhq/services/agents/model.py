@@ -5,6 +5,7 @@ reports ``AgentEvent``s while it works and returns a ``RunResult``. See
 ``docs/agents.md``.
 """
 
+import dataclasses
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -100,6 +101,8 @@ class AgentPolicy:
     """Paths the sandbox denies reads of (``~/.ssh``, …, the SpoolHQ home)."""
     network_domains: tuple[str, ...] = ()
     """Domains the agent's commands may reach; none in v1."""
+    read_only: bool = False
+    """Only the read tools (Read, Glob, Grep): no Bash, Edit or Write. For the reviewer."""
 
     @classmethod
     def for_worktree(cls, worktree: Path, commands: Mapping[str, str], home: Path) -> "AgentPolicy":
@@ -124,6 +127,16 @@ class AgentPolicy:
             read_only_git=READ_ONLY_GIT,
             denied_read_paths=(*CREDENTIAL_PATHS, *home_denials(home, worktree)),
         )
+
+    @classmethod
+    def read_only_for(cls, worktree: Path, home: Path) -> "AgentPolicy":
+        """The policy for an agent that may only read files in ``worktree``.
+
+        It runs no commands, so it has no Bash rules; the sandbox settings and the
+        deny list are the same as for a writing agent.
+        """
+        policy = cls.for_worktree(worktree, {}, home)
+        return dataclasses.replace(policy, read_only_git=(), read_only=True)
 
     @property
     def commands(self) -> tuple[str, ...]:

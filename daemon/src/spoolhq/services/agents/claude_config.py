@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from spoolhq.core.agent_policy import allowed_env
-from spoolhq.services.agents.claude_stream import CLAUDE_TOOLS, FILE_TOOLS
+from spoolhq.services.agents.claude_stream import CLAUDE_TOOLS, FILE_TOOLS, READ_ONLY_TOOLS
 from spoolhq.services.agents.model import AgentPolicy, Billing, Budget, PolicyError
 
 API_KEY_VAR = "ANTHROPIC_API_KEY"
@@ -77,6 +77,11 @@ def with_config_dir(policy: AgentPolicy, env: Mapping[str, str]) -> AgentPolicy:
     return dataclasses.replace(policy, denied_read_paths=(*policy.denied_read_paths, config_dir))
 
 
+def requested_tools(policy: AgentPolicy) -> tuple[str, ...]:
+    """``--tools`` for ``policy``; ``init`` must list exactly these for a read-only one."""
+    return READ_ONLY_TOOLS if policy.read_only else CLAUDE_TOOLS
+
+
 def sandbox_settings(policy: AgentPolicy) -> dict[str, Any]:
     """The ``--settings`` object: a required OS sandbox, no network, no hooks."""
     return {
@@ -119,9 +124,9 @@ def build_argv(
         "--permission-prompts",
         "none",
         "--tools",
-        ",".join(CLAUDE_TOOLS),
+        ",".join(requested_tools(policy)),
         "--allowedTools",
-        *FILE_TOOLS,
+        *(READ_ONLY_TOOLS if policy.read_only else FILE_TOOLS),
         *policy.bash_rules(),
         "--disallowedTools",
         "WebFetch",

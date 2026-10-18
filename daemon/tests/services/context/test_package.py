@@ -52,4 +52,6 @@ def test_template_is_in_the_built_wheel(tmp_path: Path) -> None:
     )
     [wheel] = tmp_path.glob("*.whl")
     with zipfile.ZipFile(wheel) as archive:
-        assert TEMPLATE_IN_WHEEL in archive.namelist()
+        names = archive.namelist()
+    assert TEMPLATE_IN_WHEEL in names
+    assert TEMPLATE_IN_WHEEL.replace("implementer", "reviewer") in names

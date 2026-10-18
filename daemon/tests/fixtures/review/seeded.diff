@@ -1,0 +1,11 @@
+diff --git a/slugs.py b/slugs.py
+new file mode 100644
+index 0000000..3b18e51
+--- /dev/null
++++ b/slugs.py
+@@ -0,0 +1,5 @@
++"""Slugs for titles."""
++
++
++def parse_slug(text: str) -> str:
++    return "-".join(text.lower().split())

@@ -17,7 +17,8 @@ daemon/tests/
   conftest.py      # autouse home/projects_dir, fixtures used by more than one folder, FIXTURES_DIR
   test_layout.py   # guards this layout
   fixtures/        # shared data: ticket files, the dashboard plan, agent transcripts,
-                   # context/ (prompt inputs and golden prompts in expected/)
+                   # context/ (prompt inputs and golden prompts in expected/),
+                   # review/ (the T07 ticket, its seeded diff, reviewer transcripts)
   core/  api/  cli/
   services/
     projects/  tickets/  scheduler/  runs/
@@ -25,6 +26,7 @@ daemon/tests/
     agents/        # conftest.py: worktree, user_home, policy; fake_claude.py
     context/       # conftest.py: fixture_inputs, assert_snapshot (SPOOLHQ_UPDATE_SNAPSHOTS=1)
     gates/         # fake_tool.py (run it with fake_tool_cmd from tests/conftest.py)
+    review/        # conftest.py: worktree, inputs (the T07 fixture ticket and seeded diff)
 ```
 
 - **New tests go in the folder that mirrors the code they test:** `src/spoolhq/services/runs/bus.py` → `tests/services/runs/test_bus.py`, `src/spoolhq/cli/plan.py` → `tests/cli/test_plan.py`. Don't repeat the folder in the file name (`tests/cli/test_plan.py`, not `test_cli_plan.py`). Only `test_layout.py` sits directly in `tests/`.
@@ -75,4 +77,6 @@ Tests never run a real agent. `FakeRunner(transcript)` (`services/agents/fake.py
 
 To test the Claude Code adapter itself, pass `fake_claude_cmd(scenario, record, *options)` as `ClaudeCliRunner(claude_cmd=…)`, with `platform="linux"` and `which=sandbox_which`: it runs `tests/services/agents/fake_claude.py`, a stand-in `claude` binary that answers `--version` and `auth status`, records its argv, environment and stdin, and prints the scenario. These tests start a subprocess, so they are marked `integration`.
 
-One test uses the real `claude` CLI and a real model: `tests/services/agents/test_real_run.py`, marked `real_agent`. It is skipped unless `SPOOLHQ_REAL_AGENT=1` and `claude auth status` is logged in; `SPOOLHQ_RECORD=1` also saves its anonymised stream to `tests/fixtures/agents/claude/recorded/real_run.jsonl`. See [agents.md](agents.md#the-fake-runner).
+`FakeRunner([a, b])` replays `a` on the first run and `b` on the second (and raises on a third), so retries can be tested; `fake.calls` holds each run's prompt and policy. The reviewer's ticket, seeded diff and transcripts are in `tests/fixtures/review/` (`REVIEW_FIXTURES`).
+
+Two tests use the real `claude` CLI and a real model, both marked `real_agent`: `tests/services/agents/test_real_run.py` (one implementer run) and `tests/services/review/test_real_run.py` (a review of the seeded diff). They are skipped unless `SPOOLHQ_REAL_AGENT=1` and `claude auth status` is logged in; `SPOOLHQ_RECORD=1` also saves their anonymised streams to `tests/fixtures/agents/claude/recorded/real_run.jsonl` and `tests/fixtures/review/recorded/real_review.jsonl`. See [agents.md](agents.md#the-fake-runner).

@@ -147,6 +147,8 @@ def commit_file(repo: Path, name: str, text: str, message: str) -> str:
 
 AGENT_FIXTURES = FIXTURES_DIR / "agents" / "claude"
 """Hand-written Claude Code stream-json transcripts."""
+REVIEW_FIXTURES = FIXTURES_DIR / "review"
+"""The T07 ticket, its seeded diff (no test) and reviewer transcripts."""
 FAKE_CLAUDE = TESTS_DIR / "services" / "agents" / "fake_claude.py"
 # A prompt that must never reach argv, and secrets that must never reach the agent.
 AGENT_PROMPT = "Implement T01: say hello. Ignore this: --dangerously-skip-permissions"

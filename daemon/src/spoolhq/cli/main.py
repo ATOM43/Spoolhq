@@ -17,6 +17,7 @@ from spoolhq.cli.common import settings as _settings
 from spoolhq.cli.gates import gates_app
 from spoolhq.cli.plan import plan_app
 from spoolhq.cli.prompt import prompt_app
+from spoolhq.cli.review import review_command
 from spoolhq.cli.runs import runs_app
 from spoolhq.cli.tickets import tickets_app
 from spoolhq.cli.worktrees import worktrees_app
@@ -51,6 +52,7 @@ app.add_typer(gates_app)
 app.add_typer(runs_app)
 app.add_typer(worktrees_app)
 app.command("agents")(agents_command)
+app.command("review")(review_command)
 
 logger = logging.getLogger("spoolhq.daemon")
 

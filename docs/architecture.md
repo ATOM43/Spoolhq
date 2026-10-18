@@ -15,7 +15,8 @@ spoolhq/
     routers/        # one file per resource: health.py, version.py, ...
     schemas/        # Pydantic request/response models
   services/     # domain logic, one package per domain:
-                # projects, tickets, scheduler, runs, git, agents, gates, tracker
+                # projects, tickets, scheduler, runs, git, agents, context, gates,
+                # review, tracker
   cli/          # Typer commands (main.py) + API client (client.py)
 ```
 
@@ -110,6 +111,12 @@ The code is `services/context/`: the frozen input values in `model.py`, the trim
 A ticket's work must pass the project's `install`, `lint` and `test` commands. `run_gates(worktree, commands, timeouts, log_dir)` runs them in that order (install failing skips the rest; lint failing doesn't stop test) without a shell: each command is split with `shlex` and its program found on the scrubbed `PATH`, and shell syntax in `project.yaml`'s `commands` is a validation error. Gates get the agent's environment allowlist without secrets, plus `CI=1` and no-colour settings, and a timeout (`gates.timeouts`) that stops the whole process tree. Each gate's output streams to a log capped at 20 MB, and the result carries an excerpt of at most 8,000 characters that keeps the first failure, and the failing test names. `check_done_when` maps "Done when" items like `` `just test` passes `` to the configured gate and never runs any other command. Gates are not sandboxed yet (they run with the user's file access). The rules are in [gates.md](gates.md).
 
 The code is `services/gates/`: the results (`GateResult`, `GateRun`, `DoneWhenCheck`) in `model.py`, splitting, validation and the environment in `command.py`, `run_process` in `process.py`, the pure output rules (cleaning, first failure, excerpt, failing tests) in `output.py`, and `run_gates` / `check_done_when` in `runner.py`. It imports no other service package, which an import-linter contract checks; `services/projects` uses its `check_gate_command` to validate `project.yaml`. `spool gates run` (in `cli/gates.py`) runs the gates in a folder and prints the results; nothing else calls them until the run loop (T13).
+
+## Review
+
+After the gates pass, a second, independent agent checks the committed diff against the ticket's "Done when" items. `review(inputs, runner, …)` runs it with a read-only policy (`Read`, `Glob`, `Grep`; no Bash, Edit or Write) in the worktree, a fresh process each time, and never gets the implementer's transcript, summary or progress note (`ReviewInputs` has no field for them). The reviewer ends with a `<verdict>` JSON block that SpoolHQ validates itself, including consistency (`approve` only with every item met); items the gates checked take the gates' answer; invalid output is retried once and then becomes `needs_human`; run outcomes other than `completed` are passed through. The rules are in [review.md](review.md).
+
+The code is `services/review/`: `ReviewInputs`, `ItemVerdict` and `ReviewResult` in `model.py`, `parse_verdict` in `verdict.py`, `trim_diff` (150,000 characters) in `diff.py` and `review()` in `reviewer.py`; the prompt is `services/context/prompts/reviewer.md.j2`, overridable in `<workspace>/prompts/`. It imports only `services.agents` and `services.context`, which an import-linter contract checks. `spool review` (in `cli/review.py`) builds the inputs from the ticket store and `git diff <base>...HEAD` and runs the real reviewer.
 
 ## Frontend: `desktop/src/` (Feature-Sliced Design)
 

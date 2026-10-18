@@ -464,3 +464,14 @@ def test_usd_conversion_is_exact() -> None:
     assert usd_to_micro(None) is None
     assert usd_to_micro(False) is None
     assert usd_to_micro("abc") is None
+
+
+def test_exact_tools_requires_every_requested_tool(worktree: Path) -> None:
+    parser = ClaudeStreamParser(
+        worktree, billing="subscription", requested_tools=["Read", "Glob", "Grep"], exact_tools=True
+    )
+    init: dict[str, object] = {"type": "system", "subtype": "init", "permissionMode": "dontAsk"}
+    init["tools"] = ["Read", "Glob"]
+    with pytest.raises(PolicyViolation, match=r"missing requested tools: \['Grep'\]"):
+        parser.feed(init)
+    parser.feed({**init, "tools": ["Grep", "Read", "Glob"]})

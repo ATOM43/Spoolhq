@@ -86,6 +86,7 @@ forbidden_modules = [
     "spoolhq.services.context",
     "spoolhq.services.gates",
     "spoolhq.services.projects",
+    "spoolhq.services.review",
     "spoolhq.services.runs",
     "spoolhq.services.scheduler",
     "spoolhq.services.tickets",
@@ -101,6 +102,7 @@ forbidden_modules = [
     "spoolhq.services.gates",
     "spoolhq.services.git",
     "spoolhq.services.projects",
+    "spoolhq.services.review",
     "spoolhq.services.runs",
     "spoolhq.services.scheduler",
     "spoolhq.services.tickets",
@@ -116,6 +118,7 @@ forbidden_modules = [
     "spoolhq.services.gates",
     "spoolhq.services.git",
     "spoolhq.services.projects",
+    "spoolhq.services.review",
     "spoolhq.services.runs",
     "spoolhq.services.scheduler",
     "spoolhq.services.tickets",
@@ -129,6 +132,21 @@ source_modules = ["spoolhq.services.gates"]
 forbidden_modules = [
     "spoolhq.services.agents",
     "spoolhq.services.context",
+    "spoolhq.services.git",
+    "spoolhq.services.projects",
+    "spoolhq.services.review",
+    "spoolhq.services.runs",
+    "spoolhq.services.scheduler",
+    "spoolhq.services.tickets",
+    "spoolhq.services.tracker",
+]
+
+[[tool.importlinter.contracts]]
+name = "services.review imports only services.agents and services.context"
+type = "forbidden"
+source_modules = ["spoolhq.services.review"]
+forbidden_modules = [
+    "spoolhq.services.gates",
     "spoolhq.services.git",
     "spoolhq.services.projects",
     "spoolhq.services.runs",

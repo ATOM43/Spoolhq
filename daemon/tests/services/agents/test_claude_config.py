@@ -234,3 +234,30 @@ def test_stubs_with_content_are_kept(tmp_path: Path, package: str) -> None:
     assert removed == [".npmrc", ".claude"]
     assert sorted(path.name for path in folder.iterdir()) == [".env", "node_modules"]
     assert (folder / "node_modules" / ".bin").is_dir()
+
+
+def test_read_only_argv_has_only_the_read_tools(worktree: Path, home: Path) -> None:
+    policy = AgentPolicy.read_only_for(worktree, home)
+    argv = build_argv(["claude"], policy, BUDGET, billing="subscription")
+
+    assert argv[argv.index("--tools") + 1] == "Read,Glob,Grep"
+    allowed = argv[argv.index("--allowedTools") + 1 : argv.index("--disallowedTools")]
+    assert allowed == ["Read", "Glob", "Grep"]
+    assert not any("Bash(" in arg or arg in ("Edit", "Write") for arg in argv)
+    assert "Edit" not in argv[argv.index("--tools") + 1]
+    # The other layers are unchanged.
+    writing = build_argv(["claude"], AgentPolicy.for_worktree(worktree, {}, home), BUDGET,
+                         billing="subscription")  # fmt: skip
+    for flag in ("--restricted", "--strict-mcp-config", "--no-session-persistence"):
+        assert flag in argv
+    assert argv[argv.index("--permission-mode") + 1] == "dontAsk"
+    assert argv[-1] == writing[-1]  # the same sandbox settings
+
+
+def test_read_only_policy_has_no_commands(worktree: Path, home: Path) -> None:
+    policy = AgentPolicy.read_only_for(worktree, home)
+    assert policy.read_only
+    assert policy.commands == ()
+    assert policy.bash_rules() == ()
+    writing = AgentPolicy.for_worktree(worktree, {}, home)
+    assert policy.denied_read_paths == writing.denied_read_paths

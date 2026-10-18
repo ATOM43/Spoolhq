@@ -2,16 +2,17 @@
 
 Lines go through ``ClaudeStreamParser``, exactly like a real run, and reach the same
 callbacks. ``Write`` tool calls inside the worktree write their content, so tests can
-check file effects. No process, network or model is involved.
+check file effects. Given several transcripts, each ``run`` replays the next one, so
+retries can be tested. No process, network or model is involved.
 """
 
 import json
 import threading
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from spoolhq.services.agents.claude_config import PERMISSION_MODES
+from spoolhq.services.agents.claude_config import PERMISSION_MODES, requested_tools
 from spoolhq.services.agents.claude_stream import ClaudeStreamParser, PolicyViolation
 from spoolhq.services.agents.model import (
     AgentPolicy,
@@ -26,12 +27,19 @@ FAKE_VERSION = "0.0.0-fake"
 
 
 class FakeRunner:
-    """``AgentRunner`` that replays ``transcript`` (one JSON message per line)."""
+    """``AgentRunner`` that replays ``transcript`` (one JSON message per line).
+
+    With a sequence, each ``run`` replays the next transcript, and a run past the end
+    raises. ``calls`` holds each run's prompt and policy.
+    """
 
     name = "fake"
 
-    def __init__(self, transcript: Path) -> None:
-        self.transcript = transcript
+    def __init__(self, transcript: Path | Sequence[Path]) -> None:
+        # One path is replayed on every run, as before sequences existed.
+        self._repeat = isinstance(transcript, Path)
+        self.transcripts = (transcript,) if isinstance(transcript, Path) else tuple(transcript)
+        self.calls: list[tuple[str, AgentPolicy]] = []
 
     def detect(self) -> BackendInfo:
         return BackendInfo(
@@ -56,15 +64,22 @@ class FakeRunner:
         on_raw: RawCallback | None = None,
         cancel: threading.Event,
     ) -> RunResult:
+        index = 0 if self._repeat else len(self.calls)
+        if index >= len(self.transcripts):
+            raise RuntimeError(f"FakeRunner has only {len(self.transcripts)} transcripts")
+        transcript = self.transcripts[index]
+        self.calls.append((prompt, policy))
         # Checked like the real adapter checks a live run.
         parser = ClaudeStreamParser(
             policy.worktree,
             billing="subscription",
+            requested_tools=requested_tools(policy),
+            exact_tools=policy.read_only,
             permission_modes=PERMISSION_MODES,
             backend=self.name,
             backend_version=FAKE_VERSION,
         )
-        for line in self.transcript.read_text(encoding="utf-8").splitlines():
+        for line in transcript.read_text(encoding="utf-8").splitlines():
             if cancel.is_set():
                 return parser.finish(Outcome.CANCELLED)
             if not line.strip():

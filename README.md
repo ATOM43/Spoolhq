@@ -64,6 +64,12 @@ To run a project's quality gates (`install`, then `lint` and `test`) in a folder
 uv run --directory daemon spool gates run my-app [--path <dir>]   # default: the project's repository
 ```
 
+To have a second, read-only agent review a ticket's committed work against its "Done when" items ([review](docs/review.md)); it prints ✓/✗ per item, the verdict and a summary, and exits 0 for `approve`, 1 for `changes_requested` or `needs_human`, 2 if the run didn't finish:
+
+```sh
+uv run --directory daemon spool review my-app T07 [--path <worktree>] [--base <ref>]   # diff: <base>...HEAD
+```
+
 ## Run the daemon
 
 ```sh

@@ -35,6 +35,8 @@ CLAUDE_TOOLS: tuple[str, ...] = ("Read", "Edit", "Write", "Glob", "Grep", "Bash"
 """The built-in tools a Claude Code agent gets (``--tools``)."""
 FILE_TOOLS: tuple[str, ...] = ("Read", "Edit", "Write", "Glob", "Grep")
 """The tools approved as a whole (``--allowedTools``); Bash only through command rules."""
+READ_ONLY_TOOLS: tuple[str, ...] = ("Read", "Glob", "Grep")
+"""The only tools a read-only agent (the reviewer) gets, all approved as a whole."""
 EXPECTED_PERMISSION_MODES = frozenset({"dontAsk"})
 # Tools that must never show up, even if a future default slipped them in.
 FORBIDDEN_TOOLS = frozenset({"WebFetch", "WebSearch"})
@@ -132,6 +134,7 @@ class ClaudeStreamParser:
         *,
         billing: Billing,
         requested_tools: Iterable[str] = CLAUDE_TOOLS,
+        exact_tools: bool = False,
         permission_modes: Iterable[str] = EXPECTED_PERMISSION_MODES,
         backend: str = BACKEND_NAME,
         backend_version: str = "",
@@ -139,6 +142,7 @@ class ClaudeStreamParser:
         self._root = worktree.resolve()
         self._billing = billing
         self._requested = frozenset(requested_tools)
+        self._exact_tools = exact_tools
         self._modes = frozenset(permission_modes)
         self._backend = backend
         self.backend_version = backend_version
@@ -223,6 +227,9 @@ class ClaudeStreamParser:
         )
         if unexpected:
             raise PolicyViolation(f"init lists tools that were not requested: {unexpected}")
+        missing = sorted(self._requested - set(tools))
+        if self._exact_tools and missing:
+            raise PolicyViolation(f"init is missing requested tools: {missing}")
         mode = message.get("permissionMode")
         if mode not in self._modes:
             expected = " or ".join(sorted(self._modes))

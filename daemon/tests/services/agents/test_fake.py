@@ -99,3 +99,32 @@ def test_replay_of_the_recorded_real_run(
     assert [denial.tool for denial in result.denials] == ["Bash"]
     assert "python3" in result.denials[0].input_summary
     assert result.input_tokens > 0 and result.output_tokens > 0
+
+
+def test_a_sequence_replays_one_transcript_per_run(worktree: Path, policy: AgentPolicy) -> None:
+    import pytest
+
+    runner = FakeRunner([SUCCESS, AGENT_FIXTURES / "max_turns.jsonl"])
+    outcomes = [
+        runner.run(
+            f"run {n}", policy, BUDGET, on_event=lambda e: None, cancel=threading.Event()
+        ).outcome
+        for n in (1, 2)
+    ]
+    assert outcomes == [Outcome.COMPLETED, Outcome.MAX_TURNS]
+    assert [prompt for prompt, _ in runner.calls] == ["run 1", "run 2"]
+    with pytest.raises(RuntimeError, match="only 2 transcripts"):
+        runner.run("run 3", policy, BUDGET, on_event=lambda e: None, cancel=threading.Event())
+
+
+def test_read_only_init_with_edit_is_not_enforced(worktree: Path, home: Path) -> None:
+    from tests.conftest import REVIEW_FIXTURES
+
+    policy = AgentPolicy.read_only_for(worktree, home)
+    result = FakeRunner(REVIEW_FIXTURES / "init_with_edit.jsonl").run(
+        "review", policy, BUDGET, on_event=lambda e: None, cancel=threading.Event()
+    )
+    assert result.outcome is Outcome.ERROR
+    assert result.error is not None
+    assert result.error.startswith("policy not enforced:")
+    assert "Edit" in result.error

@@ -89,6 +89,10 @@ claude -p --output-format stream-json --verbose --restricted
 
 `autoAllowBashIfSandboxed` defaults to `true` in Claude Code, which would approve every sandboxed command whether or not it is on the allowlist, so it is set to `false`.
 
+## Read-only policies
+
+The reviewer ([review](review.md)) reads code but must not change it or run anything. `AgentPolicy.read_only_for(worktree, home)` builds a policy with `read_only=True`, no stack commands and no git commands; the deny list is the same. For it the adapter passes `--tools Read,Glob,Grep` and `--allowedTools Read Glob Grep`, with no `Bash(…)` rules, no `Edit` and no `Write`, and `init` must list exactly those three tools: any other, or a missing one, is a policy violation (`policy not enforced: …`). `--restricted`, `dontAsk`, the sandbox settings and the scrubbed environment stay as for a writing policy, whose command line is unchanged.
+
 ## The allowlist
 
 The agent may run the project's stack commands from `project.yaml` (`install`, `lint`, `test` and any others it defines) and read-only git: `git status`, `git diff`, `git log`, `git show`. Each becomes two permission rules: exact (`Bash(just test)`) and prefix (`Bash(just test *)`, which allows `just test -k foo`). The file tools `Read`, `Edit`, `Write`, `Glob` and `Grep` are allowed as a whole; layer 1 confines them to the worktree.
@@ -151,7 +155,7 @@ The `rate_limit_event` fields, as observed from Claude Code 2.1.302 and in the A
 
 ## The fake runner
 
-`FakeRunner(transcript)` replays a recorded stream-json file through the same `ClaudeStreamParser` and calls the same callbacks, so tests can drive agent runs without a model or network. For a `Write` inside the worktree it writes the given content, so file effects can be tested. Its `detect()` reports installed, logged in, `subscription`, enforceable. Transcripts live in `daemon/tests/fixtures/agents/claude/`; `recorded/real_run.jsonl` is an anonymised recording of the opt-in real run below.
+`FakeRunner(transcript)` replays a recorded stream-json file through the same `ClaudeStreamParser` and calls the same callbacks (with the same tool check, read-only included), so tests can drive agent runs without a model or network. For a `Write` inside the worktree it writes the given content, so file effects can be tested. Given a list of transcripts, each `run()` replays the next one and a run past the end raises, so retries can be tested; `calls` holds each run's prompt and policy. Its `detect()` reports installed, logged in, `subscription`, enforceable. Transcripts live in `daemon/tests/fixtures/agents/claude/`; `recorded/real_run.jsonl` is an anonymised recording of the opt-in real run below.
 
 The adapter itself is tested end to end with `daemon/tests/services/agents/fake_claude.py`, a stand-in `claude` binary that records its argv, environment and stdin and prints a scenario.
 
