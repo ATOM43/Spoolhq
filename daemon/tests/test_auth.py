@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from spoolhq.auth import load_or_create_token, read_token, token_path
-from spoolhq.config import ensure_home
+from spoolhq.core.auth import load_or_create_token, read_token, token_path
+from spoolhq.core.config import ensure_home
 
 
 def test_token_is_created_once_and_reused(home: Path) -> None:

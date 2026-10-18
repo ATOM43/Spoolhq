@@ -38,3 +38,13 @@ Newest entries at the bottom. One entry per merged ticket.
 - Tailwind 4 design tokens (light and dark from the system), radius 4/6/8 px, 4 px spacing; shadcn/ui Button, Card, Tabs; Inter and JetBrains Mono bundled via `@fontsource`.
 - `just dev` runs the daemon and `pnpm tauri dev` in parallel (`just daemon` / `just desktop` for one); `just lint` adds `cargo fmt --check` and `cargo clippy -D warnings`; `just test` adds `cargo test`. CI installs Rust and Tauri's Linux packages; no installers are built.
 - Tests: client error mapping, status rules, status pill states, daemon-down and token-missing panels, routes (Vitest, Tauri mocked); port/token reading and URL restriction (Rust, temp `SPOOLHQ_HOME`). None needs a daemon or a window.
+
+## Restructure (before T04)
+
+Structure only; no routes, commands, UI or security rules changed.
+
+- Backend: `config`, `auth` and `logs` moved to `spoolhq/core/`; the API split into `api/routers/` (`health.py`, `version.py`) and `api/schemas/` (Pydantic `Health`, `Version`); empty `services/` packages for projects, tickets, scheduler, runs, git, agents, gates and tracker; `cli/` unchanged apart from imports.
+- import-linter (dev only) checks three contracts — the layers, `core` importing nothing above it, and services free of FastAPI/Starlette/Typer/uvicorn — in `just lint`.
+- Frontend: Feature-Sliced Design under `desktop/src/` — `app/` (entry, Query provider, router, global styles), `pages/home` and `pages/project-panel`, `widgets/top-bar` and `widgets/daemon-down-panel`, `features/daemon-status` and `features/open-settings`, `entities/daemon` (plus empty `project`, `ticket`, `run`), and `shared/` (`api`, `ui`, `lib`, `config`, `styles`). Every slice has an `index.ts`; tests sit next to their code.
+- `eslint-plugin-boundaries` (dev only) enforces public-API-only, downward-only and no-sideways imports in `just lint`.
+- Docs: `docs/architecture.md`; "Code structure" in `CLAUDE.md`; work directly on `main` (no branches or pull requests) in `CLAUDE.md` and `CONTRIBUTING.md`.

@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from spoolhq.auth import read_token
+from spoolhq.core.auth import read_token
 
 pytestmark = pytest.mark.integration
 

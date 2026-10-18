@@ -19,20 +19,21 @@ Linux, macOS and Windows are all supported. On Windows, `just` runs recipes in P
 | Command | What it does |
 | --- | --- |
 | `just install` | Installs Python and Node dependencies exactly as locked |
-| `just lint` | ruff, ruff format check, mypy, ESLint, Prettier check, `tsc --noEmit`, `cargo fmt --check`, `cargo clippy -- -D warnings` |
+| `just lint` | ruff, ruff format check, mypy, import-linter, ESLint (including the Feature-Sliced Design boundaries), Prettier check, `tsc --noEmit`, `cargo fmt --check`, `cargo clippy -- -D warnings` |
 | `just test` | pytest, Vitest and `cargo test` |
 | `just dev` | Starts the daemon (`spool serve`) and the desktop app (`pnpm tauri dev`) |
 | `just daemon` / `just desktop` | Starts only one of them |
 
-Run `just lint && just test` before you open a pull request.
+Run `just lint && just test` before you push.
 
 ## Workflow
 
 - Work is planned as tickets with IDs like `T07`.
-- **One ticket = one branch = one pull request.** Keep each PR inside its ticket's scope.
-- Branch names: `feat/T<NN>-<slug>`, for example `feat/T07-run-loop`.
-- Fill in the pull request template, including the ticket's "Done when" checklist.
-- **PRs must pass CI** on Linux, macOS and Windows before they merge.
+- **Work on `main`.** No branches and no pull requests: commit each finished ticket to `main` and push.
+- Keep each commit inside its ticket's scope, and check the ticket's "Done when" list before you push.
+- **CI must pass** on Linux, macOS and Windows; if a push turns it red, fix it with a follow-up commit on `main`.
+- Never force-push `main`.
+- Code goes where [docs/architecture.md](docs/architecture.md) says; `just lint` enforces the layer rules.
 - Commit in small, logical steps with clear messages.
 - Never commit secrets, tokens or machine-specific paths.
 

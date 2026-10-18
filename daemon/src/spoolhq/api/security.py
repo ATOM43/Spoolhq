@@ -3,12 +3,17 @@
 import logging
 import secrets
 
+from fastapi.security import HTTPBearer
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
 PUBLIC_ROUTES = frozenset({("GET", "/api/health")})
+
+# LocalOnlyMiddleware enforces the token; routers depend on this only to document it in
+# /docs, where the Authorize button then works.
+bearer_scheme = HTTPBearer(auto_error=False, description="The token in ~/.spoolhq/token")
 
 
 def _is_api_path(path: str) -> bool:

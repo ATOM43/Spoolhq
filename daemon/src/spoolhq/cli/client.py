@@ -4,8 +4,8 @@ from typing import Any, Self
 
 import httpx
 
-from spoolhq.auth import read_token, token_path
-from spoolhq.config import Settings, home_dir
+from spoolhq.core.auth import read_token, token_path
+from spoolhq.core.config import Settings, home_dir
 
 
 class ApiError(Exception):

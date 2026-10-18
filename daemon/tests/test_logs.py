@@ -7,8 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from spoolhq.api import create_app
-from spoolhq.config import load_settings
-from spoolhq.logs import REDACTED, configure_logging
+from spoolhq.core.config import load_settings
+from spoolhq.core.logs import REDACTED, configure_logging
 
 
 @pytest.fixture

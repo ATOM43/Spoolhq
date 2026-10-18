@@ -1,0 +1,27 @@
+/* Fonts ship with the app (no CDN): the CSP only allows fonts from 'self'. */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "../../shared/styles/tokens.css";
+
+@layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-surface font-sans text-ink antialiased;
+  }
+}

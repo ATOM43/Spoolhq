@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from spoolhq.config import ConfigError, ensure_home, home_dir, load_settings
+from spoolhq.core.config import ConfigError, ensure_home, home_dir, load_settings
 
 
 def write_config(home: Path, text: str) -> Path:

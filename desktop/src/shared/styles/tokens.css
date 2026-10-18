@@ -1,0 +1,53 @@
+/*
+ * SpoolHQ design tokens. Components use these names (bg-surface, text-ink-muted,
+ * bg-accent, ...) rather than shadcn's defaults. Dark values follow the system theme.
+ */
+:root {
+  --surface: #ffffff;
+  --surface-sunken: #f4f4f5;
+  --border: #e4e4e7;
+  --ink: #18181b;
+  --ink-muted: #52525b;
+  --accent: #2563eb;
+  --warning: #b45309;
+  --danger: #b91c1c;
+  --success: #15803d;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #111113;
+    --surface-sunken: #0a0a0b;
+    --border: #2a2a2f;
+    --ink: #f4f4f5;
+    --ink-muted: #b4b4bc;
+    --accent: #6ea2fa;
+    --warning: #f5b83d;
+    --danger: #f87171;
+    --success: #4ade80;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border: var(--border);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-accent: var(--accent);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* 4 px grid: p-1 = 4 px, p-2 = 8 px, ... */
+  --spacing: 4px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}

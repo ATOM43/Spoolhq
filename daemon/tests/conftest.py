@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from spoolhq.api import create_app
-from spoolhq.config import load_settings
+from spoolhq.core.config import load_settings
 
 
 @pytest.fixture(autouse=True)

@@ -8,10 +8,10 @@ import uvicorn
 
 import spoolhq
 from spoolhq.api import create_app
-from spoolhq.auth import load_or_create_token, token_path
 from spoolhq.cli.client import ApiClient, ApiError, DaemonNotRunning
-from spoolhq.config import ConfigError, Settings, ensure_home, load_settings
-from spoolhq.logs import configure_logging
+from spoolhq.core.auth import load_or_create_token, token_path
+from spoolhq.core.config import ConfigError, Settings, ensure_home, load_settings
+from spoolhq.core.logs import configure_logging
 
 app = typer.Typer(
     name="spool",

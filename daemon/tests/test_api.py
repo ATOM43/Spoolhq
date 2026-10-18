@@ -4,8 +4,8 @@ from fastapi.testclient import TestClient
 
 import spoolhq
 from spoolhq.api import create_app
-from spoolhq.auth import read_token
-from spoolhq.config import load_settings
+from spoolhq.core.auth import read_token
+from spoolhq.core.config import load_settings
 
 
 def test_health_needs_no_token(client: TestClient) -> None:

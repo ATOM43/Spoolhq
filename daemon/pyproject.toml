@@ -19,6 +19,7 @@ spool = "spoolhq.cli:app"
 
 [dependency-groups]
 dev = [
+    "import-linter==2.15",
     "mypy==2.4.0",
     "pytest==9.1.1",
     "ruff==0.17.1",
@@ -45,6 +46,33 @@ select = ["E", "F", "W", "I", "UP", "B", "S"]
 strict = true
 python_version = "3.12"
 files = ["src"]
+
+[tool.importlinter]
+root_package = "spoolhq"
+# Needed so contracts can forbid third-party packages (FastAPI, Typer, ...).
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layers: cli and api on top of services, services on top of core"
+type = "layers"
+layers = [
+    "spoolhq.cli",
+    "spoolhq.api",
+    "spoolhq.services",
+    "spoolhq.core",
+]
+
+[[tool.importlinter.contracts]]
+name = "core imports nothing from api, cli or services"
+type = "forbidden"
+source_modules = ["spoolhq.core"]
+forbidden_modules = ["spoolhq.api", "spoolhq.cli", "spoolhq.services"]
+
+[[tool.importlinter.contracts]]
+name = "services never import web or CLI frameworks"
+type = "forbidden"
+source_modules = ["spoolhq.services"]
+forbidden_modules = ["fastapi", "starlette", "typer", "uvicorn"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

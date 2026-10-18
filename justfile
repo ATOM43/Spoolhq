@@ -19,6 +19,7 @@ lint:
     uv run --directory daemon ruff check
     uv run --directory daemon ruff format --check
     uv run --directory daemon mypy
+    uv run --directory daemon lint-imports
     pnpm --dir desktop exec eslint .
     pnpm --dir desktop exec prettier --check .
     pnpm --dir desktop exec tsc --noEmit
