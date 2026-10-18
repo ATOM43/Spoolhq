@@ -26,10 +26,10 @@ lint:
     cargo fmt --manifest-path {{ tauri_manifest }} --check
     cargo clippy --manifest-path {{ tauri_manifest }} --locked --all-targets -- -D warnings
 
-# Run all tests.
+# Run all tests, with coverage (the daemon fails below 85% line coverage).
 test:
-    uv run --directory daemon pytest
-    pnpm --dir desktop exec vitest run
+    uv run --directory daemon pytest --cov=spoolhq --cov-report=term-missing --cov-fail-under=85
+    pnpm --dir desktop exec vitest run --coverage
     cargo test --manifest-path {{ tauri_manifest }} --locked
 
 # Start the daemon and the desktop app together; Ctrl-C stops both.

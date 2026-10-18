@@ -23,6 +23,7 @@ dev = [
     "import-linter==2.15",
     "mypy==2.4.0",
     "pytest==9.1.1",
+    "pytest-cov==7.1.0",
     "ruff==0.17.1",
 ]
 
@@ -81,3 +82,8 @@ addopts = ["--strict-markers", "--strict-config"]
 markers = [
     "integration: starts a real daemon in a subprocess (runs in CI on Linux, macOS and Windows)",
 ]
+
+# `just test` adds --cov=spoolhq --cov-fail-under=85. Only TYPE_CHECKING blocks are
+# excluded; this replaces coverage's defaults, so `# pragma: no cover` has no effect.
+[tool.coverage.report]
+exclude_lines = ["if TYPE_CHECKING:"]

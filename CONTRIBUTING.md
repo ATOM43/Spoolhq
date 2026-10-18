@@ -20,7 +20,7 @@ Linux, macOS and Windows are all supported. On Windows, `just` runs recipes in P
 | --- | --- |
 | `just install` | Installs Python and Node dependencies exactly as locked |
 | `just lint` | ruff, ruff format check, mypy, import-linter, ESLint (including the Feature-Sliced Design boundaries), Prettier check, `tsc --noEmit`, `cargo fmt --check`, `cargo clippy -- -D warnings` |
-| `just test` | pytest, Vitest and `cargo test` |
+| `just test` | pytest and Vitest with coverage (daemon floor 85%), and `cargo test` — see [docs/testing.md](docs/testing.md) |
 | `just dev` | Starts the daemon (`spool serve`) and the desktop app (`pnpm tauri dev`) |
 | `just daemon` / `just desktop` | Starts only one of them |
 

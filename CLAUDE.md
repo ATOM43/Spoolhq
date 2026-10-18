@@ -9,6 +9,16 @@ Conventions for coding agents (and humans) changing SpoolHQ.
 - **Work directly on main. No branches, no pull requests.** See `CONTRIBUTING.md`.
 - Record notable choices in `DECISIONS.md` and add a `PROGRESS.md` entry for each finished ticket.
 
+## Testing
+
+How to run and lay out tests: [docs/testing.md](docs/testing.md).
+
+- Every new function, route or CLI command gets tests in the same change.
+- Every bug fix adds a regression test that fails without the fix.
+- Unit tests never use the network, a real model, or the real home folder. The autouse `home` and `projects_dir` fixtures in `daemon/tests/conftest.py` point `SPOOLHQ_HOME` and `SPOOLHQ_PROJECTS_DIR` at tmp dirs for every test; don't bypass them.
+- Mark slow or subprocess tests with `@pytest.mark.integration`.
+- Before finishing: `just lint && just test` must pass. `just test` fails if daemon line coverage drops below 85%.
+
 ## Layout
 
 - `daemon/` — Python package `spoolhq` (uv, src layout, Python 3.12+).
