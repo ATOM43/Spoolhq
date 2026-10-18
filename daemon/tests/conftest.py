@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from spoolhq.api import create_app
 from spoolhq.core.config import load_settings
+from spoolhq.services.git import WorktreeManager
 from spoolhq.services.projects import init_project
 
 
@@ -112,3 +113,51 @@ def clock() -> FixedClock:
 def workspace(git_repo: Path, projects_dir: Path) -> Path:
     """A project workspace ``demo`` made by ``spool init``'s service."""
     return init_project("demo", git_repo, projects_dir=projects_dir).path
+
+
+@pytest.fixture
+def isolated_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hide the user's global and system git config and identity variables from git."""
+    global_config = tmp_path / "gitconfig-global"
+    global_config.write_text("", encoding="utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    for name in (
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+        "EMAIL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+def commit_file(repo: Path, name: str, text: str, message: str) -> str:
+    """Write ``name``, commit it and return the new commit's sha."""
+    (repo / name).write_text(text, encoding="utf-8")
+    run_git(repo, "add", "--", name)
+    run_git(repo, "commit", "--quiet", "--no-verify", "-m", message)
+    return run_git(repo, "rev-parse", "HEAD").strip()
+
+
+@pytest.fixture
+def wt_repo(tmp_path: Path, isolated_git: None) -> Path:
+    """A repository on ``main`` with a local identity and one commit holding README.md."""
+    repo = tmp_path / "main-repo"
+    repo.mkdir()
+    run_git(repo, "init", "--quiet", "-b", "main")
+    run_git(repo, "config", "user.name", "SpoolHQ Tests")
+    run_git(repo, "config", "user.email", "tests@example.invalid")
+    run_git(repo, "config", "commit.gpgsign", "false")
+    commit_file(repo, "README.md", "# demo\n", "initial commit")
+    return repo
+
+
+@pytest.fixture
+def wt_root(tmp_path: Path) -> Path:
+    return tmp_path / "worktrees"
+
+
+@pytest.fixture
+def manager(wt_repo: Path, wt_root: Path) -> WorktreeManager:
+    return WorktreeManager(wt_repo, "demo", "main", wt_root)

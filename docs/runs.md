@@ -154,7 +154,7 @@ A subscriber's callback or queue error never reaches the publisher or other subs
 - `awaiting_approval`, `done`, `blocked` and `cancelled` runs are untouched (approval survives restarts), and so are the current daemon's own runs.
 - A second call finds nothing and adds no events.
 
-Recovery touches only the database. Reconciling the ticket files' statuses is the run loop's job (T13), and removing leftover worktrees is T08's.
+Recovery touches only the database. Reconciling the ticket files' statuses is the run loop's job (T13). Leftover worktrees are removed right after it, at the same startup ([git.md](git.md#crash-recovery)).
 
 The daemon runs recovery at startup, for every workspace under the projects folder (`projects_dir`), under a fresh `daemon_instance` (`uuid4().hex`). A workspace whose `state.db` can't be opened is logged as an error with its path and skipped; it doesn't stop startup. Each recovered run gets one log line (`run interrupted by a daemon restart`, with project, run id and ticket). The open `RunLog` and `EventBus` of every workspace are kept in `app.state.runs` and closed on shutdown.
 

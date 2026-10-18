@@ -3,7 +3,8 @@
 Settings come from ``<home>/config.toml`` and then from ``SPOOLHQ_*`` environment
 variables, which win. The home folder is ``~/.spoolhq`` unless ``SPOOLHQ_HOME`` is set.
 Projects live in ``~/spoolhq-projects`` unless ``projects_dir`` (``SPOOLHQ_PROJECTS_DIR``)
-says otherwise.
+says otherwise; run worktrees in ``<home>/worktrees`` unless ``worktrees_dir``
+(``SPOOLHQ_WORKTREES_DIR``) does.
 """
 
 import os
@@ -41,6 +42,10 @@ def default_projects_dir() -> Path:
     return Path.home() / "spoolhq-projects"
 
 
+def default_worktrees_dir() -> Path:
+    return home_dir() / "worktrees"
+
+
 def config_path() -> Path:
     return home_dir() / "config.toml"
 
@@ -65,6 +70,7 @@ class Settings(BaseSettings):
     port: int = Field(default=8765, ge=1, le=65535)
     log_level: LogLevel = "INFO"
     projects_dir: Path = Field(default_factory=default_projects_dir)
+    worktrees_dir: Path = Field(default_factory=default_worktrees_dir)
 
     @field_validator("host")
     @classmethod
@@ -80,9 +86,9 @@ class Settings(BaseSettings):
     def _upper_log_level(cls, value: Any) -> Any:
         return value.upper() if isinstance(value, str) else value
 
-    @field_validator("projects_dir")
+    @field_validator("projects_dir", "worktrees_dir")
     @classmethod
-    def _expand_projects_dir(cls, value: Path) -> Path:
+    def _expand_dir(cls, value: Path) -> Path:
         return value.expanduser()
 
     @classmethod

@@ -17,6 +17,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
 
+from spoolhq.core.ids import TICKET_ID_RE, TICKET_ID_RULE
 from spoolhq.services.runs import db
 from spoolhq.services.runs.bus import EventBus
 from spoolhq.services.runs.db import Clock
@@ -30,7 +31,6 @@ from spoolhq.services.runs.model import (
     RunStatus,
     Usage,
 )
-from spoolhq.services.tickets.model import TICKET_ID_RE, TICKET_ID_RULE
 
 MAX_PAYLOAD_BYTES = 64 * 1024
 RUNS_DIR = "runs"

@@ -16,6 +16,7 @@ from spoolhq.cli.common import settings as _settings
 from spoolhq.cli.plan import plan_app
 from spoolhq.cli.runs import runs_app
 from spoolhq.cli.tickets import tickets_app
+from spoolhq.cli.worktrees import worktrees_app
 from spoolhq.core.auth import load_or_create_token, token_path
 from spoolhq.core.config import Settings, ensure_home
 from spoolhq.core.daemon_lock import DaemonAlreadyRunning, acquire_daemon_lock
@@ -43,6 +44,7 @@ app.add_typer(project_app)
 app.add_typer(tickets_app)
 app.add_typer(plan_app)
 app.add_typer(runs_app)
+app.add_typer(worktrees_app)
 
 logger = logging.getLogger("spoolhq.daemon")
 

@@ -476,8 +476,9 @@ def test_init_never_modifies_the_repo(projects_dir: Path, git_repo: Path) -> Non
 def test_missing_git_is_reported(
     projects_dir: Path, git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("spoolhq.services.git.repo.shutil.which", lambda name: None)
+    monkeypatch.setattr("spoolhq.services.git.runner._git_path", None)
+    monkeypatch.setattr("spoolhq.services.git.runner.shutil.which", lambda name: None)
     with pytest.raises(ProjectValidationError) as excinfo:
         init_project("demo", git_repo, projects_dir=projects_dir)
-    assert excinfo.value.errors == ["repo: git was not found on PATH"]
+    assert excinfo.value.errors == ["repo: git not found on PATH"]
     assert not projects_dir.exists()

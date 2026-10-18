@@ -76,6 +76,20 @@ type = "forbidden"
 source_modules = ["spoolhq.services"]
 forbidden_modules = ["fastapi", "starlette", "typer", "uvicorn"]
 
+[[tool.importlinter.contracts]]
+name = "services.git imports no other service package"
+type = "forbidden"
+source_modules = ["spoolhq.services.git"]
+forbidden_modules = [
+    "spoolhq.services.agents",
+    "spoolhq.services.gates",
+    "spoolhq.services.projects",
+    "spoolhq.services.runs",
+    "spoolhq.services.scheduler",
+    "spoolhq.services.tickets",
+    "spoolhq.services.tracker",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--strict-markers", "--strict-config"]

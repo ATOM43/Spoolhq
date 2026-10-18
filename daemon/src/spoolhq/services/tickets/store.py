@@ -8,6 +8,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from spoolhq.core.ids import TICKET_ID_RE, TICKET_ID_RULE
 from spoolhq.services.projects import ProjectError, project_dir
 from spoolhq.services.projects.errors import format_errors
 from spoolhq.services.projects.yaml_io import write_atomic
@@ -22,8 +23,6 @@ from spoolhq.services.tickets.errors import (
 )
 from spoolhq.services.tickets.model import (
     FILE_ID_CONTEXT,
-    TICKET_ID_RE,
-    TICKET_ID_RULE,
     TICKET_STATUSES,
     DoneItem,
     TicketMeta,

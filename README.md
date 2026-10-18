@@ -2,7 +2,7 @@
 
 SpoolHQ is an open-source, local-first desktop app that turns a written spec into a ticket plan, then has a coding agent implement the tickets one at a time, with tests and review before each merge. A Python daemon runs the loop, a `spool` CLI drives it, and a Tauri desktop app shows what is happening.
 
-**Status: pre-alpha, not usable yet.** The daemon serves a minimal authenticated API, the desktop app shows whether it is running, and the CLI can create a project and read and edit its ticket files; nothing runs agents yet.
+**Status: pre-alpha, not usable yet.** The daemon serves a minimal authenticated API and the desktop app shows whether it is running. The CLI can create a project, read and edit its tickets, check the plan and change ticket statuses, and show the run log and worktrees. The daemon records runs and manages the git worktree each run works in, but nothing runs agents yet.
 
 ## Development quickstart
 
@@ -40,13 +40,19 @@ uv run --directory daemon spool runs list my-app [--ticket T04]   # newest first
 uv run --directory daemon spool runs show my-app 12               # one run and its attempts' folders
 ```
 
+Each run works in its own git worktree, `~/.spoolhq/worktrees/<project>/<ticket>`, on a `feat/<ticket>-<slug>` branch made from the default branch; the main working copy must be clean and is never changed ([git](docs/git.md), git 2.36 or newer). To see them:
+
+```sh
+uv run --directory daemon spool worktrees list my-app      # ticket, branch, path, state (ok, missing folder, ...)
+```
+
 ## Run the daemon
 
 ```sh
 uv run --directory daemon spool serve     # or: just dev
 ```
 
-The daemon listens on `http://127.0.0.1:8765` only; the interactive API docs are at `/docs`. On first start it writes a random access token to `~/.spoolhq/token` (readable only by you); the `spool` CLI reads it from there, and every `/api/*` route except `/api/health` needs it as `Authorization: Bearer <token>`. Settings live in `~/.spoolhq/config.toml` (`port`, `log_level`) and can be overridden with `SPOOLHQ_PORT` and `SPOOLHQ_LOG_LEVEL`; set `SPOOLHQ_HOME` to use another folder. Logs are JSON lines in `~/.spoolhq/logs/daemon.log`. Only one daemon runs at a time: a second `spool serve` exits with `another SpoolHQ daemon is already running (pid …)`. On start, the daemon marks runs that a stopped daemon left active as `interrupted`.
+The daemon listens on `http://127.0.0.1:8765` only; the interactive API docs are at `/docs`. On first start it writes a random access token to `~/.spoolhq/token` (readable only by you); the `spool` CLI reads it from there, and every `/api/*` route except `/api/health` needs it as `Authorization: Bearer <token>`. Settings live in `~/.spoolhq/config.toml` (`port`, `log_level`) and can be overridden with `SPOOLHQ_PORT` and `SPOOLHQ_LOG_LEVEL`; set `SPOOLHQ_HOME` to use another folder. Logs are JSON lines in `~/.spoolhq/logs/daemon.log`. Only one daemon runs at a time: a second `spool serve` exits with `another SpoolHQ daemon is already running (pid …)`. On start, the daemon marks runs that a stopped daemon left active as `interrupted` and removes the worktrees they left behind, except those of blocked runs and runs awaiting approval.
 
 `uv run --directory daemon spool version` prints the CLI's version and, if the daemon is running, the daemon's.
 

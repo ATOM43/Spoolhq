@@ -5,16 +5,15 @@ never silently falls back to a default. Only single files are checked here; unkn
 dependencies and cycles are checks on the whole plan.
 """
 
-import re
 from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
+from spoolhq.core.ids import TICKET_ID_RE, TICKET_ID_RULE
+
 TicketStatus = Literal["draft", "ready", "running", "awaiting_approval", "blocked", "done"]
 TICKET_STATUSES: tuple[str, ...] = get_args(TicketStatus)
 
-TICKET_ID_RE = re.compile(r"T\d{2,3}")
-TICKET_ID_RULE = "must be T followed by 2 or 3 digits, like T04"
 MAX_ESTIMATE_H = 40
 
 # Set as validation context by the store, so `id` must match the file-name prefix.

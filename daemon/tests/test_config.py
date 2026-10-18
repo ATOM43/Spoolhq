@@ -97,3 +97,11 @@ def test_projects_dir_env_wins(
 ) -> None:
     write_config(home, 'projects_dir = "/elsewhere"\n')
     assert load_settings().projects_dir == projects_dir
+
+
+def test_worktrees_dir_defaults_to_home_and_follows_env(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert load_settings().worktrees_dir == home / "worktrees"
+    monkeypatch.setenv("SPOOLHQ_WORKTREES_DIR", str(tmp_path / "wt"))
+    assert load_settings().worktrees_dir == tmp_path / "wt"

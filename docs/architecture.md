@@ -85,6 +85,14 @@ The run log records every run (one execution of the loop for one ticket), every 
 
 The code is `services/runs/`: the SQLite connection and migrations in `db.py`, `RunLog` in `log.py`, statuses and records in `model.py`, attempt files in `files.py`, `EventBus` in `bus.py`, `recover_interrupted` in `recovery.py`, and `RunRegistry` (one `RunLog` and `EventBus` per workspace) in `registry.py`. The API's lifespan (`api/app.py`) opens the registry, which runs recovery, and closes it on shutdown; `spool serve` first takes the single-instance lock in `core/daemon_lock.py`, so recovery never runs beside another live daemon. `spool runs list|show` (in `cli/runs.py`) read `state.db` directly and read-only, like the other local commands.
 
+## Git
+
+Each run of a ticket works in its own git worktree, `~/.spoolhq/worktrees/<project>/<ticket_id>`, on the branch `feat/<ticket_id>-<slug>` made from the local default branch. SpoolHQ marks the branches it creates (`git config branch.<branch>.spoolhq <run_id>`) and only ever deletes marked ones; it refuses to start from a repository with uncommitted changes or a rebase or merge in progress, tears a worktree down when its run ends unless the run is kept for inspection, and at startup removes what a stopped daemon left behind. The rules, the slug and the recovery steps are in [git.md](git.md).
+
+The code is `services/git/`: `run_git` and `GitError` in `runner.py` (every git call goes through it, as an argument list), `slugify` / `branch_name` in `naming.py`, the read-only repository checks in `repo.py` (also used by `project.yaml` validation), `WorktreeManager` in `worktrees.py` and `recover_worktrees` in `recovery.py`. It imports no other service package, which an import-linter contract checks: the startup wiring in `api/worktrees.py` loads each `project.yaml`, builds the "keep this ticket's worktree" rule from the workspace's `RunLog` and passes it in. `spool worktrees list` (in `cli/worktrees.py`) calls the service directly and only reads.
+
+The ticket id pattern lives in `core/ids.py`, because both `services/tickets` and `services/git` need it.
+
 ## Frontend: `desktop/src/` (Feature-Sliced Design)
 
 ```text
