@@ -137,6 +137,13 @@ def isolated_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
+def set_identity(repo: Path) -> None:
+    """Give ``repo`` a local identity, so commits work without a global git config."""
+    run_git(repo, "config", "user.name", "SpoolHQ Tests")
+    run_git(repo, "config", "user.email", "tests@example.invalid")
+    run_git(repo, "config", "commit.gpgsign", "false")
+
+
 def commit_file(repo: Path, name: str, text: str, message: str) -> str:
     """Write ``name``, commit it and return the new commit's sha."""
     (repo / name).write_text(text, encoding="utf-8")

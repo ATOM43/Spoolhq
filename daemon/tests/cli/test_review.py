@@ -8,17 +8,18 @@ from typer.testing import CliRunner
 
 from spoolhq.cli import app, review
 from spoolhq.services.agents import FakeRunner
-from tests.conftest import REVIEW_FIXTURES, commit_file, run_git
+from tests.conftest import REVIEW_FIXTURES, commit_file, run_git, set_identity
 
 runner = CliRunner()
 
 
 @pytest.fixture
-def repo(workspace: Path, git_repo: Path) -> Path:
+def repo(workspace: Path, git_repo: Path, isolated_git: None) -> Path:
     """The demo project with ticket T07 and parse_slug committed on a branch."""
     tickets = workspace / "tickets"
     tickets.mkdir(exist_ok=True)
     shutil.copyfile(REVIEW_FIXTURES / "T07-parse-slug.md", tickets / "T07-parse-slug.md")
+    set_identity(git_repo)
     run_git(git_repo, "checkout", "--quiet", "-b", "feat/T07-parse-slug")
     commit_file(git_repo, "slugs.py", "def parse_slug(text):\n    return text\n", "T07")
     return git_repo

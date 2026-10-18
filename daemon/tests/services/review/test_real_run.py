@@ -14,7 +14,7 @@ import pytest
 from spoolhq.services.agents import ClaudeCliRunner, Outcome
 from spoolhq.services.review import ReviewInputs, review
 from spoolhq.services.tickets import read_ticket
-from tests.conftest import REVIEW_FIXTURES, commit_file, run_git
+from tests.conftest import REVIEW_FIXTURES, commit_file, run_git, set_identity
 from tests.services.agents.test_real_run import REAL, RECORD, anonymise, logged_in
 
 RECORDING = REVIEW_FIXTURES / "recorded" / "real_review.jsonl"
@@ -35,6 +35,7 @@ pytestmark = [
 
 
 def test_real_review_names_the_missing_test(git_repo: Path, home: Path) -> None:
+    set_identity(git_repo)
     run_git(git_repo, "checkout", "--quiet", "-b", "feat/T07-parse-slug")
     commit_file(git_repo, "slugs.py", SLUGS, "T07: add parse_slug")
     ticket = read_ticket(REVIEW_FIXTURES / "T07-parse-slug.md")
