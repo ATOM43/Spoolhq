@@ -267,10 +267,12 @@ def remove_new_stubs(folder: Path, existed: frozenset[str]) -> list[str]:
 
 
 def _remove_empty_tree(path: Path) -> bool:
-    """Remove ``path`` if it holds only (nested) empty folders."""
-    for root, dirs, files in os.walk(path, topdown=False):
+    """Remove ``path`` if it holds only (nested) empty folders; otherwise touch nothing."""
+    walked = list(os.walk(path, topdown=False))
+    for root, dirs, files in walked:
         if files or any(Path(root, name).is_symlink() for name in dirs):
             return False
+    for root, _, _ in walked:
         os.rmdir(root)
     return True
 

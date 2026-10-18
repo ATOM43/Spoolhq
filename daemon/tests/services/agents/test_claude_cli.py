@@ -632,11 +632,13 @@ def test_run_removes_new_empty_stubs_only(
     assert (worktree / "package.json").read_text(encoding="utf-8") == '{"name": "app"}'
 
 
-def test_stubs_with_content_are_kept(tmp_path: Path) -> None:
+@pytest.mark.parametrize("package", ["a-first", "left-pad", "zz-last"])
+def test_stubs_with_content_are_kept(tmp_path: Path, package: str) -> None:
+    # The package's name decides whether the walk sees it before or after .bin.
     folder = tmp_path / "wt"
     (folder / "node_modules" / ".bin").mkdir(parents=True)
-    (folder / "node_modules" / "left-pad").mkdir()
-    (folder / "node_modules" / "left-pad" / "index.js").write_text("x", encoding="utf-8")
+    (folder / "node_modules" / package).mkdir()
+    (folder / "node_modules" / package / "index.js").write_text("x", encoding="utf-8")
     (folder / ".claude" / "agents").mkdir(parents=True)
     (folder / ".env").write_text("KEY=1\n", encoding="utf-8")
     (folder / ".npmrc").touch()
