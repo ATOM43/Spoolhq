@@ -13,10 +13,18 @@ Conventions for coding agents (and humans) changing SpoolHQ.
 
 `graphify-out/` holds a [Graphify](https://github.com/Graphify-Labs/graphify) knowledge graph of the repo, committed for agent context.
 
-- Read `graphify-out/GRAPH_REPORT.md` before exploring the code.
+- **Before starting work**, read `graphify-out/GRAPH_REPORT.md` to see the structure.
 - The graph can be stale. Trust the code when they disagree.
 - If Graphify is installed, `graphify query` and `graphify path` may be used read-only.
-- Don't regenerate or commit the graph as part of a ticket unless the ticket says so.
+- **After the ticket's code is final and `just lint && just test` pass**, rebuild the graph offline (install with `uv tool install graphifyy==0.9.92` if it's missing):
+
+  ```sh
+  GRAPHIFY_BACKEND=none graphify extract . --code-only
+  graphify cluster-only . --no-label
+  ```
+
+- Commit the updated `graphify-out/` files in the same commit as the ticket. Never commit `graphify-out/graph.html`.
+- If Graphify fails, don't block the ticket: say so in the report.
 
 ## Testing
 
