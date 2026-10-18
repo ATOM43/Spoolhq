@@ -3,15 +3,11 @@
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
+from spoolhq.core.ids import id_key
 from spoolhq.services.scheduler.errors import PlanError, PlanProblem
 from spoolhq.services.tickets import Ticket
 
 ARROW = " → "
-
-
-def id_key(ticket_id: str) -> tuple[int, str]:
-    """Sort key for ticket ids: by number, so ``T99`` comes before ``T100``."""
-    return int(ticket_id[1:]), ticket_id
 
 
 def sort_ids(ids: Iterable[str]) -> list[str]:

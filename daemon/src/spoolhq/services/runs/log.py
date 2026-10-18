@@ -17,7 +17,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
 
-from spoolhq.core.ids import TICKET_ID_RE, TICKET_ID_RULE
+from spoolhq.core.ids import check_ticket_id
 from spoolhq.services.runs import db
 from spoolhq.services.runs.bus import EventBus
 from spoolhq.services.runs.db import Clock
@@ -60,12 +60,6 @@ def encode_payload(payload: Any) -> str:
             "put large content in the attempt's files"
         )
     return text
-
-
-def check_ticket_id(ticket_id: str) -> str:
-    if not isinstance(ticket_id, str) or not TICKET_ID_RE.fullmatch(ticket_id):
-        raise ValueError(f"invalid ticket id {ticket_id!r}: {TICKET_ID_RULE}")
-    return ticket_id
 
 
 def _check_count(name: str, value: int) -> None:
@@ -476,6 +470,12 @@ class RunLog:
                 (run_id,),
             ).fetchone()
         return Usage(input_tokens=row[0], output_tokens=row[1], cost_micro_usd=row[2])
+
+    def last_event_id(self) -> int:
+        """The highest event id in the database, or 0 if there are no events."""
+        with self._reading() as conn:
+            row = conn.execute("SELECT COALESCE(MAX(id), 0) FROM events").fetchone()
+        return int(row[0])
 
     def events_since(
         self, after_id: int, run_id: int | None = None, limit: int = 1000

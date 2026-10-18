@@ -14,12 +14,12 @@ from dataclasses import dataclass
 from io import StringIO
 from typing import Any
 
-from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.error import MarkedYAMLError, YAMLError
 from ruamel.yaml.reader import ReaderError
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString, SingleQuotedScalarString
 
+from spoolhq.services.projects.yaml_io import dumper, loader, to_plain
 from spoolhq.services.tickets.errors import TicketValidationError
 
 DELIMITER = "---"
@@ -80,23 +80,10 @@ def split(text: str, source: str) -> TicketText:
     )
 
 
-def _loader() -> YAML:
-    yaml = YAML(typ="rt")
-    yaml.preserve_quotes = True
-    return yaml
-
-
-def _dumper(*, sequence: int = 4, offset: int = 2) -> YAML:
-    yaml = YAML(typ="rt")
-    yaml.indent(mapping=2, sequence=sequence, offset=offset)
-    yaml.width = 4096  # never re-wrap long values
-    return yaml
-
-
 def parse_yaml(frontmatter: str, source: str) -> Any:
     """Parse the frontmatter; syntax errors give the line and column in the file."""
     try:
-        return _loader().load(frontmatter)
+        return loader().load(frontmatter)
     except MarkedYAMLError as exc:
         mark = exc.problem_mark or exc.context_mark
         problem = exc.problem or exc.context or "invalid YAML"
@@ -117,18 +104,6 @@ def parse_yaml(frontmatter: str, source: str) -> Any:
         raise TicketValidationError([f"{source}: invalid YAML: {first_line}"]) from exc
 
 
-def to_plain(value: Any) -> Any:
-    """ruamel's containers and scalar subclasses as plain Python values, for Pydantic."""
-    if isinstance(value, Mapping):
-        return {str(key): to_plain(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [to_plain(item) for item in value]
-    for kind in (bool, int, float, str):
-        if isinstance(value, kind):
-            return kind(value)
-    return value
-
-
 # Updating the frontmatter -------------------------------------------------------------
 
 
@@ -144,7 +119,7 @@ def update_frontmatter(text: TicketText, changes: Mapping[str, Any]) -> str:
     expected = {**to_plain(text.doc), **to_plain(dict(changes))}
     try:
         spliced = _splice(text, changes)
-        if to_plain(_loader().load(spliced)) == expected:
+        if to_plain(loader().load(spliced)) == expected:
             return spliced
     except (YAMLError, ValueError):
         pass
@@ -206,7 +181,7 @@ def _render_entry(text: TicketText, key: str, value: Any, old_lines: list[str]) 
         rendered = [f"{key}: null"]
     else:
         stream = StringIO()
-        _dumper(sequence=sequence, offset=offset).dump({key: _node(value, old)}, stream)
+        dumper(sequence=sequence, offset=offset).dump({key: _node(value, old)}, stream)
         rendered = [line.rstrip("\n") for line in split_lines(stream.getvalue())]
     rendered[0] += comment
     return [" " * col + line + text.newline for line in rendered]
@@ -287,5 +262,5 @@ def _redump(doc: Any, changes: Mapping[str, Any], newline: str) -> str:
     for key, value in changes.items():
         doc[key] = _node(value, doc.get(key))
     stream = StringIO()
-    _dumper().dump(doc, stream)
+    dumper().dump(doc, stream)
     return stream.getvalue().replace("\n", newline)

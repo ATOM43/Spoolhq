@@ -19,10 +19,17 @@ from ruamel.yaml.error import MarkedYAMLError, YAMLError
 from spoolhq.services.projects.errors import FILE_NAME, ProjectError
 
 
-def _yaml() -> YAML:
+def loader() -> YAML:
+    """A round-trip loader that keeps the user's quoting."""
     yaml = YAML(typ="rt")
     yaml.preserve_quotes = True
-    yaml.indent(mapping=2, sequence=4, offset=2)
+    return yaml
+
+
+def dumper(*, sequence: int = 4, offset: int = 2) -> YAML:
+    """A round-trip dumper with two-space mappings that never re-wraps long values."""
+    yaml = YAML(typ="rt")
+    yaml.indent(mapping=2, sequence=sequence, offset=offset)
     yaml.width = 4096  # never re-wrap long values
     return yaml
 
@@ -30,7 +37,7 @@ def _yaml() -> YAML:
 def parse(text: str) -> Any:
     """Parse YAML text, reporting syntax errors with their line and column."""
     try:
-        return _yaml().load(text)
+        return loader().load(text)
     except MarkedYAMLError as exc:
         mark = exc.problem_mark or exc.context_mark
         problem = exc.problem or exc.context or "invalid YAML"
@@ -51,11 +58,14 @@ def read(path: Path) -> Any:
 
 
 def to_plain(value: Any) -> Any:
-    """ruamel's comment-carrying containers as plain dicts and lists, for Pydantic."""
+    """ruamel's containers and scalar subclasses as plain Python values, for Pydantic."""
     if isinstance(value, Mapping):
-        return {key: to_plain(item) for key, item in value.items()}
+        return {str(key): to_plain(item) for key, item in value.items()}
     if isinstance(value, list):
         return [to_plain(item) for item in value]
+    for kind in (bool, int, float, str):
+        if isinstance(value, kind):
+            return kind(value)
     return value
 
 
@@ -92,7 +102,7 @@ def merge(doc: CommentedMap, data: Mapping[str, Any]) -> None:
 
 def dump(doc: Any) -> str:
     stream = StringIO()
-    _yaml().dump(doc, stream)
+    dumper().dump(doc, stream)
     return stream.getvalue()
 
 

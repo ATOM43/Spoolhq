@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import cast
 
-from spoolhq.services.scheduler.graph import id_key, require_valid, sort_tickets
+from spoolhq.core.ids import id_key
+from spoolhq.services.scheduler.graph import require_valid, sort_tickets
 from spoolhq.services.tickets import TICKET_STATUSES, Ticket, TicketStatus
 
 

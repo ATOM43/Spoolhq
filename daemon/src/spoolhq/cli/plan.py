@@ -8,7 +8,7 @@ from typing import Annotated, NoReturn
 
 import typer
 
-from spoolhq.cli.common import fail, settings
+from spoolhq.cli.common import fail, hours, settings
 from spoolhq.services.scheduler import (
     PlanError,
     explain_idle,
@@ -52,10 +52,6 @@ def _valid_listing(project: str) -> TicketListing:
 
 def _plan_failed(exc: PlanError) -> NoReturn:
     fail(f"error: {exc}")
-
-
-def _hours(value: float) -> str:
-    return f"{value:g}h"
 
 
 @plan_app.command("check")
@@ -106,10 +102,10 @@ def summary_command(project: ProjectArg) -> None:
     for status, count in figures.counts.items():
         typer.echo(f"{status + ':':<{width}} {count}")
     typer.echo("")
-    typer.echo(f"remaining:     {_hours(figures.remaining_hours)}")
+    typer.echo(f"remaining:     {hours(figures.remaining_hours)}")
     path = figures.critical_path
     if path.ticket_ids:
         chain = ARROW.join(path.ticket_ids)
-        typer.echo(f"critical path: {chain} ({_hours(path.hours)})")
+        typer.echo(f"critical path: {chain} ({hours(path.hours)})")
     else:
         typer.echo("critical path: none")

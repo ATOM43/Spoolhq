@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from spoolhq.services.agents import READ_ONLY_GIT as AGENT_READ_ONLY_GIT
-from spoolhq.services.context import READ_ONLY_GIT
 from spoolhq.services.context import render as render_module
 from tests.conftest import TESTS_DIR
 
@@ -34,10 +32,6 @@ def test_untrusted_text_is_never_template_source() -> None:
         source = path.read_text(encoding="utf-8")
         assert "from_string" not in source, path
         assert "Template(" not in source.replace("PromptTemplate(", ""), path
-
-
-def test_read_only_git_matches_the_agent_policy() -> None:
-    assert READ_ONLY_GIT == AGENT_READ_ONLY_GIT
 
 
 def test_package_name_matches_the_module() -> None:

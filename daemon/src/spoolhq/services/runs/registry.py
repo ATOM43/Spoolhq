@@ -62,6 +62,7 @@ class RunRegistry:
             )
             return
         try:
+            bus.start_at(run_log.last_event_id())
             recovered = recover_interrupted(run_log)
         except (sqlite3.Error, OSError) as exc:
             run_log.close()

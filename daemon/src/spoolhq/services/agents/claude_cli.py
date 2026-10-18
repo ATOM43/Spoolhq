@@ -7,6 +7,7 @@ four layers are described in ``docs/agents.md``. Every process call is an argume
 list; the prompt goes to stdin only.
 """
 
+import dataclasses
 import json
 import os
 import queue
@@ -74,6 +75,12 @@ ENV_ALLOWED = frozenset(
         "HTTPS_PROXY",
         "HTTP_PROXY",
         "NO_PROXY",
+        "https_proxy",
+        "http_proxy",
+        "no_proxy",
+        # A corporate proxy's CA, so Claude Code can reach the API through it.
+        "NODE_EXTRA_CA_CERTS",
+        "SSL_CERT_FILE",
     }
 )
 ENV_ALLOWED_WINDOWS = frozenset(
@@ -175,6 +182,17 @@ def child_env(parent: Mapping[str, str], *, billing: Billing, platform: str) -> 
             env[name] = value
     env.update(ENV_SET)
     return env
+
+
+def with_config_dir(policy: AgentPolicy, env: Mapping[str, str]) -> AgentPolicy:
+    """``policy`` that also denies ``CLAUDE_CONFIG_DIR`` when ``env`` moves Claude Code's
+    config folder away from ``~/.claude``."""
+    config_dir = next(
+        (value for name, value in env.items() if name.upper() == "CLAUDE_CONFIG_DIR"), None
+    )
+    if not config_dir or config_dir in policy.denied_read_paths:
+        return policy
+    return dataclasses.replace(policy, denied_read_paths=(*policy.denied_read_paths, config_dir))
 
 
 def sandbox_settings(policy: AgentPolicy) -> dict[str, Any]:
@@ -446,6 +464,8 @@ class ClaudeCliRunner:
         cmd = self._command()
         if not info.usable or cmd is None:
             raise BackendUnavailableError(info.reason or "Claude Code is not available")
+        env = self._env(info.billing)
+        policy = with_config_dir(policy, env)
         check_worktree(policy, self._home)
         if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
             raise ValueError("the prompt is larger than Claude Code's 10 MB stdin limit")
@@ -457,7 +477,7 @@ class ClaudeCliRunner:
             backend_version=info.version or "",
         )
         stubs = existing_stubs(policy.worktree)
-        session = _Session(argv, policy.worktree, self._env(info.billing), prompt)
+        session = _Session(argv, policy.worktree, env, prompt)
         try:
             return session.drive(parser, budget, on_event, on_raw, cancel)
         finally:

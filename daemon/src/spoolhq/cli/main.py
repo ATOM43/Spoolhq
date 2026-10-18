@@ -54,14 +54,9 @@ logger = logging.getLogger("spoolhq.daemon")
 
 
 @app.command()
-def serve(
-    port: Annotated[
-        int | None,
-        typer.Option(min=1, max=65535, help="Port to listen on (default: from settings, 8765)."),
-    ] = None,
-) -> None:
-    """Start the daemon on 127.0.0.1."""
-    settings = _settings(**({"port": port} if port is not None else {}))
+def serve() -> None:
+    """Start the daemon on 127.0.0.1 (the port comes from SPOOLHQ_PORT or config.toml)."""
+    settings = _settings()
     home = ensure_home()
     try:
         # Held until the daemon exits: startup recovery must never run while another

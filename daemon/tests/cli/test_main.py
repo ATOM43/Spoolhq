@@ -28,6 +28,13 @@ def test_version_with_bad_config_fails_readably(home: Path) -> None:
     assert "Traceback" not in result.output
 
 
+def test_serve_has_no_port_option() -> None:
+    # The desktop app and the CLI find the daemon through SPOOLHQ_PORT / config.toml only.
+    result = runner.invoke(app, ["serve", "--help"])
+    assert result.exit_code == 0
+    assert "--port" not in result.output
+
+
 def test_serve_refuses_non_loopback_host(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SPOOLHQ_HOST", "0.0.0.0")  # noqa: S104 - the value under test
     result = runner.invoke(app, ["serve"])
@@ -41,6 +48,21 @@ def test_client_connection_refused(free_port: int) -> None:
         pytest.raises(DaemonNotRunning),
     ):
         client.version()
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(200, text="<!doctype html><title>Some other app</title>"),
+        httpx.Response(200, json={"name": "another service"}),
+    ],
+)
+def test_client_reports_a_server_that_is_not_spoolhq(response: httpx.Response) -> None:
+    transport = httpx.MockTransport(lambda request: response)
+    with ApiClient("http://127.0.0.1:8765", "abc", transport=transport) as client:
+        with pytest.raises(ApiError) as raised:
+            client.version()
+    assert str(raised.value) == "not a SpoolHQ daemon at http://127.0.0.1:8765"
 
 
 def test_client_sends_token_and_reports_401() -> None:

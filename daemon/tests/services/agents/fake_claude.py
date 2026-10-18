@@ -7,12 +7,15 @@
 Anything else is a run: it records its argv, environment variable names, stdin and
 pid to ``--record``, prints the scenario's lines, then sleeps for ``--sleep`` seconds
 (``--spawn-child`` first starts a child process that sleeps too, and records its pid)
-and exits with ``--exit-code``. With ``--stubs``, every mode first creates empty stub
-files and folders in its cwd, as the real CLI does with the env scrub on.
+and exits with ``--exit-code``. ``--ignore-sigint`` and ``--ignore-sigterm`` make the
+run ignore those signals (POSIX), to test the adapter's stop sequence. With ``--stubs``,
+every mode first creates empty stub files and folders in its cwd, as the real CLI does
+with the env scrub on.
 """
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -26,7 +29,7 @@ OPTIONS_WITH_VALUE = {
     "--sleep",
     "--exit-code",
 }
-FLAGS = {"--logged-out", "--spawn-child", "--stubs"}
+FLAGS = {"--logged-out", "--spawn-child", "--stubs", "--ignore-sigint", "--ignore-sigterm"}
 # What Claude Code 2.1.302 leaves in its cwd with CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1.
 STUB_FILES = (".env", ".env.local", ".npmrc", "package.json", "yarn.lock")
 STUB_DIRS = (".claude/agents", ".claude/commands", "node_modules/.bin")
@@ -71,6 +74,10 @@ def main() -> int:
         print(json.dumps({"loggedIn": not logged_out, "authMethod": method}, indent=2))
         return 1 if logged_out else 0
 
+    if "--ignore-sigint" in options:
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+    if "--ignore-sigterm" in options:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
     stdin = sys.stdin.read()
     record: dict[str, object] = {
         "argv": claude_args,

@@ -179,7 +179,8 @@ def test_serve_refuses_while_another_daemon_holds_the_lock(home: Path, free_port
         word, pid = holder.stdout.readline().split()
         assert word == "locked"
         result = subprocess.run(  # noqa: S603 - fixed argument list, no shell
-            [sys.executable, "-m", "spoolhq", "serve", "--port", str(free_port)],
+            [sys.executable, "-m", "spoolhq", "serve"],
+            env={**os.environ, "SPOOLHQ_PORT": str(free_port)},
             capture_output=True,
             text=True,
             encoding="utf-8",

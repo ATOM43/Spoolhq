@@ -53,10 +53,24 @@ def branch_sha(repo: Path, branch: str) -> str | None:
     raise command_error(result)
 
 
-def branch_exists(repo: Path, branch: str) -> bool:
-    """True if ``repo`` has a local branch ``branch`` with at least one commit."""
-    result = run_git(["rev-parse", "--verify", "--quiet", f"refs/heads/{branch}^{{commit}}"], repo)
-    return result.returncode == 0
+def is_branch_name(repo: Path, name: str) -> bool:
+    """True if ``name`` is a valid branch name, not a revision such as ``main~1``."""
+    result = run_git(["check-ref-format", "--branch", name], repo)
+    # check-ref-format expands @{-1}; only a name that is itself valid counts.
+    return result.returncode == 0 and result.stdout.strip() == name
+
+
+def has_local_branch(repo: Path, branch: str) -> bool:
+    """True if ``repo`` has the local branch ``branch``.
+
+    Raises GitError when git fails (a corrupt ref store), instead of "not found".
+    """
+    result = run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"], repo)
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    raise command_error(result)
 
 
 def default_branch_sha(repo: Path, branch: str) -> str:

@@ -42,7 +42,7 @@ def test_startup_recovers_worktrees_and_skips_a_broken_project(
     stale = manager.create("T04", "stale", 1)
     blocked = manager.create("T05", "blocked", 2)
     with RunLog(projects_dir / "alpha", daemon_instance="previous") as log:
-        log.start_run("T04")
+        log.set_run_status(log.start_run("T04").id, RunStatus.DONE)
         log.set_run_status(log.start_run("T05").id, RunStatus.BLOCKED, "gates failed")
 
     app = create_app(settings, token=token)
@@ -81,6 +81,32 @@ def test_awaiting_approval_keeps_and_done_removes(
         report = client.app.state.worktree_recovery["demo"]  # type: ignore[attr-defined]
         assert report.kept == ["T04"]
         assert report.removed == ["T05", "T06"]
+
+
+@pytest.mark.parametrize("status", [RunStatus.RUNNING, RunStatus.PAUSED])
+def test_interrupted_run_keeps_its_worktree(
+    git_repo: Path, workspace: Path, token: str, status: RunStatus
+) -> None:
+    settings = load_settings()
+    manager = WorktreeManager(git_repo, "demo", "main", settings.worktrees_dir)
+    interrupted = manager.create("T04", "work", 1)
+    finished = manager.create("T05", "work", 2)
+    with RunLog(workspace, daemon_instance="previous") as log:
+        run = log.start_run("T04")
+        if status is RunStatus.PAUSED:
+            log.set_run_status(run.id, RunStatus.PAUSED)
+        log.set_run_status(log.start_run("T05").id, RunStatus.DONE)
+
+    with TestClient(create_app(settings, token=token), base_url="http://127.0.0.1:8765") as client:
+        report = client.app.state.worktree_recovery["demo"]  # type: ignore[attr-defined]
+        assert report.kept == ["T04"]
+        assert report.removed == ["T05"]
+        with RunLog(workspace, daemon_instance="check") as log:
+            assert log.list_runs(ticket_id="T04", limit=1)[0].status is RunStatus.INTERRUPTED
+
+    assert manager.resume("T04") == interrupted
+    assert interrupted.branch in run_git(git_repo, "branch", "--list")
+    assert not finished.path.exists()
 
 
 def test_keep_rule(workspace: Path) -> None:

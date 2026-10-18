@@ -221,6 +221,22 @@ def test_edit_aborted_prompt_restores(
     assert not path.with_name(f".{FILE_NAME}.bak").exists()
 
 
+def test_edit_interrupted_restores(projects_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = make_ticket(projects_dir)
+
+    def interrupted_editor(command: list[str], file: Path) -> int:
+        file.write_text("half-edited", encoding="utf-8")
+        raise KeyboardInterrupt
+
+    monkeypatch.setenv("VISUAL", "my-editor")
+    monkeypatch.setattr("spoolhq.services.tickets.editor.run_editor", interrupted_editor)
+    result = runner.invoke(app, ["tickets", "edit", "demo", "T01"])
+    assert result.exit_code == 130  # click's exit code for Ctrl-C
+    assert f"Restored the previous version of tickets/{FILE_NAME}." in result.stderr
+    assert path.read_bytes() == TICKET.encode()
+    assert not path.with_name(f".{FILE_NAME}.bak").exists()
+
+
 @pytest.mark.integration
 def test_edit_warns_about_exit_status_and_done_when(
     projects_dir: Path, fake_editor: Callable[[str], None]

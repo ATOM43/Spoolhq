@@ -26,6 +26,7 @@ from jinja2 import (
 from jinja2.exceptions import SecurityError
 from jinja2.sandbox import SandboxedEnvironment
 
+from spoolhq.core.agent_policy import READ_ONLY_GIT
 from spoolhq.services.context.budget import (
     CLAUDE_MD_CAP,
     DECISIONS_CAP,
@@ -45,9 +46,6 @@ PACKAGE = "spoolhq.services.context"
 TEMPLATE_DIR = "prompts"
 IMPLEMENTER_TEMPLATE = "implementer.md.j2"
 DEFAULT_LABEL = "default"
-# The read-only git commands T09's policy allows (services/agents READ_ONLY_GIT); a test
-# keeps the two lists equal, since this package may not import services.agents.
-READ_ONLY_GIT: tuple[str, ...] = ("git status", "git diff", "git log", "git show")
 
 _TEMPLATE_NAME_RE = re.compile(r"[a-z][a-z0-9_-]*\.md\.j2")
 _FIT_ATTEMPTS = 3

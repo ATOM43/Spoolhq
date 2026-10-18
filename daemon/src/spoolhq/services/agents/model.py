@@ -13,10 +13,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
+from spoolhq.core.agent_policy import READ_ONLY_GIT
 from spoolhq.core.auth import token_path
-
-READ_ONLY_GIT: tuple[str, ...] = ("git status", "git diff", "git log", "git show")
-"""git commands every agent may run, on top of the project's stack commands."""
 
 CREDENTIAL_PATHS: tuple[str, ...] = (
     "~/.ssh",
@@ -31,6 +29,10 @@ CREDENTIAL_PATHS: tuple[str, ...] = (
     "~/.npmrc",
     "~/.pypirc",
     "~/.local/share/keyrings",
+    # Claude Code's own login, settings and other projects' transcripts. Only the
+    # agent's commands are denied them; the claude process itself still reads them.
+    "~/.claude",
+    "~/.claude.json",
 )
 """Files the sandbox never lets an agent's commands read; the SpoolHQ home is added."""
 

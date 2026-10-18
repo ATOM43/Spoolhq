@@ -91,7 +91,7 @@ Each run of a ticket works in its own git worktree, `~/.spoolhq/worktrees/<proje
 
 The code is `services/git/`: `run_git` and `GitError` in `runner.py` (every git call goes through it, as an argument list), `slugify` / `branch_name` in `naming.py`, the read-only repository checks in `repo.py` (also used by `project.yaml` validation), `WorktreeManager` in `worktrees.py` and `recover_worktrees` in `recovery.py`. It imports no other service package, which an import-linter contract checks: the startup wiring in `api/worktrees.py` loads each `project.yaml`, builds the "keep this ticket's worktree" rule from the workspace's `RunLog` and passes it in. `spool worktrees list` (in `cli/worktrees.py`) calls the service directly and only reads.
 
-The ticket id pattern lives in `core/ids.py`, because both `services/tickets` and `services/git` need it.
+The ticket id pattern, `check_ticket_id` and the id sort key `id_key` live in `core/ids.py`, because `services/tickets`, `services/git`, `services/runs` and `services/scheduler` all need them. The read-only git commands agents may run live in `core/agent_policy.py`, shared by `services/agents` (the allowlist) and `services/context` (the prompt). The YAML round-trip setup and `to_plain` are in `services/projects/yaml_io.py`, used for both `project.yaml` and ticket frontmatter.
 
 ## Agents
 

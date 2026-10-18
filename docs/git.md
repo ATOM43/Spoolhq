@@ -144,7 +144,7 @@ It only reads; cleanup happens when the daemon starts.
 
 ## Crash recovery
 
-A daemon that stops mid-run leaves its worktree behind. At startup, after the run log's recovery ([runs.md](runs.md#recovery)), the daemon runs `recover_worktrees` for every workspace whose `project.yaml` loads. Its `keep(ticket_id)` callable is true when the ticket's latest run is `blocked` or `awaiting_approval`: those worktrees wait for a person.
+A daemon that stops mid-run leaves its worktree behind. At startup, after the run log's recovery ([runs.md](runs.md#recovery)), the daemon runs `recover_worktrees` for every workspace whose `project.yaml` loads. Its `keep(ticket_id)` callable is true when the ticket's latest run is `blocked` or `awaiting_approval` (those worktrees wait for a person) or `interrupted` (the run loop, T13, resumes from its commits). Recovery in the run log has just marked every run a stopped daemon left `running` or `paused` as `interrupted`, so a crash, reboot or restart keeps that run's worktree and branch.
 
 1. `git worktree prune` drops registered worktrees whose folder is gone: **pruned**. Their branch stays; the next `create` for the ticket recreates it if it is marked.
 2. Each registered worktree under `<root>/<project>/` whose ticket isn't kept is torn down: **removed**. Its branch is deleted only if it carries the marker.

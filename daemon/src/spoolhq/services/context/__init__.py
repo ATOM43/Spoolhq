@@ -7,6 +7,7 @@ the agent's ``<progress>`` block from its final message. This package imports no
 other service package; callers pass plain values in. See ``docs/context.md``.
 """
 
+from spoolhq.core.agent_policy import READ_ONLY_GIT
 from spoolhq.services.context.errors import (
     ContextBudgetError,
     ContextError,
@@ -27,7 +28,6 @@ from spoolhq.services.context.model import (
 from spoolhq.services.context.progress import extract_progress_note, format_progress_entry
 from spoolhq.services.context.render import (
     IMPLEMENTER_TEMPLATE,
-    READ_ONLY_GIT,
     build_implementer_prompt,
     escape_closing_tag,
     render_template,

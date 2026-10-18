@@ -37,10 +37,10 @@ def test_serve_starts_and_serves_docs(home: Path, free_port: int, tmp_path: Path
     output = tmp_path / "serve-output.txt"
     with output.open("wb") as out:
         process = subprocess.Popen(  # noqa: S603 - fixed argument list, no shell
-            [sys.executable, "-m", "spoolhq", "serve", "--port", str(free_port)],
+            [sys.executable, "-m", "spoolhq", "serve"],
             stdout=out,
             stderr=subprocess.STDOUT,
-            env=os.environ.copy(),
+            env={**os.environ, "SPOOLHQ_PORT": str(free_port)},
         )
         try:
             wait_for_health(base_url, process)

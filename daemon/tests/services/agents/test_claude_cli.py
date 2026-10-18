@@ -142,9 +142,40 @@ def test_settings_json(policy: AgentPolicy, home: Path) -> None:
         "~/.npmrc",
         "~/.pypirc",
         "~/.local/share/keyrings",
+        "~/.claude",
+        "~/.claude.json",
         str(home.resolve()),
     ]
     assert settings["disableAllHooks"] is True
+
+
+def test_claude_codes_own_files_are_denied(policy: AgentPolicy) -> None:
+    files = [
+        entry["path"]
+        for entry in json.loads(settings_json(policy))["sandbox"]["credentials"]["files"]
+    ]
+    assert {"~/.claude", "~/.claude.json"} <= set(files)
+
+
+def test_claude_config_dir_is_denied_when_set(policy: AgentPolicy) -> None:
+    moved = claude_cli.with_config_dir(
+        policy, {"PATH": "/usr/bin", "CLAUDE_CONFIG_DIR": "/srv/cfg"}
+    )
+    files = [entry["path"] for entry in sandbox_settings(moved)["sandbox"]["credentials"]["files"]]
+    assert {"~/.claude", "~/.claude.json", "/srv/cfg"} <= set(files)
+    assert claude_cli.with_config_dir(policy, {"PATH": "/usr/bin"}) == policy
+    assert (
+        claude_cli.with_config_dir(policy, {"claude_config_dir": "C:\\cfg"}).denied_read_paths[-1]
+        == "C:\\cfg"
+    )
+
+
+def test_worktree_inside_the_claude_folder_is_refused(tmp_path: Path, home: Path) -> None:
+    user_home = tmp_path / "user-home"
+    worktree = user_home / ".claude" / "projects" / "x"
+    policy = AgentPolicy.for_worktree(worktree, {"test": "just test"}, home)
+    with pytest.raises(PolicyError, match="overlaps ~/.claude, which agents may not read"):
+        check_worktree(policy, user_home)
 
 
 # --- environment --------------------------------------------------------------------
@@ -435,6 +466,41 @@ def test_environment_is_scrubbed(
     assert {"PATH", "HOME", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", "DISABLE_AUTOUPDATER"} <= names
 
 
+PROXY_AND_CA = {
+    "https_proxy": "http://proxy:3128",
+    "http_proxy": "http://proxy:3128",
+    "no_proxy": "localhost,127.0.0.1",
+    "NODE_EXTRA_CA_CERTS": "/etc/ssl/corp.pem",
+    "SSL_CERT_FILE": "/etc/ssl/certs.pem",
+}
+
+
+@pytest.mark.integration
+def test_proxy_and_ca_variables_reach_claude(
+    tmp_path: Path, policy: AgentPolicy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name, value in PROXY_AND_CA.items():
+        monkeypatch.setenv(name, value)
+    run(runner(tmp_path), policy)
+    names = set(read_record(tmp_path)["env"])
+    if sys.platform == "win32":  # names ignore case there
+        assert {name.upper() for name in PROXY_AND_CA} <= {name.upper() for name in names}
+    else:
+        assert set(PROXY_AND_CA) <= names
+
+
+@pytest.mark.integration
+def test_claude_config_dir_reaches_the_settings(
+    tmp_path: Path, policy: AgentPolicy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_dir = str(tmp_path / "cfg")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", config_dir)
+    run(runner(tmp_path), policy)
+    argv = read_record(tmp_path)["argv"]
+    settings = json.loads(argv[argv.index("--settings") + 1])
+    assert config_dir in [entry["path"] for entry in settings["sandbox"]["credentials"]["files"]]
+
+
 @pytest.mark.integration
 def test_api_key_billing_passes_the_key_and_the_budget(
     tmp_path: Path, policy: AgentPolicy, monkeypatch: pytest.MonkeyPatch
@@ -545,6 +611,24 @@ def test_timeout(tmp_path: Path, policy: AgentPolicy) -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.integration
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows stops with terminate() then kill()")
+@pytest.mark.parametrize("ignored", [("--ignore-sigint",), ("--ignore-sigint", "--ignore-sigterm")])
+def test_stop_escalates_to_sigterm_and_sigkill(
+    tmp_path: Path, policy: AgentPolicy, monkeypatch: pytest.MonkeyPatch, ignored: tuple[str, ...]
+) -> None:
+    monkeypatch.setattr(claude_cli, "INTERRUPT_WAIT_S", 0.5)
+    monkeypatch.setattr(claude_cli, "TERMINATE_WAIT_S", 0.5)
+    budget = Budget(max_turns=30, max_usd=None, max_tokens=None, timeout_s=1)
+    started = time.monotonic()
+    result = run(runner(tmp_path, "--sleep", "60", *ignored), policy, budget)
+    assert result.outcome is Outcome.TIMED_OUT
+    assert time.monotonic() - started < 15
+    pid = read_record(tmp_path)["pid"]
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
 def test_cancel(tmp_path: Path, policy: AgentPolicy) -> None:
     cancel = threading.Event()
     recorder = Recorder()

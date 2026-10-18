@@ -22,6 +22,7 @@ from spoolhq.services.agents import (
 )
 from spoolhq.services.agents.claude_stream import epoch_to_datetime, summarize, usd_to_micro
 from spoolhq.services.agents.model import AgentEvent, Billing
+from spoolhq.services.context import extract_progress_note
 from tests.conftest import AGENT_FIXTURES
 
 RESET = datetime(2026, 10, 18, 10, 0, tzinfo=UTC)
@@ -159,8 +160,18 @@ def test_cached_tokens_count_as_input(worktree: Path) -> None:
 
 def test_summary_is_cut_to_4000_characters(worktree: Path) -> None:
     parser = ClaudeStreamParser(worktree, billing="subscription")
-    replay(parser, [INIT, result(result="x" * 5000)])
-    assert parser.finish().summary == "x" * 4000
+    replay(parser, [INIT, result(result="a" * 1000 + "x" * 4000)])
+    assert parser.finish().summary == "[… 1,000 characters cut …]\n" + "x" * 4000
+
+
+def test_summary_keeps_the_progress_note_at_the_end(worktree: Path) -> None:
+    note = "<progress>Added the workspace folder.</progress>"
+    text = "Long report. " * 1000
+    text = text[: 10_000 - len(note)] + note
+    assert len(text) == 10_000
+    parser = ClaudeStreamParser(worktree, billing="subscription")
+    replay(parser, [INIT, result(result=text)])
+    assert extract_progress_note(parser.finish().summary) == "Added the workspace folder."
 
 
 def test_tool_input_summary_is_cut_to_2000_characters(worktree: Path) -> None:

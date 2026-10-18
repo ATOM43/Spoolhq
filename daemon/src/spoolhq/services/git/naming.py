@@ -8,7 +8,7 @@ import re
 import unicodedata
 from pathlib import Path
 
-from spoolhq.core.ids import TICKET_ID_RE, TICKET_ID_RULE
+from spoolhq.core.ids import check_ticket_id
 from spoolhq.services.git.runner import GitError, neutral_cwd, run_git
 
 BRANCH_PREFIX = "feat/"
@@ -28,12 +28,6 @@ def slugify(title: str) -> str:
     slug = _NOT_SLUG_RE.sub("-", ascii_title.lower()).strip("-")
     slug = slug[:MAX_SLUG_LENGTH].rstrip("-")
     return slug or EMPTY_SLUG
-
-
-def check_ticket_id(ticket_id: str) -> str:
-    if not isinstance(ticket_id, str) or not TICKET_ID_RE.fullmatch(ticket_id):
-        raise ValueError(f"invalid ticket id {ticket_id!r}: {TICKET_ID_RULE}")
-    return ticket_id
 
 
 def branch_name(ticket_id: str, title: str, *, cwd: Path | None = None) -> str:

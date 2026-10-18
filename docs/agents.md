@@ -37,7 +37,7 @@ All are frozen dataclasses with a `kind`:
 
 ### Outcomes and the result
 
-`RunResult` has `outcome`, `summary` (the final text, cut to 4,000 characters), `files_changed` (sorted, deduplicated, relative), `input_tokens`, `output_tokens`, `cost_micro_usd`, `reset_at`, `denials`, `num_turns`, `backend`, `backend_version`, `model`, `error` and `debug` (counters such as `unknown_events`).
+`RunResult` has `outcome`, `summary` (the final text; a longer one keeps its last 4,000 characters after a `[… 6,000 characters cut …]` line, so the closing `<progress>` block survives), `files_changed` (sorted, deduplicated, relative), `input_tokens`, `output_tokens`, `cost_micro_usd`, `reset_at`, `denials`, `num_turns`, `backend`, `backend_version`, `model`, `error` and `debug` (counters such as `unknown_events`).
 
 | Outcome | From |
 | --- | --- |
@@ -117,7 +117,7 @@ The worktree must not be, or contain, the user's home folder or the SpoolHQ home
 
 ## The environment allowlist
 
-The `claude` process gets only these variables from the daemon's environment: `PATH`, `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_*`, `TMPDIR`, `TMP`, `TEMP`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`, `CLAUDE_CONFIG_DIR`, `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, and on Windows `SYSTEMROOT`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMSPEC`, `PATHEXT`. It always adds `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` and `DISABLE_AUTOUPDATER=1`.
+The `claude` process gets only these variables from the daemon's environment: `PATH`, `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_*`, `TMPDIR`, `TMP`, `TEMP`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`, `CLAUDE_CONFIG_DIR`, `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, `https_proxy`, `http_proxy`, `no_proxy`, `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, and on Windows `SYSTEMROOT`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMSPEC`, `PATHEXT`. It always adds `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` and `DISABLE_AUTOUPDATER=1`.
 
 `ANTHROPIC_API_KEY` is passed only for API billing. If it were in the environment, Claude Code would bill the API instead of the subscription, so a subscription login always wins: `detect()` checks `claude auth status` without the key first, and offers the key only when there is no subscription login. Tokens such as `GITHUB_TOKEN`, `CLICKUP_TOKEN` and `SPOOLHQ_TOKEN` never reach the agent.
 
@@ -125,7 +125,7 @@ The `claude` process gets only these variables from the daemon's environment: `P
 
 ## The credential deny list
 
-Sandboxed commands may not read: `~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.gnupg`, `~/.netrc`, `~/.docker/config.json`, `~/.kube`, `~/.git-credentials`, `~/.config/git/credentials`, `~/.npmrc`, `~/.pypirc`, `~/.local/share/keyrings`, and the SpoolHQ home folder, which holds the API token.
+Sandboxed commands may not read: `~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.gnupg`, `~/.netrc`, `~/.docker/config.json`, `~/.kube`, `~/.git-credentials`, `~/.config/git/credentials`, `~/.npmrc`, `~/.pypirc`, `~/.local/share/keyrings`, Claude Code's own `~/.claude` and `~/.claude.json` (and the `CLAUDE_CONFIG_DIR` folder when that variable is set in the environment passed to `claude`), and the SpoolHQ home folder, which holds the API token.
 
 Worktrees live inside the SpoolHQ home by default (`~/.spoolhq/worktrees/<project>/<ticket>`), and denying the whole folder would deny the worktree too. Then the list holds the token file plus every entry of the home except the folders on the way down to the worktree (`config.toml`, `logs/`, other projects' worktrees, …).
 

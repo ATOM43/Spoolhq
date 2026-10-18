@@ -8,10 +8,10 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from spoolhq.core.ids import TICKET_ID_RE, TICKET_ID_RULE
+from spoolhq.core.ids import check_ticket_id
 from spoolhq.services.projects import ProjectError, project_dir
 from spoolhq.services.projects.errors import format_errors
-from spoolhq.services.projects.yaml_io import write_atomic
+from spoolhq.services.projects.yaml_io import to_plain, write_atomic
 from spoolhq.services.tickets import document
 from spoolhq.services.tickets.checklist import parse_done_when
 from spoolhq.services.tickets.document import TicketText
@@ -102,7 +102,7 @@ def parse_ticket(text: str, file_name: str) -> Ticket:
     else:
         context = {FILE_ID_CONTEXT: name["prefix"]} if name else None
         try:
-            meta = TicketMeta.model_validate(document.to_plain(data), context=context)
+            meta = TicketMeta.model_validate(to_plain(data), context=context)
         except ValidationError as exc:
             errors.extend(format_errors(exc, TicketMeta, prefix=source))
     if errors or meta is None:
@@ -170,8 +170,10 @@ def _ticket_files(directory: Path) -> list[Path]:
 
 def find_ticket_file(project: str, ticket_id: str, *, projects_dir: Path) -> Path:
     """The file for ``ticket_id`` (by file-name prefix, so an invalid file is found too)."""
-    if not TICKET_ID_RE.fullmatch(ticket_id):
-        raise TicketError(f"invalid ticket id {ticket_id!r}: {TICKET_ID_RULE}")
+    try:
+        check_ticket_id(ticket_id)
+    except ValueError as exc:
+        raise TicketError(str(exc)) from None
     directory = tickets_dir(project, projects_dir=projects_dir)
     matches = [
         path

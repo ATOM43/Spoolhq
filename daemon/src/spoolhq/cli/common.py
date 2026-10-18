@@ -22,6 +22,11 @@ def settings(**overrides: Any) -> Settings:
         fail(f"error: {exc}")
 
 
+def hours(value: float) -> str:
+    """Hours as ``1.5h``."""
+    return f"{value:g}h"
+
+
 def table(rows: Sequence[tuple[str, ...]]) -> list[str]:
     """Left-aligned columns two spaces apart; the first row is the header."""
     widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]

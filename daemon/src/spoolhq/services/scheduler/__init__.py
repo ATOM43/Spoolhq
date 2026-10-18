@@ -7,6 +7,7 @@ can, and computes the progress figures. Everything here is pure logic over a lis
 rules are described in ``docs/scheduler.md``.
 """
 
+from spoolhq.core.ids import id_key
 from spoolhq.services.scheduler.errors import (
     PlanError,
     PlanProblem,
@@ -14,7 +15,7 @@ from spoolhq.services.scheduler.errors import (
     SchedulerError,
     TransitionError,
 )
-from spoolhq.services.scheduler.graph import id_key, validate_plan
+from spoolhq.services.scheduler.graph import validate_plan
 from spoolhq.services.scheduler.progress import (
     CriticalPath,
     PlanSummary,

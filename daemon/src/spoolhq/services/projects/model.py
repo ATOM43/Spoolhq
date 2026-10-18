@@ -17,7 +17,7 @@ from pydantic import (
     field_validator,
 )
 
-from spoolhq.services.git import GitError, branch_exists, is_work_tree
+from spoolhq.services.git import GitError, has_local_branch, is_branch_name, is_work_tree
 
 AgentBackend = Literal["claude-code-cli", "codex-cli", "gemini-cli", "claude-agent-sdk"]
 AGENT_BACKENDS: tuple[str, ...] = get_args(AgentBackend)
@@ -173,7 +173,9 @@ class Project(_Strict):
             return value
         path = Path(repo).expanduser()
         try:
-            exists = branch_exists(path, value)
+            if not is_branch_name(path, value):
+                raise ValueError(f"{value!r} is not a valid branch name")
+            exists = has_local_branch(path, value)
         except GitError as exc:
             raise ValueError(str(exc)) from exc
         if not exists:

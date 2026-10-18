@@ -1,8 +1,8 @@
 """Startup worktree recovery: the daemon's wiring between the run log and git.
 
 ``services/git`` knows nothing about runs, so the ``keep`` rule (a ticket whose latest
-run is blocked or awaiting approval keeps its worktree) is built here, from each
-workspace's ``RunLog``.
+run is blocked, awaiting approval or interrupted keeps its worktree) is built here, from
+each workspace's ``RunLog``.
 """
 
 import logging
@@ -23,11 +23,13 @@ from spoolhq.services.runs import RunLog, RunLogError, RunRegistry, RunStatus
 
 logger = logging.getLogger("spoolhq.daemon")
 
-KEEP_STATUSES = frozenset({RunStatus.BLOCKED, RunStatus.AWAITING_APPROVAL})
+# Interrupted runs (a crash, reboot or restart) keep their commits for T13 to resume.
+KEEP_STATUSES = frozenset({RunStatus.BLOCKED, RunStatus.AWAITING_APPROVAL, RunStatus.INTERRUPTED})
 
 
 def keep_for(run_log: RunLog) -> Callable[[str], bool]:
-    """``keep(ticket_id)``: True when the ticket's latest run is blocked or awaiting approval.
+    """``keep(ticket_id)``: True when the ticket's latest run is blocked, awaiting approval
+    or interrupted.
 
     If the run log can't be read, the worktree is kept: removing work that a person
     may still need is worse than leaving a folder behind.

@@ -43,7 +43,7 @@ context:
 | --- | --- | --- | --- |
 | `name` | yes | | Slug: `^[a-z0-9][a-z0-9-]{0,62}$` (lowercase letters, digits, hyphens; 1–63 characters). Must match the project's folder name. |
 | `repo` | yes | | Absolute path or a path starting with `~`. Must exist and be a git work tree. |
-| `default_branch` | no | `main` | Must exist in `repo` (with at least one commit). |
+| `default_branch` | no | `main` | A branch name (not a revision such as `main~1` or `main@{0}`) that exists in `repo` (with at least one commit). |
 | `template` | no | | Name of the stack template the project came from. |
 | `commands.install` | yes | | Non-empty shell command the gates run to install dependencies. |
 | `commands.lint` | yes | | Non-empty lint command. |
@@ -51,7 +51,7 @@ context:
 | `agents.default` | no | `claude-code-cli` | One of `claude-code-cli`, `codex-cli`, `gemini-cli`, `claude-agent-sdk`. |
 | `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override; same values as `agents.default`. |
 | `agents.budget_per_ticket.usd` | no | | Positive number: spending cap per ticket for API backends. |
-| `agents.budget_per_ticket.tokens` | no | | Positive whole number: token cap per ticket for subscription backends. |
+| `agents.budget_per_ticket.tokens` | no | | Positive whole number: token cap per ticket for subscription backends. Cache reads count toward it on every turn, so with about 50k tokens of context a 1,000,000 budget lasts roughly 20 turns. |
 | `limits.gate_retries` | no | `3` | Whole number from 0 to 10. |
 | `limits.review_retries` | no | `2` | Whole number from 0 to 10. |
 | `merge_policy.max_direct_diff_lines` | no | `400` | Whole number above 0. Larger diffs wait for approval in a pull request. |
@@ -77,6 +77,7 @@ Every problem is reported at once, one line each, as `project.yaml: <dotted.path
 | Repo path is relative | `project.yaml: repo: must be an absolute path (or start with ~), got 'code/app'` |
 | Repo path missing | `project.yaml: repo: path does not exist: /home/me/code/app` |
 | Not a git repository | `project.yaml: repo: not a git work tree: /home/me/code/app` |
+| Not a branch name | `project.yaml: default_branch: 'main~1' is not a valid branch name` |
 | Branch missing | `project.yaml: default_branch: branch 'develop' not found in /home/me/code/app` |
 | git not installed | `project.yaml: repo: git was not found on PATH` |
 | Bad remote | `project.yaml: git.remote: not a GitHub URL` |

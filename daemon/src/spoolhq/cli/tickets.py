@@ -8,7 +8,7 @@ from typing import Annotated
 
 import typer
 
-from spoolhq.cli.common import fail, settings, table
+from spoolhq.cli.common import fail, hours, settings, table
 from spoolhq.services.scheduler import SchedulerError, apply_transition
 from spoolhq.services.tickets import (
     TICKET_STATUSES,
@@ -31,10 +31,6 @@ TicketIdArg = Annotated[str, typer.Argument(help="Ticket id, like T04.")]
 
 COLUMNS = ("ID", "STATUS", "PHASE", "TITLE", "DEPENDS ON", "ESTIMATE")
 NONE = "-"
-
-
-def _hours(value: float) -> str:
-    return f"{value:g}h"
 
 
 def _deps(ticket: Ticket) -> str:
@@ -64,7 +60,7 @@ def list_command(
                 str(t.meta.phase),
                 t.meta.title,
                 _deps(t),
-                _hours(t.meta.estimate_h),
+                hours(t.meta.estimate_h),
             )
             for t in listing.tickets
         ]
@@ -154,7 +150,7 @@ def edit_command(project: ProjectArg, ticket_id: TicketIdArg) -> None:
     except TicketError as exc:
         edit.restore()
         fail(f"error: {exc}")
-    except typer.Abort:
+    except (typer.Abort, KeyboardInterrupt):
         edit.restore()
         typer.echo(f"Restored the previous version of tickets/{edit.path.name}.", err=True)
         raise

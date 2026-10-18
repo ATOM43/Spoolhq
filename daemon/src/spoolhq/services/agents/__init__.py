@@ -8,12 +8,12 @@ recorded transcripts for tests. This package imports no other service. See
 ``docs/agents.md``.
 """
 
+from spoolhq.core.agent_policy import READ_ONLY_GIT
 from spoolhq.services.agents.backends import available_runners
 from spoolhq.services.agents.claude_cli import MIN_VERSION, ClaudeCliRunner
 from spoolhq.services.agents.claude_stream import ClaudeStreamParser, PolicyViolation
 from spoolhq.services.agents.fake import FakeRunner
 from spoolhq.services.agents.model import (
-    READ_ONLY_GIT,
     AgentEvent,
     AgentPolicy,
     BackendInfo,

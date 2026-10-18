@@ -137,7 +137,7 @@ with bus.subscribe(run_id=None, maxsize=1000) as sub:
 1. Each subscription has a bounded queue (`maxsize`, default 1000). `publish` only appends to it.
 2. When the queue is full, the subscription is marked `lagged` and **receives no further events**. The events already queued stay and can still be read.
 3. `get` returns `None` at once when nothing is queued and the subscription is lagged or closed, so a consumer never waits for events that will not come.
-4. `last_id` is the id of the last event `get` returned; before the first `get`, the id of the last event the bus had published when the subscription started. Every event after `last_id` is either still queued or in the database.
+4. `last_id` is the id of the last event `get` returned; before the first `get`, the id of the last event the bus had published when the subscription started. The registry starts each workspace's bus at the database's last event id, so after a restart `last_id` is never behind events already stored. Every event after `last_id` is either still queued or in the database.
 5. A lagged consumer resyncs from the database: `run_log.events_since(sub.last_id, run_id=...)` (in pages of `limit`), then `subscribe` again. Events can then arrive both from the database read and the new queue; skip any whose id is not above the last id handled.
 6. To start a stream from a client's cursor without a gap: subscribe first, read `events_since(cursor)`, then read the queue, skipping ids already sent.
 

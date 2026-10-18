@@ -134,6 +134,15 @@ class EventBus:
         self._subscribers: list[Subscription] = []
         self._last_id = 0
 
+    def start_at(self, last_id: int) -> None:
+        """Treat ``last_id`` as already published, so new subscribers resync after it.
+
+        Called with the database's highest event id when a run log is opened; without
+        it, a subscriber that lags at once would replay every older run's events.
+        """
+        with self._lock:
+            self._last_id = max(self._last_id, last_id)
+
     def subscribe(
         self,
         run_id: int | None = None,

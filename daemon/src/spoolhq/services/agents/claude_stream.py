@@ -64,6 +64,13 @@ def summarize(value: Any, limit: int = SUMMARY_LIMIT) -> str:
     return text[:limit]
 
 
+def keep_end(text: str, limit: int = RESULT_LIMIT) -> str:
+    """The last ``limit`` characters, where the agent's ``<progress>`` note is."""
+    if len(text) <= limit:
+        return text
+    return f"[… {len(text) - limit:,} characters cut …]\n{text[-limit:]}"
+
+
 def epoch_to_datetime(value: Any) -> datetime | None:
     """A Unix timestamp (seconds, or milliseconds if it is that large) in UTC."""
     if isinstance(value, bool) or not isinstance(value, int | float | str):
@@ -390,7 +397,7 @@ class ClaudeStreamParser:
         summary = result.get("result")
         return RunResult(
             outcome=outcome,
-            summary=summary[:RESULT_LIMIT] if isinstance(summary, str) else "",
+            summary=keep_end(summary) if isinstance(summary, str) else "",
             files_changed=tuple(sorted(self._files)),
             input_tokens=input_tokens,
             output_tokens=output_tokens,

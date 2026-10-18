@@ -20,12 +20,6 @@ MAX_ESTIMATE_H = 40
 FILE_ID_CONTEXT = "file_id"
 
 
-def check_ticket_id(value: str) -> str:
-    if not TICKET_ID_RE.fullmatch(value):
-        raise ValueError(TICKET_ID_RULE)
-    return value
-
-
 class TicketMeta(BaseModel):
     """The YAML frontmatter at the top of a ticket file."""
 
@@ -43,7 +37,8 @@ class TicketMeta(BaseModel):
     @field_validator("id")
     @classmethod
     def _id_matches_file(cls, value: str, info: ValidationInfo) -> str:
-        check_ticket_id(value)
+        if not TICKET_ID_RE.fullmatch(value):
+            raise ValueError(TICKET_ID_RULE)
         file_id = (info.context or {}).get(FILE_ID_CONTEXT)
         if file_id is not None and value != file_id:
             raise ValueError(f"{value!r} does not match the file name prefix {file_id!r}")

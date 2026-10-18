@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
-from spoolhq.core.ids import TICKET_ID_RE
-from spoolhq.services.git.naming import branch_name, check_ticket_id
+from spoolhq.core.ids import TICKET_ID_RE, check_ticket_id, id_key
+from spoolhq.services.git.naming import branch_name
 from spoolhq.services.git.repo import (
     branch_sha,
     default_branch_sha,
@@ -186,10 +186,6 @@ def remove_path(path: Path) -> None:
             path.unlink()
     elif path.exists():
         shutil.rmtree(path, onexc=_clear_read_only_and_retry)
-
-
-def _ticket_order(ticket_id: str) -> tuple[int, str]:
-    return int(ticket_id[1:]), ticket_id
 
 
 class WorktreeManager:
@@ -501,4 +497,4 @@ class WorktreeManager:
                     folder_exists=True,
                     has_marker=False,
                 )
-        return [infos[ticket_id] for ticket_id in sorted(infos, key=_ticket_order)]
+        return [infos[ticket_id] for ticket_id in sorted(infos, key=id_key)]

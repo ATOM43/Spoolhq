@@ -65,4 +65,9 @@ class ApiClient:
         return response.json()
 
     def version(self) -> str:
-        return str(self.get("/api/version")["version"])
+        try:
+            return str(self.get("/api/version")["version"])
+        except (ValueError, KeyError) as exc:
+            # Something else answers on the port: HTML, or JSON without a version.
+            base_url = str(self._http.base_url).rstrip("/")
+            raise ApiError(f"not a SpoolHQ daemon at {base_url}") from exc

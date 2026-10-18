@@ -229,6 +229,32 @@ def test_name_must_match_folder(projects_dir: Path, git_repo: Path) -> None:
     ]
 
 
+@pytest.mark.parametrize("revision", ["main~1", "main^", "main@{0}"])
+def test_default_branch_must_be_a_branch_name(
+    projects_dir: Path, git_repo: Path, revision: str
+) -> None:
+    data = valid_data(git_repo)
+    data["default_branch"] = revision
+    assert errors_for(projects_dir, data) == [
+        f"project.yaml: default_branch: {revision!r} is not a valid branch name"
+    ]
+
+
+def test_default_branch_main_is_accepted(projects_dir: Path, git_repo: Path) -> None:
+    write_project(projects_dir, valid_data(git_repo))
+    assert load_project("demo", projects_dir=projects_dir).default_branch == "main"
+
+
+def test_default_branch_git_error_is_reported(projects_dir: Path, git_repo: Path) -> None:
+    # A corrupt packed-refs file makes git fail, which must not read as "not found".
+    (git_repo / ".git" / "packed-refs").write_text("not a ref line\n", encoding="utf-8")
+    data = valid_data(git_repo)
+    data["default_branch"] = "release"
+    [error] = errors_for(projects_dir, data)
+    assert error.startswith("project.yaml: default_branch: git show-ref failed (exit 128): ")
+    assert "packed-refs" in error
+
+
 def test_all_errors_are_reported_at_once(projects_dir: Path, git_repo: Path) -> None:
     data = valid_data(git_repo)
     del data["commands"]["test"]
