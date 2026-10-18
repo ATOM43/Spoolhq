@@ -78,6 +78,14 @@ def test_run_git_sets_options_and_environment(
         "core.quotepath=off",
         "-c",
         "core.fsmonitor=false",
+        "-c",
+        f"core.hooksPath={runner.disabled_hooks_dir()}",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "tag.gpgsign=false",
+        "-c",
+        "tag.forceSignAnnotated=false",
         "status",
         "--",
         "a b",
@@ -96,6 +104,54 @@ def test_run_git_sets_options_and_environment(
     assert env["LC_ALL"] == "C"
     assert env["LANGUAGE"] == "C"
     assert "GIT_INDEX_FILE" not in env
+
+
+def test_hook_and_signing_overrides_come_before_the_subcommand(
+    wt_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    runner.run_git(["commit", "-m", "x"], wt_repo)
+
+    [command] = seen
+    before_subcommand = command[: command.index("commit")]
+    pairs = list(zip(before_subcommand[1::2], before_subcommand[2::2], strict=True))
+    for option in (
+        f"core.hooksPath={runner.disabled_hooks_dir()}",
+        "commit.gpgsign=false",
+        "tag.gpgsign=false",
+        "tag.forceSignAnnotated=false",
+    ):
+        assert ("-c", option) in pairs
+
+
+def test_disabled_hooks_dir_is_created_in_the_home_folder(home: Path) -> None:
+    path = runner.disabled_hooks_dir()
+    assert path == home / "hooks-disabled"
+    assert path.is_dir()
+    assert list(path.iterdir()) == []
+
+
+def test_non_empty_hooks_dir_stops_git_from_starting(
+    wt_repo: Path, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hooks = runner.disabled_hooks_dir()
+    (hooks / "post-commit").write_text("#!/bin/sh\n", encoding="utf-8")
+    calls: list[object] = []
+    monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: calls.append(a))
+
+    with pytest.raises(GitError) as raised:
+        runner.run_git(["status"], wt_repo)
+
+    assert str(raised.value) == (
+        f"{home / 'hooks-disabled'} must be empty; SpoolHQ uses it to disable git hooks"
+    )
+    assert calls == []
 
 
 def test_missing_git_is_reported(wt_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -46,6 +46,11 @@ def default_worktrees_dir() -> Path:
     return home_dir() / "worktrees"
 
 
+def disabled_hooks_path() -> Path:
+    """The always-empty folder SpoolHQ's git calls use as ``core.hooksPath`` (not created)."""
+    return home_dir() / "hooks-disabled"
+
+
 def config_path() -> Path:
     return home_dir() / "config.toml"
 

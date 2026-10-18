@@ -369,7 +369,8 @@ class WorktreeManager:
     def commit_all(self, wt: Worktree, message: str) -> str | None:
         """Stage everything in the worktree and commit it; the new sha, or None if no change.
 
-        Commits skip the repository's hooks (``--no-verify``): the gates are the checks.
+        Commits skip the repository's hooks: the gates are the checks. ``run_git``
+        disables every hook; ``--no-verify`` stays as a second guard.
         """
         if not message.strip():
             raise ValueError("commit message must not be empty")

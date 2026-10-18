@@ -4,6 +4,7 @@ git is called with an argument list, never a shell string, from the folder it wo
 on (``cwd``), with an environment that never prompts, takes no optional locks and
 prints messages in the C locale so they can be matched. Values that come from users
 or agents (ticket titles, commit messages, paths) are always separate arguments.
+Repository hooks never run and nothing is signed (see ``hook_and_signing_options``).
 """
 
 import os
@@ -14,6 +15,8 @@ import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+from spoolhq.core.config import disabled_hooks_path, ensure_home
 
 DEFAULT_TIMEOUT_S = 60.0
 MIN_GIT_VERSION = (2, 36)
@@ -127,15 +130,49 @@ def git_env() -> dict[str, str]:
     return env
 
 
+def disabled_hooks_dir() -> Path:
+    """The empty folder git is told to look in for hooks: ``<home>/hooks-disabled/``.
+
+    Created if missing. Raises GitError if anything is in it, since git would run it as
+    a hook; checked on every call because the folder could be written to at any time.
+    """
+    ensure_home()  # mode 0700, like every other entry point into the home folder
+    path = disabled_hooks_path()
+    path.mkdir(mode=0o700, exist_ok=True)
+    with os.scandir(path) as entries:
+        if next(entries, None) is not None:
+            raise GitError(f"{path} must be empty; SpoolHQ uses it to disable git hooks")
+    return path
+
+
+def hook_and_signing_options() -> tuple[str, ...]:
+    """``-c`` options that stop repository hooks and commit/tag signing.
+
+    Command-line ``-c`` wins over repository, global and system config, so a hooks
+    folder the agent can edit (``core.hooksPath=.githooks``) or a user's
+    ``commit.gpgsign=true`` has no effect on SpoolHQ's own git calls.
+    """
+    return (
+        "-c",
+        f"core.hooksPath={disabled_hooks_dir()}",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "tag.gpgsign=false",
+        "-c",
+        "tag.forceSignAnnotated=false",
+    )
+
+
 def run_git(args: Sequence[str], cwd: Path, *, timeout: float = DEFAULT_TIMEOUT_S) -> GitResult:
     """Run ``git <args>`` in ``cwd`` and return its result, whatever the exit code.
 
-    Raises GitError if git is not on PATH, cannot start in ``cwd`` (a missing folder)
-    or does not finish within ``timeout`` seconds. Call ``.check()`` on the result to
-    raise on a non-zero exit too.
+    Raises GitError if git is not on PATH, cannot start in ``cwd`` (a missing folder),
+    does not finish within ``timeout`` seconds, or the disabled-hooks folder is not
+    empty. Call ``.check()`` on the result to raise on a non-zero exit too.
     """
     arguments = tuple(args)
-    command = [git_executable(), *GLOBAL_OPTIONS, *arguments]
+    command = [git_executable(), *GLOBAL_OPTIONS, *hook_and_signing_options(), *arguments]
     try:
         completed = subprocess.run(  # noqa: S603 - fixed argument list, no shell
             command,

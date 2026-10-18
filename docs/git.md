@@ -86,7 +86,29 @@ Then `git worktree add -b <branch> <path> <base_sha>` creates the worktree and t
 
 The commit runs with `user.useConfigOnly=true`, so git never invents an identity from the user and host names. Without `user.name` and `user.email` it raises `git user.name/user.email not set for /home/u/code/x; set them with git config`.
 
-**Why `--no-verify`:** the gates (T11) are SpoolHQ's checks, run with a timeout and recorded for every attempt. A repository's `pre-commit` and `commit-msg` hooks are code SpoolHQ doesn't control: they can hang, prompt, need tools that aren't installed, or change files after the gates passed. `--no-verify` skips those two; other hooks (such as `post-checkout` when a worktree is added) still run.
+## Hooks and signing
+
+**SpoolHQ's own git calls never run repository hooks and never sign.** `run_git` puts these options before every subcommand:
+
+```text
+-c core.hooksPath=<home>/hooks-disabled
+-c commit.gpgsign=false
+-c tag.gpgsign=false
+-c tag.forceSignAnnotated=false
+```
+
+A `-c` on the command line wins over the repository's, the user's and the system's config, so neither can turn hooks or signing back on.
+
+**Why hooks:** the agent works inside a worktree of the repository. If the repository sets `core.hooksPath` to a tracked folder (`.husky`, `.githooks`), that folder is in the worktree too, and the agent can write a new hook there. The next git command SpoolHQ runs (`git worktree add` runs `post-checkout`; `git commit` runs `prepare-commit-msg` and `post-commit`) would then run that code as the daemon, outside the agent's permission policy: a sandbox escape. `--no-verify` is not enough, because it skips only `pre-commit` and `commit-msg`. Hooks in `.git/hooks/` are code SpoolHQ doesn't control either: they can hang, prompt, need tools that aren't installed, or change files after the gates (T11), which are SpoolHQ's checks, have passed.
+
+`<home>/hooks-disabled/` is created on first use and must stay empty: `run_git` lists it with `os.scandir` before every call, and if anything is in it, it starts no git process and raises `<path> must be empty; SpoolHQ uses it to disable git hooks`. Commits still pass `--no-verify` as well, in case a future call ever bypasses `run_git`.
+
+**Why signing:** with `commit.gpgsign=true` or `tag.gpgsign=true` in the user's config, git would try to sign SpoolHQ's commits and tags and can wait on a passphrase prompt until the 60 s timeout, or fail if the signing program is missing. SpoolHQ's commits are unsigned; signing may come back later as an opt-in.
+
+**What this does not cover:**
+
+- **git config filters** (`filter.<driver>.clean` / `smudge`, set through `.gitattributes`) and similar config-driven programs. They are not hooks, so `core.hooksPath` does not stop them.
+- **The agent's own git commands.** What the agent may run, git included, is decided by its permission policy (T09), not by `run_git`.
 
 ## Teardown
 
@@ -142,7 +164,7 @@ SpoolHQ needs **git 2.36 or newer**, the first with `git worktree list --porcela
 Every call goes through `run_git(args, cwd, timeout=60)` in `runner.py`:
 
 - An argument list (`subprocess.run([git, ...])`), never a shell. `git` is found once with `shutil.which`; if it is missing: `git not found on PATH`.
-- `-c core.quotepath=off -c core.fsmonitor=false` before every subcommand, so paths come back unescaped and no fsmonitor daemon is started.
+- `-c core.quotepath=off -c core.fsmonitor=false` before every subcommand, so paths come back unescaped and no fsmonitor daemon is started, plus the hook and signing overrides from [Hooks and signing](#hooks-and-signing).
 - The environment is a copy of the daemon's with `GIT_TERMINAL_PROMPT=0` (never prompt), `GIT_OPTIONAL_LOCKS=0` (reads don't take the index lock), `LC_ALL=C` and `LANGUAGE=C` (stable messages). Variables that point git at another repository (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, …) are removed, and stdin is empty.
 - Output is decoded as UTF-8 with `errors="replace"`.
 - A failure raises `GitError` with the arguments, the exit code and the last 20 lines of stderr: `git worktree add failed (exit 128): fatal: …`.
