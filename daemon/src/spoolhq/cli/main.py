@@ -10,6 +10,7 @@ import uvicorn
 
 import spoolhq
 from spoolhq.api import create_app
+from spoolhq.cli.agents import agents_command
 from spoolhq.cli.client import ApiClient, ApiError, DaemonNotRunning
 from spoolhq.cli.common import fail as _fail
 from spoolhq.cli.common import settings as _settings
@@ -45,6 +46,7 @@ app.add_typer(tickets_app)
 app.add_typer(plan_app)
 app.add_typer(runs_app)
 app.add_typer(worktrees_app)
+app.command("agents")(agents_command)
 
 logger = logging.getLogger("spoolhq.daemon")
 

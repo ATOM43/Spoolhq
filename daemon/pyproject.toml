@@ -90,11 +90,26 @@ forbidden_modules = [
     "spoolhq.services.tracker",
 ]
 
+[[tool.importlinter.contracts]]
+name = "services.agents imports no other service package"
+type = "forbidden"
+source_modules = ["spoolhq.services.agents"]
+forbidden_modules = [
+    "spoolhq.services.gates",
+    "spoolhq.services.git",
+    "spoolhq.services.projects",
+    "spoolhq.services.runs",
+    "spoolhq.services.scheduler",
+    "spoolhq.services.tickets",
+    "spoolhq.services.tracker",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--strict-markers", "--strict-config"]
 markers = [
     "integration: starts a real daemon in a subprocess (runs in CI on Linux, macOS and Windows)",
+    "real_agent: runs the real claude CLI (opt-in: SPOOLHQ_REAL_AGENT=1, logged in)",
 ]
 
 # `just test` adds --cov=spoolhq --cov-fail-under=85. Only TYPE_CHECKING blocks are

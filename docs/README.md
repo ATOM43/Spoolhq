@@ -8,4 +8,5 @@ User and developer documentation will live here: architecture, the daemon API, t
 - [scheduler.md](scheduler.md): plan checks, status changes and scheduling
 - [runs.md](runs.md): the run log and event bus
 - [git.md](git.md): worktrees, branches and git recovery
+- [agents.md](agents.md): the agent runner, the Claude Code backend and its policy
 - [testing.md](testing.md): running and writing tests

@@ -2,7 +2,7 @@
 
 SpoolHQ is an open-source, local-first desktop app that turns a written spec into a ticket plan, then has a coding agent implement the tickets one at a time, with tests and review before each merge. A Python daemon runs the loop, a `spool` CLI drives it, and a Tauri desktop app shows what is happening.
 
-**Status: pre-alpha, not usable yet.** The daemon serves a minimal authenticated API and the desktop app shows whether it is running. The CLI can create a project, read and edit its tickets, check the plan and change ticket statuses, and show the run log and worktrees. The daemon records runs and manages the git worktree each run works in, but nothing runs agents yet.
+**Status: pre-alpha, not usable yet.** The daemon serves a minimal authenticated API and the desktop app shows whether it is running. The CLI can create a project, read and edit its tickets, check the plan and change ticket statuses, and show the run log and worktrees. The daemon records runs and manages the git worktree each run works in, and can drive Claude Code under a locked-down policy, but nothing starts agent runs yet.
 
 ## Development quickstart
 
@@ -44,6 +44,12 @@ Each run works in its own git worktree, `~/.spoolhq/worktrees/<project>/<ticket>
 
 ```sh
 uv run --directory daemon spool worktrees list my-app      # ticket, branch, path, state (ok, missing folder, ...)
+```
+
+Agents run through your own installed [Claude Code](https://code.claude.com/docs/en/setup) CLI (2.1.259 or newer, logged in with `claude auth login`), confined to the ticket's worktree by Claude Code's restricted mode, an allowlist of the project's commands, the OS sandbox with no network and a scrubbed environment ([agents](docs/agents.md)). Native Windows is not supported (use WSL2); on Linux the sandbox needs `bubblewrap` and `socat` (`sudo dnf install bubblewrap socat` on Fedora). To check:
+
+```sh
+uv run --directory daemon spool agents      # installed, version, login and billing, policy enforceable
 ```
 
 ## Run the daemon

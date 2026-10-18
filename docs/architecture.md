@@ -93,6 +93,12 @@ The code is `services/git/`: `run_git` and `GitError` in `runner.py` (every git 
 
 The ticket id pattern lives in `core/ids.py`, because both `services/tickets` and `services/git` need it.
 
+## Agents
+
+A coding agent implements a ticket in its worktree through one interface, `AgentRunner`: `detect()` says whether a backend is installed, logged in and able to enforce the policy, and `run(prompt, policy, budget, …)` streams normalised events to callbacks and returns a `RunResult` with an outcome (`completed`, `max_turns`, `budget_exhausted`, `usage_limited`, `timed_out`, `cancelled`, `error`). The first backend, `claude-code-cli`, drives the user's own `claude` CLI. The policy (the agent may edit only its worktree and run only the project's stack commands and read-only git) is enforced by Claude Code in four layers: restricted mode, an allowlist, the OS sandbox with no network, and a scrubbed environment; SpoolHQ builds that configuration and stops the run if Claude Code's `init` shows it didn't take effect. The rules are in [agents.md](agents.md).
+
+The code is `services/agents/`: `AgentPolicy`, `Budget`, the events and `RunResult` in `model.py`, the `AgentRunner` protocol in `runner.py`, the pure `ClaudeStreamParser` in `claude_stream.py`, `ClaudeCliRunner` (command line, settings, environment, process handling) in `claude_cli.py`, `FakeRunner` (replays recorded transcripts for tests) in `fake.py` and `available_runners` in `backends.py`. It imports no other service package, which an import-linter contract checks; the run loop (T13) will pass in the worktree path and `project.yaml`'s commands. `spool agents` (in `cli/agents.py`) lists the backends; nothing runs an agent yet.
+
 ## Frontend: `desktop/src/` (Feature-Sliced Design)
 
 ```text

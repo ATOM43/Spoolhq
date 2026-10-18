@@ -2,6 +2,7 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -141,3 +142,26 @@ def commit_file(repo: Path, name: str, text: str, message: str) -> str:
     run_git(repo, "add", "--", name)
     run_git(repo, "commit", "--quiet", "--no-verify", "-m", message)
     return run_git(repo, "rev-parse", "HEAD").strip()
+
+
+AGENT_FIXTURES = FIXTURES_DIR / "agents" / "claude"
+"""Hand-written Claude Code stream-json transcripts."""
+FAKE_CLAUDE = TESTS_DIR / "services" / "agents" / "fake_claude.py"
+
+
+def fake_claude_cmd(scenario: Path, record: Path, *options: str) -> list[str]:
+    """``claude_cmd`` that runs ``fake_claude.py`` with ``scenario`` (see its docstring)."""
+    return [
+        sys.executable,
+        str(FAKE_CLAUDE),
+        "--scenario",
+        str(scenario),
+        "--record",
+        str(record),
+        *options,
+    ]
+
+
+def sandbox_which(name: str) -> str | None:
+    """A ``which`` that finds the Linux sandbox packages (bwrap, socat) and nothing else."""
+    return f"/usr/bin/{name}" if name in {"bwrap", "socat"} else None
