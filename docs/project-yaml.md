@@ -55,7 +55,7 @@ tracker:
 | `merge_policy.max_direct_diff_lines` | no | `400` | Whole number above 0. Larger diffs wait for approval in a pull request. |
 | `merge_policy.protected_paths` | no | `["**/migrations/**", ".github/**", "**/auth/**"]` | List of globs. A ticket touching one of these waits for approval. |
 | `merge_policy.always_pr` | no | `false` | `true` sends every ticket through a pull request. |
-| `git.remote` | no | | A GitHub URL: `https://github.com/<owner>/<repo>` (optionally ending in `.git`) or `git@github.com:<owner>/<repo>.git`. |
+| `git.remote` | no | | A GitHub URL: `https://github.com/<owner>/<repo>` (optionally ending in `.git`) or `git@github.com:<owner>/<repo>.git`. The owner is 1–39 letters, digits or hyphens; the repository is 1–100 letters, digits, `.`, `_` or `-`; neither may start with `-` or `.`. |
 | `tracker.kind` | no | `clickup` | Only `clickup` for now. |
 | `tracker.list_id` | when `tracker` is set | | Non-empty string; quote it (`"901"`) if it is all digits. |
 

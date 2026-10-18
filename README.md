@@ -2,7 +2,7 @@
 
 SpoolHQ is an open-source, local-first desktop app that turns a written spec into a ticket plan, then has a coding agent implement the tickets one at a time, with tests and review before each merge. A Python daemon runs the loop, a `spool` CLI drives it, and a Tauri desktop app shows what is happening.
 
-**Status: pre-alpha, not usable yet.** The daemon serves a minimal authenticated API, and the desktop app shows whether it is running; nothing else works yet.
+**Status: pre-alpha, not usable yet.** The daemon serves a minimal authenticated API, the desktop app shows whether it is running, and the CLI can create a project and read and edit its ticket files; nothing runs agents yet.
 
 ## Development quickstart
 
@@ -10,6 +10,23 @@ Install [uv](https://docs.astral.sh/uv/), [Node.js 24 LTS](https://nodejs.org/),
 
 ```sh
 just install && just test
+```
+
+## Create a project and look at its tickets
+
+A project is a workspace folder in `~/spoolhq-projects/` for an existing git repository (`SPOOLHQ_PROJECTS_DIR` to use another folder):
+
+```sh
+uv run --directory daemon spool init my-app --repo ~/code/my-app   # creates ~/spoolhq-projects/my-app/
+uv run --directory daemon spool project validate my-app
+```
+
+Tickets are markdown files in the workspace's `tickets/` folder, written by hand for now ([format](docs/ticket-format.md)):
+
+```sh
+uv run --directory daemon spool tickets list my-app [--status ready] [--phase 1]
+uv run --directory daemon spool tickets show my-app T01
+uv run --directory daemon spool tickets edit my-app T01     # opens $VISUAL / $EDITOR
 ```
 
 ## Run the daemon

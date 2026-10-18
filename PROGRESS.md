@@ -59,3 +59,14 @@ Structure only; no routes, commands, UI or security rules changed.
 - `spool project validate <name>` prints `valid` or every error, exiting 1 on errors.
 - Docs: "Projects" in `docs/architecture.md`, `docs/project-yaml.md`, DECISIONS 39–43.
 - Tests: init then validate, each required field missing, documented messages for bad values (remote, backend, budget, retries, typos, slugs), repo/branch refusals that create nothing, existing folder, failures mid-init, comment-preserving round-trip, YAML line/column, unsafe tags. Temp `SPOOLHQ_HOME`, `SPOOLHQ_PROJECTS_DIR` and git repos in fixtures.
+
+## T05 · Ticket file format and store
+
+- `services/tickets/`: one markdown file per ticket in `<workspace>/tickets/`, named `<id>-<slug>.md`. Pydantic model of the frontmatter (`id`, `title`, `phase`, `depends_on`, `status`, `estimate_h`, `review_required`, `tracker_ref`), strict and with `extra="forbid"`; the id must match the file-name prefix, no self or duplicate dependencies. Every error at once as `tickets/<file>: <field>: <message>`; YAML errors give the file's line and column.
+- Byte-identical round-trip: the body is kept as raw text; saving rewrites only the frontmatter lines of changed keys (comments, quoting, list layout, line endings, final newline, BOM kept), with an atomic write.
+- Done-when parsing (read-only): `[{text, checked}]` from the `## Done when` section; a missing or empty section is a warning.
+- Store API: `list_tickets(project, status=, phase=)` (sorted by id, invalid files reported without stopping the rest), `load_ticket`, `save_ticket`, `TicketError` / `TicketValidationError`.
+- CLI: `spool tickets list <project> [--status] [--phase]` (exit 1 if any file is invalid), `spool tickets show <project> <id>`, `spool tickets edit <project> <id>` ($VISUAL / $EDITOR via `shlex.split` as an argument list, re-validation, reopen or restore from a backup). Shared CLI helpers moved to `cli/common.py`.
+- Fixtures: round-trip files (comments, CRLF, no final newline, unicode, extra sections, block and flow lists, quoting, BOM, frontmatter only) and the 18-ticket dashboard plan.
+- T04 leftovers: `git.remote` follows GitHub's owner and repository naming rules; the README quickstart covers `spool init` and `spool tickets`.
+- Docs: `docs/ticket-format.md`, "Tickets" in `docs/architecture.md`, DECISIONS 45–51.

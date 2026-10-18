@@ -55,7 +55,7 @@ A project is one workspace folder plus the git repository it works on. Workspace
 ~/spoolhq-projects/<name>/
   project.yaml   # settings: repo, branch, stack commands, agents, limits, merge policy, remote, tracker
   CONTEXT.md     # the spec the planner reads
-  tickets/       # one markdown file per ticket (T05)
+  tickets/       # one markdown file per ticket: <id>-<slug>.md
   runs/          # per-ticket attempts: transcripts, gate output, diffs, reviews (later tickets)
 ```
 
@@ -64,6 +64,12 @@ A project is one workspace folder plus the git repository it works on. Workspace
 **Code-facing notes live in the repository, not the workspace.** `PROGRESS.md`, `DECISIONS.md` and `CLAUDE.md` sit next to the code because agents read them with the code, and they travel with the repo. `spool init` never writes into the repository; it only says which of these files are missing.
 
 The code is `services/projects/` (the model in `model.py`, YAML handling in `yaml_io.py`, the workspace in `workspace.py`), with read-only repository checks in `services/git/`. Nothing outside `services/projects/` reads or writes YAML: callers use `load_project`, `save_project` and `init_project`. Because these are local file operations, the `spool init` and `spool project validate` commands call the service directly instead of going through the daemon.
+
+## Tickets
+
+Each ticket is a markdown file in the workspace's `tickets/` folder: YAML frontmatter (id, title, phase, dependencies, status, estimate, ...) and a free-form body with a `## Done when` checklist. The format, its error messages and the round-trip guarantee are in [ticket-format.md](ticket-format.md).
+
+The code is `services/tickets/`: the frontmatter model in `model.py`, splitting and changed-keys-only frontmatter updates in `document.py`, the Done-when parser in `checklist.py`, `list_tickets` / `load_ticket` / `save_ticket` in `store.py` and the editor session in `editor.py`. It reuses `format_errors` and `write_atomic` from `services/projects/`. `spool tickets list|show|edit` (in `cli/tickets.py`) call the service directly, like the project commands.
 
 ## Frontend: `desktop/src/` (Feature-Sliced Design)
 

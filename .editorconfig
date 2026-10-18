@@ -20,3 +20,10 @@ trim_trailing_whitespace = false
 
 [LICENSE]
 insert_final_newline = unset
+
+# Round-trip fixtures keep their exact bytes; editors must not normalise them.
+[daemon/tests/fixtures/tickets/**]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset

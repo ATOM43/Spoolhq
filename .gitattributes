@@ -1,2 +1,5 @@
 # Keep LF everywhere so formatters agree on Windows checkouts.
 * text=auto eol=lf
+
+# Round-trip fixtures must keep their exact bytes (CRLF, no final newline, BOM).
+daemon/tests/fixtures/tickets/** -text

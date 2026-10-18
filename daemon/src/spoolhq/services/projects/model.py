@@ -24,12 +24,13 @@ AGENT_BACKENDS: tuple[str, ...] = get_args(AgentBackend)
 
 SLUG_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
 SLUG_RULE = "must be 1-63 lowercase letters, digits or hyphens, starting with a letter or digit"
-GITHUB_HTTPS_RE = re.compile(
-    r"https://github\.com/(?P<owner>[A-Za-z0-9-]+)/(?P<repo>[A-Za-z0-9._-]+?)(?:\.git)?"
-)
-GITHUB_SSH_RE = re.compile(
-    r"git@github\.com:(?P<owner>[A-Za-z0-9-]+)/(?P<repo>[A-Za-z0-9._-]+)\.git"
-)
+# GitHub's rules: an owner is 1-39 letters, digits or hyphens, not starting with a
+# hyphen; a repository is 1-100 letters, digits, '.', '_' or '-', not starting with
+# '-' or '.'.
+_GITHUB_OWNER = r"(?P<owner>[A-Za-z0-9][A-Za-z0-9-]{0,38})"
+_GITHUB_REPO = r"(?P<repo>[A-Za-z0-9_][A-Za-z0-9._-]{0,99}?)"
+GITHUB_HTTPS_RE = re.compile(rf"https://github\.com/{_GITHUB_OWNER}/{_GITHUB_REPO}(?:\.git)?")
+GITHUB_SSH_RE = re.compile(rf"git@github\.com:{_GITHUB_OWNER}/{_GITHUB_REPO}\.git")
 
 DEFAULT_PROTECTED_PATHS = ["**/migrations/**", ".github/**", "**/auth/**"]
 
@@ -44,10 +45,8 @@ def check_slug(value: str) -> str:
 
 
 def check_github_url(value: str) -> str:
-    for pattern in (GITHUB_HTTPS_RE, GITHUB_SSH_RE):
-        match = pattern.fullmatch(value)
-        if match and match["repo"] not in {".", ".."}:
-            return value
+    if any(pattern.fullmatch(value) for pattern in (GITHUB_HTTPS_RE, GITHUB_SSH_RE)):
+        return value
     raise ValueError("not a GitHub URL")
 
 

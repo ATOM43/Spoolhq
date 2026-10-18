@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Annotated, Any, NoReturn
+from typing import Annotated
 
 import typer
 import uvicorn
@@ -10,8 +10,11 @@ import uvicorn
 import spoolhq
 from spoolhq.api import create_app
 from spoolhq.cli.client import ApiClient, ApiError, DaemonNotRunning
+from spoolhq.cli.common import fail as _fail
+from spoolhq.cli.common import settings as _settings
+from spoolhq.cli.tickets import tickets_app
 from spoolhq.core.auth import load_or_create_token, token_path
-from spoolhq.core.config import ConfigError, Settings, ensure_home, load_settings
+from spoolhq.core.config import ensure_home
 from spoolhq.core.logs import configure_logging
 from spoolhq.services.projects import (
     ProjectError,
@@ -33,20 +36,9 @@ project_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(project_app)
+app.add_typer(tickets_app)
 
 logger = logging.getLogger("spoolhq.daemon")
-
-
-def _fail(message: str) -> NoReturn:
-    typer.echo(message, err=True)
-    raise typer.Exit(code=1)
-
-
-def _settings(**overrides: Any) -> Settings:
-    try:
-        return load_settings(**overrides)
-    except ConfigError as exc:
-        _fail(f"error: {exc}")
 
 
 @app.command()
