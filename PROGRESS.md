@@ -70,3 +70,13 @@ Structure only; no routes, commands, UI or security rules changed.
 - Fixtures: round-trip files (comments, CRLF, no final newline, unicode, extra sections, block and flow lists, quoting, BOM, frontmatter only) and the 18-ticket dashboard plan.
 - T04 leftovers: `git.remote` follows GitHub's owner and repository naming rules; the README quickstart covers `spool init` and `spool tickets`.
 - Docs: `docs/ticket-format.md`, "Tickets" in `docs/architecture.md`, DECISIONS 45–51.
+
+## T06 · Dependency graph and scheduler
+
+- `services/scheduler/`: `validate_plan(tickets)` reports unknown dependencies, each distinct cycle (members in work order, from the lowest id) and ids defined in several files, all at once, as `PlanProblem(code, ticket_ids, message)`. Ids sort by number (`T99` before `T100`).
+- Status transitions: the `TRANSITIONS` table is the single source; `check_transition` raises `TransitionError` (`blocked → done is not allowed`, `T07 cannot start: waits for T04, T06`), same status is a no-op; `apply_transition(project, id, status)` saves through the T05 store, changing only the `status` line.
+- Scheduling: `next_ready`, `waiting_on`, and `explain_idle` with the reasons `all_done`, `running`, `awaiting_approval`, `blocked`, `waiting`, `plan_not_approved`. All refuse an invalid plan with `PlanError`.
+- Progress: `remaining_hours`, `critical_path` (longest not-done chain by hours, ties to lower ids, decimal sums) and `summary` (counts per status, hours, path).
+- CLI: `spool plan check|next|summary <project>` (new `cli/plan.py`) and `spool tickets set-status <project> <id> <status>`; non-zero exit on problems or refused moves.
+- Docs: `docs/scheduler.md`, "Scheduler" in `docs/architecture.md`, README commands, DECISIONS 52–57.
+- Tests: validation (unknown dep, 3-ticket cycle, separate and overlapping cycles, duplicates, numeric order), every allowed and disallowed transition, same-status no-op, dependency rule, status-line-only saves, the dashboard's next-ready order, remaining hours and critical path, one test per idle reason, and the CLI output and exit codes.

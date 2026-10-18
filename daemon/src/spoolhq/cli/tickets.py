@@ -1,4 +1,4 @@
-"""`spool tickets`: list, show and edit a project's ticket files.
+"""`spool tickets`: list, show and edit a project's ticket files, and change a status.
 
 These are local file operations, so they call the tickets service directly; the daemon
 is not needed.
@@ -10,6 +10,7 @@ from typing import Annotated
 import typer
 
 from spoolhq.cli.common import fail, settings
+from spoolhq.services.scheduler import SchedulerError, apply_transition
 from spoolhq.services.tickets import (
     TICKET_STATUSES,
     Ticket,
@@ -22,7 +23,7 @@ from spoolhq.services.tickets import (
 
 tickets_app = typer.Typer(
     name="tickets",
-    help="List, show and edit a project's tickets.",
+    help="List, show and edit a project's tickets, and change their status.",
     no_args_is_help=True,
 )
 
@@ -171,3 +172,27 @@ def edit_command(project: ProjectArg, ticket_id: TicketIdArg) -> None:
     for warning in ticket.warnings:
         typer.echo(f"warning: {warning}", err=True)
     typer.echo(f"Saved tickets/{edit.path.name}.")
+
+
+@tickets_app.command("set-status")
+def set_status_command(
+    project: ProjectArg,
+    ticket_id: TicketIdArg,
+    status: Annotated[str, typer.Argument(help=f"New status: {', '.join(TICKET_STATUSES)}.")],
+) -> None:
+    """Change a ticket's status, if the transition table allows it.
+
+    Only the status line of the file changes. See docs/scheduler.md for the table.
+    """
+    projects_dir = settings().projects_dir
+    try:
+        result = apply_transition(project, ticket_id, status, projects_dir=projects_dir)
+    except TicketValidationError as exc:
+        fail("\n".join(exc.errors))
+    except (TicketError, SchedulerError) as exc:
+        fail(f"error: {exc}")
+    ticket = result.ticket
+    if result.changed:
+        typer.echo(f"{ticket.id}: {result.previous} → {ticket.meta.status}")
+    else:
+        typer.echo(f"{ticket.id} is already {ticket.meta.status}")

@@ -12,6 +12,7 @@ from spoolhq.api import create_app
 from spoolhq.cli.client import ApiClient, ApiError, DaemonNotRunning
 from spoolhq.cli.common import fail as _fail
 from spoolhq.cli.common import settings as _settings
+from spoolhq.cli.plan import plan_app
 from spoolhq.cli.tickets import tickets_app
 from spoolhq.core.auth import load_or_create_token, token_path
 from spoolhq.core.config import ensure_home
@@ -37,6 +38,7 @@ project_app = typer.Typer(
 )
 app.add_typer(project_app)
 app.add_typer(tickets_app)
+app.add_typer(plan_app)
 
 logger = logging.getLogger("spoolhq.daemon")
 

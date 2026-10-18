@@ -45,7 +45,7 @@ Unknown keys are errors, so a typo never silently falls back to a default. Value
 | `review_required` | no | `false` | `true` or `false`. |
 | `tracker_ref` | no | `null` | The ticket's id in an external tracker, or `null`. |
 
-Only single files are checked here. Whether every `depends_on` id exists, whether the dependencies form a cycle, and which status changes are allowed are checks on the whole plan, which come with the dependency graph (T06).
+Only single files are checked here. Whether every `depends_on` id exists, whether the dependencies form a cycle, and which status changes are allowed are checks on the whole plan: see [scheduler.md](scheduler.md).
 
 ## Body
 
@@ -103,6 +103,7 @@ If a frontmatter cannot be updated line by line (it is written as one `{...}` fl
 | `spool tickets list <project> [--status S] [--phase N]` | Table of id, status, phase, title, dependencies and estimate, sorted by id. Invalid files are listed at the end with their errors, and the command then exits 1. |
 | `spool tickets show <project> <id>` | The frontmatter fields, the Done-when checklist and the body. Warnings go to stderr. |
 | `spool tickets edit <project> <id>` | Opens the file in your editor, then checks it. |
+| `spool tickets set-status <project> <id> <status>` | Changes the status if the [transition table](scheduler.md#status-transitions) allows it; only the `status` line changes. |
 
 These read the files directly; the daemon does not need to be running.
 

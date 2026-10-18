@@ -71,6 +71,12 @@ Each ticket is a markdown file in the workspace's `tickets/` folder: YAML frontm
 
 The code is `services/tickets/`: the frontmatter model in `model.py`, splitting and changed-keys-only frontmatter updates in `document.py`, the Done-when parser in `checklist.py`, `list_tickets` / `load_ticket` / `save_ticket` in `store.py` and the editor session in `editor.py`. It reuses `format_errors` and `write_atomic` from `services/projects/`. `spool tickets list|show|edit` (in `cli/tickets.py`) call the service directly, like the project commands.
 
+## Scheduler
+
+The scheduler works on the plan as a whole: it checks the dependency graph (unknown dependencies, cycles, duplicate ids), owns the table of allowed status changes, picks the ticket that runs next and explains why none can, and computes remaining hours and the critical path. The rules are in [scheduler.md](scheduler.md).
+
+The code is `services/scheduler/`: plan validation in `graph.py`, `next_ready` / `explain_idle` / `waiting_on` in `schedule.py`, the transition table and `apply_transition` in `transitions.py`, and the progress figures in `progress.py`. It is pure logic over a list of tickets; only `apply_transition` touches files, through the tickets store. `spool plan check|next|summary` (in `cli/plan.py`) and `spool tickets set-status` call it directly.
+
 ## Frontend: `desktop/src/` (Feature-Sliced Design)
 
 ```text
