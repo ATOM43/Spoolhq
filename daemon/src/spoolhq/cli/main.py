@@ -14,9 +14,11 @@ from spoolhq.cli.client import ApiClient, ApiError, DaemonNotRunning
 from spoolhq.cli.common import fail as _fail
 from spoolhq.cli.common import settings as _settings
 from spoolhq.cli.plan import plan_app
+from spoolhq.cli.runs import runs_app
 from spoolhq.cli.tickets import tickets_app
 from spoolhq.core.auth import load_or_create_token, token_path
-from spoolhq.core.config import ensure_home
+from spoolhq.core.config import Settings, ensure_home
+from spoolhq.core.daemon_lock import DaemonAlreadyRunning, acquire_daemon_lock
 from spoolhq.core.logs import configure_logging
 from spoolhq.services.projects import (
     ProjectError,
@@ -40,6 +42,7 @@ project_app = typer.Typer(
 app.add_typer(project_app)
 app.add_typer(tickets_app)
 app.add_typer(plan_app)
+app.add_typer(runs_app)
 
 logger = logging.getLogger("spoolhq.daemon")
 
@@ -54,6 +57,17 @@ def serve(
     """Start the daemon on 127.0.0.1."""
     settings = _settings(**({"port": port} if port is not None else {}))
     home = ensure_home()
+    try:
+        # Held until the daemon exits: startup recovery must never run while another
+        # daemon has live runs.
+        lock = acquire_daemon_lock(home)
+    except DaemonAlreadyRunning as exc:
+        _fail(f"error: {exc}")
+    with lock:
+        _serve(settings, home)
+
+
+def _serve(settings: Settings, home: Path) -> None:
     token = load_or_create_token(home)
     log_file = configure_logging(home / "logs", settings.log_level, redact=[token])
 

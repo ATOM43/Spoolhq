@@ -73,6 +73,24 @@ def project_dir(name: str, projects_dir: Path) -> Path:
     return projects_dir / name
 
 
+def list_workspaces(projects_dir: Path) -> list[Path]:
+    """Every project workspace in ``projects_dir``, sorted by name.
+
+    A workspace is a folder with a slug name and a ``project.yaml``; staging folders
+    left by an interrupted ``init_project`` and stray files are skipped.
+    """
+    if not projects_dir.is_dir():
+        return []
+    return sorted(
+        (
+            path
+            for path in projects_dir.iterdir()
+            if SLUG_RE.fullmatch(path.name) and path.is_dir() and (path / FILE_NAME).is_file()
+        ),
+        key=lambda path: path.name,
+    )
+
+
 def _validate(data: Any, *, folder_name: str | None, prefix: str | None) -> Project:
     if data is None:
         raise ProjectValidationError([f"{FILE_NAME}: the file is empty"])

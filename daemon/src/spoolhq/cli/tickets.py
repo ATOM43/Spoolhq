@@ -4,12 +4,11 @@ These are local file operations, so they call the tickets service directly; the 
 is not needed.
 """
 
-from collections.abc import Sequence
 from typing import Annotated
 
 import typer
 
-from spoolhq.cli.common import fail, settings
+from spoolhq.cli.common import fail, settings, table
 from spoolhq.services.scheduler import SchedulerError, apply_transition
 from spoolhq.services.tickets import (
     TICKET_STATUSES,
@@ -42,14 +41,6 @@ def _deps(ticket: Ticket) -> str:
     return ", ".join(ticket.meta.depends_on) or NONE
 
 
-def _table(rows: Sequence[tuple[str, ...]]) -> list[str]:
-    widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
-    return [
-        "  ".join(cell.ljust(width) for cell, width in zip(row, widths, strict=True)).rstrip()
-        for row in rows
-    ]
-
-
 @tickets_app.command("list")
 def list_command(
     project: ProjectArg,
@@ -77,7 +68,7 @@ def list_command(
             )
             for t in listing.tickets
         ]
-        for line in _table(rows):
+        for line in table(rows):
             typer.echo(line)
     elif not listing.invalid:
         filtered = status is not None or phase is not None

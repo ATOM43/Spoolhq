@@ -56,7 +56,9 @@ A project is one workspace folder plus the git repository it works on. Workspace
   project.yaml   # settings: repo, branch, stack commands, agents, limits, merge policy, remote, tracker
   CONTEXT.md     # the spec the planner reads
   tickets/       # one markdown file per ticket: <id>-<slug>.md
-  runs/          # per-ticket attempts: transcripts, gate output, diffs, reviews (later tickets)
+  runs/          # one folder per attempt: runs/<ticket>/<NNN>/ (transcript, gates, diff, review)
+  .spoolhq/
+    state.db     # run log: runs, attempts, append-only events (SQLite)
 ```
 
 `spool init <name> --repo <path>` creates it; `spool project validate <name>` checks it. The `project.yaml` format and its error messages are in [project-yaml.md](project-yaml.md).
@@ -76,6 +78,12 @@ The code is `services/tickets/`: the frontmatter model in `model.py`, splitting 
 The scheduler works on the plan as a whole: it checks the dependency graph (unknown dependencies, cycles, duplicate ids), owns the table of allowed status changes, picks the ticket that runs next and explains why none can, and computes remaining hours and the critical path. The rules are in [scheduler.md](scheduler.md).
 
 The code is `services/scheduler/`: plan validation in `graph.py`, `next_ready` / `explain_idle` / `waiting_on` in `schedule.py`, the transition table and `apply_transition` in `transitions.py`, and the progress figures in `progress.py`. It is pure logic over a list of tickets; only `apply_transition` touches files, through the tickets store. `spool plan check|next|summary` (in `cli/plan.py`) and `spool tickets set-status` call it directly.
+
+## Runs
+
+The run log records every run (one execution of the loop for one ticket), every attempt inside it (one implementer pass with its gates and review) and an append-only stream of events, in the workspace's `.spoolhq/state.db`; each attempt's files sit in `runs/<ticket>/<NNN>/`. An in-process event bus per workspace fans committed events out to subscribers (the WebSocket in T19), and at startup the daemon marks runs a stopped daemon left active as `interrupted`. The rules, the schema and the bus's lag-and-resync contract are in [runs.md](runs.md).
+
+The code is `services/runs/`: the SQLite connection and migrations in `db.py`, `RunLog` in `log.py`, statuses and records in `model.py`, attempt files in `files.py`, `EventBus` in `bus.py`, `recover_interrupted` in `recovery.py`, and `RunRegistry` (one `RunLog` and `EventBus` per workspace) in `registry.py`. The API's lifespan (`api/app.py`) opens the registry, which runs recovery, and closes it on shutdown; `spool serve` first takes the single-instance lock in `core/daemon_lock.py`, so recovery never runs beside another live daemon. `spool runs list|show` (in `cli/runs.py`) read `state.db` directly and read-only, like the other local commands.
 
 ## Frontend: `desktop/src/` (Feature-Sliced Design)
 

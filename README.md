@@ -33,13 +33,20 @@ uv run --directory daemon spool plan summary my-app         # counts, hours left
 uv run --directory daemon spool tickets set-status my-app T01 running
 ```
 
+Each run of a ticket and its attempts are recorded in the workspace's `.spoolhq/state.db` ([run log](docs/runs.md)); nothing starts runs yet, but you can read them:
+
+```sh
+uv run --directory daemon spool runs list my-app [--ticket T04]   # newest first: status, attempts, tokens
+uv run --directory daemon spool runs show my-app 12               # one run and its attempts' folders
+```
+
 ## Run the daemon
 
 ```sh
 uv run --directory daemon spool serve     # or: just dev
 ```
 
-The daemon listens on `http://127.0.0.1:8765` only; the interactive API docs are at `/docs`. On first start it writes a random access token to `~/.spoolhq/token` (readable only by you); the `spool` CLI reads it from there, and every `/api/*` route except `/api/health` needs it as `Authorization: Bearer <token>`. Settings live in `~/.spoolhq/config.toml` (`port`, `log_level`) and can be overridden with `SPOOLHQ_PORT` and `SPOOLHQ_LOG_LEVEL`; set `SPOOLHQ_HOME` to use another folder. Logs are JSON lines in `~/.spoolhq/logs/daemon.log`.
+The daemon listens on `http://127.0.0.1:8765` only; the interactive API docs are at `/docs`. On first start it writes a random access token to `~/.spoolhq/token` (readable only by you); the `spool` CLI reads it from there, and every `/api/*` route except `/api/health` needs it as `Authorization: Bearer <token>`. Settings live in `~/.spoolhq/config.toml` (`port`, `log_level`) and can be overridden with `SPOOLHQ_PORT` and `SPOOLHQ_LOG_LEVEL`; set `SPOOLHQ_HOME` to use another folder. Logs are JSON lines in `~/.spoolhq/logs/daemon.log`. Only one daemon runs at a time: a second `spool serve` exits with `another SpoolHQ daemon is already running (pid …)`. On start, the daemon marks runs that a stopped daemon left active as `interrupted`.
 
 `uv run --directory daemon spool version` prints the CLI's version and, if the daemon is running, the daemon's.
 

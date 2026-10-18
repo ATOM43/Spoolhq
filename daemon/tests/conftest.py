@@ -3,6 +3,7 @@ import shutil
 import socket
 import subprocess
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from spoolhq.api import create_app
 from spoolhq.core.config import load_settings
+from spoolhq.services.projects import init_project
 
 
 @pytest.fixture(autouse=True)
@@ -83,3 +85,30 @@ def client(token: str) -> Iterator[TestClient]:
     app = create_app(settings, token=token)
     with TestClient(app, base_url=f"http://127.0.0.1:{settings.port}") as test_client:
         yield test_client
+
+
+CLOCK_START = datetime(2026, 10, 18, 9, 0, 0, tzinfo=UTC)
+
+
+class FixedClock:
+    """Returns ``start``, then one second later on every call."""
+
+    def __init__(self, start: datetime = CLOCK_START, step: timedelta = timedelta(seconds=1)):
+        self.next = start
+        self.step = step
+
+    def __call__(self) -> datetime:
+        now = self.next
+        self.next += self.step
+        return now
+
+
+@pytest.fixture
+def clock() -> FixedClock:
+    return FixedClock()
+
+
+@pytest.fixture
+def workspace(git_repo: Path, projects_dir: Path) -> Path:
+    """A project workspace ``demo`` made by ``spool init``'s service."""
+    return init_project("demo", git_repo, projects_dir=projects_dir).path
