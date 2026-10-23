@@ -16,7 +16,7 @@ spoolhq/
     schemas/        # Pydantic request/response models
   services/     # domain logic, one package per domain:
                 # projects, tickets, scheduler, runs, git, agents, context, gates,
-                # review, tracker
+                # review, runloop, tracker
   cli/          # Typer commands (main.py) + API client (client.py)
 ```
 
@@ -98,7 +98,7 @@ The ticket id pattern, `check_ticket_id` and the id sort key `id_key` live in `c
 
 A coding agent implements a ticket in its worktree through one interface, `AgentRunner`: `detect()` says whether a backend is installed, logged in and able to enforce the policy, and `run(prompt, policy, budget, …)` streams normalised events to callbacks and returns a `RunResult` with an outcome (`completed`, `max_turns`, `budget_exhausted`, `usage_limited`, `timed_out`, `cancelled`, `error`). The first backend, `claude-code-cli`, drives the user's own `claude` CLI. The policy (the agent may edit only its worktree and run only the project's stack commands and read-only git) is enforced by Claude Code in four layers: restricted mode, an allowlist, the OS sandbox with no network, and a scrubbed environment; SpoolHQ builds that configuration and stops the run if Claude Code's `init` shows it didn't take effect. The rules are in [agents.md](agents.md).
 
-The code is `services/agents/`: `AgentPolicy`, `Budget`, the events and `RunResult` in `model.py`, the `AgentRunner` protocol in `runner.py`, the pure `ClaudeStreamParser` in `claude_stream.py`, the command line, settings, environment and worktree check in `claude_config.py`, `ClaudeCliRunner` (detection and process handling) in `claude_cli.py`, `FakeRunner` (replays recorded transcripts for tests) in `fake.py` and `available_runners` in `backends.py`. It imports no other service package, which an import-linter contract checks; the run loop (T13) will pass in the worktree path and `project.yaml`'s commands. `spool agents` (in `cli/agents.py`) lists the backends; nothing runs an agent yet.
+The code is `services/agents/`: `AgentPolicy`, `Budget`, the events and `RunResult` in `model.py`, the `AgentRunner` protocol in `runner.py`, the pure `ClaudeStreamParser` in `claude_stream.py`, the command line, settings, environment and worktree check in `claude_config.py`, `ClaudeCliRunner` (detection and process handling) in `claude_cli.py`, `FakeRunner` (replays recorded transcripts for tests) in `fake.py` and `available_runners` in `backends.py`. It imports no other service package, which an import-linter contract checks; the run loop passes in the worktree path and `project.yaml`'s commands. `spool agents` (in `cli/agents.py`) lists the backends.
 
 ## Context
 
@@ -110,13 +110,19 @@ The code is `services/context/`: the frozen input values in `model.py`, the trim
 
 A ticket's work must pass the project's `install`, `lint` and `test` commands. `run_gates(worktree, commands, timeouts, log_dir)` runs them in that order (install failing skips the rest; lint failing doesn't stop test) without a shell: each command is split with `shlex` and its program found on the scrubbed `PATH`, and shell syntax in `project.yaml`'s `commands` is a validation error. Gates get the agent's environment allowlist without secrets, plus `CI=1` and no-colour settings, and a timeout (`gates.timeouts`) that stops the whole process tree. Each gate's output streams to a log capped at 20 MB, and the result carries an excerpt of at most 8,000 characters that keeps the first failure, and the failing test names. `check_done_when` maps "Done when" items like `` `just test` passes `` to the configured gate and never runs any other command. Gates are not sandboxed yet (they run with the user's file access). The rules are in [gates.md](gates.md).
 
-The code is `services/gates/`: the results (`GateResult`, `GateRun`, `DoneWhenCheck`) in `model.py`, splitting, validation and the environment in `command.py`, `run_process` in `process.py`, the pure output rules (cleaning, first failure, excerpt, failing tests) in `output.py`, and `run_gates` / `check_done_when` in `runner.py`. It imports no other service package, which an import-linter contract checks; `services/projects` uses its `check_gate_command` to validate `project.yaml`. `spool gates run` (in `cli/gates.py`) runs the gates in a folder and prints the results; nothing else calls them until the run loop (T13).
+The code is `services/gates/`: the results (`GateResult`, `GateRun`, `DoneWhenCheck`) in `model.py`, splitting, validation and the environment in `command.py`, `run_process` in `process.py`, the pure output rules (cleaning, first failure, excerpt, failing tests) in `output.py`, and `run_gates` / `check_done_when` in `runner.py`. It imports no other service package, which an import-linter contract checks; `services/projects` uses its `check_gate_command` to validate `project.yaml`. `spool gates run` (in `cli/gates.py`) runs the gates in a folder and prints the results; the run loop runs them after each implementer attempt.
 
 ## Review
 
 After the gates pass, a second, independent agent checks the committed diff against the ticket's "Done when" items. `review(inputs, runner, …)` runs it with a read-only policy (`Read`, `Glob`, `Grep`; no Bash, Edit or Write) in the worktree, a fresh process each time, and never gets the implementer's transcript, summary or progress note (`ReviewInputs` has no field for them). The reviewer ends with a `<verdict>` JSON block that SpoolHQ validates itself, including consistency (`approve` only with every item met); items the gates checked take the gates' answer; invalid output is retried once and then becomes `needs_human`; run outcomes other than `completed` are passed through. The rules are in [review.md](review.md).
 
 The code is `services/review/`: `ReviewInputs`, `ItemVerdict` and `ReviewResult` in `model.py`, `parse_verdict` in `verdict.py`, `trim_diff` (150,000 characters) in `diff.py` and `review()` in `reviewer.py`; the prompt is `services/context/prompts/reviewer.md.j2`, overridable in `<workspace>/prompts/`. It imports only `services.agents` and `services.context`, which an import-linter contract checks. `spool review` (in `cli/review.py`) builds the inputs from the ticket store and `git diff <base>...HEAD` and runs the real reviewer.
+
+## Run loop
+
+The run loop takes one ready ticket through worktree → implementer → commit → gates → reviewer, with gate and review retries (counted from the run's attempt rows), and hands an approved attempt to an `Integrator` (T14's; until then `HoldForIntegration` leaves it `awaiting_approval`) or blocks the ticket. The daemon owns it: each project's active run executes in a worker thread, one run per project (the loop's record plus `<workspace>/.spoolhq/run.lock`), so a run survives the terminal that started it. Usage limits pause the run and a timer resumes it after the reset; an interrupted run waits for `spool run resume` or `spool run discard`. The rules are in [run-loop.md](run-loop.md).
+
+The code is `services/runloop/`: `RunContext`, `Ending` and the errors in `model.py`, the state machine as plain functions in `machine.py`, `RunLoop` in `loop.py`, `Integrator` and `HoldForIntegration` in `integrator.py`, the lock in `lock.py` and `ResumeTimer` in `resume.py`. It is the one service that imports the others; no service imports it (an import-linter contract checks both). The daemon builds the `RunLoop` in its lifespan (`api/app.py`, `app.state.runloop`); `api/routers/runs.py` exposes start, pause, resume, cancel, discard and the current run, and `spool run` (in `cli/run.py`) calls those endpoints and follows the run.
 
 ## Frontend: `desktop/src/` (Feature-Sliced Design)
 

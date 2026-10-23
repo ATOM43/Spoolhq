@@ -2,7 +2,7 @@
 
 The implementer agent starts from one prompt: the ticket, the relevant part of the spec, the repository's `CLAUDE.md`, `PROGRESS.md` and `DECISIONS.md`, and, on a retry, what went wrong last time. It hands back a short progress note at the end. This page describes both.
 
-The code is `services/context/`: the input values in `model.py`, the trimming rules in `budget.py`, the sandboxed rendering in `render.py`, the progress note in `progress.py` and the default template in `prompts/implementer.md.j2`. It imports no other service package (an import-linter contract checks this): the caller builds `ContextInputs` from the ticket store and `project.yaml` and passes them in. `spool prompt show <project> <ticket>` prints the initial prompt; the run loop (T13) will call `build_implementer_prompt()` and pass the text to `AgentRunner.run()` on stdin.
+The code is `services/context/`: the input values in `model.py`, the trimming rules in `budget.py`, the sandboxed rendering in `render.py`, the progress note in `progress.py` and the default template in `prompts/implementer.md.j2`. It imports no other service package (an import-linter contract checks this): the caller builds `ContextInputs` from the ticket store and `project.yaml` and passes them in. `spool prompt show <project> <ticket>` prints the initial prompt; the run loop ([run-loop.md](run-loop.md)) calls `build_implementer_prompt()` and passes the text to `AgentRunner.run()` on stdin.
 
 ## What goes into the prompt
 

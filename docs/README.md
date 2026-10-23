@@ -11,4 +11,5 @@ User and developer documentation will live here: architecture, the daemon API, t
 - [agents.md](agents.md): the agent runner, the Claude Code backend and its policy
 - [gates.md](gates.md): the install, lint and test gates
 - [review.md](review.md): the reviewer agent and its verdict
+- [run-loop.md](run-loop.md): the run loop: retries, pause, resume, cancel and the integration seam
 - [testing.md](testing.md): running and writing tests

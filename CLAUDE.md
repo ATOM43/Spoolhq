@@ -59,7 +59,8 @@ spoolhq/
     routers/       # one file per resource: health.py, version.py, ...
     schemas/       # Pydantic request/response models
   services/    # domain logic, one package per domain:
-               # projects, tickets, scheduler, runs, git, agents, gates, tracker
+               # projects, tickets, scheduler, runs, git, agents, context, gates,
+               # review, runloop (the only one that imports the others), tracker
   cli/         # Typer commands + API client
 ```
 

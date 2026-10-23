@@ -1,6 +1,6 @@
 # Gates
 
-A ticket's work must pass the project's own `install`, `lint` and `test` commands (`commands` in [`project.yaml`](project-yaml.md)) before it merges. The gates run those commands in the ticket's worktree and return structured results: a status per gate, the exit code, a trimmed excerpt of the output that keeps the first failure, and the names of the failing tests. The run loop (T13) will store the full output in the attempt folder and feed failures into the retry prompt ([context](context.md)); for now `spool gates run` is the only caller.
+A ticket's work must pass the project's own `install`, `lint` and `test` commands (`commands` in [`project.yaml`](project-yaml.md)) before it merges. The gates run those commands in the ticket's worktree and return structured results: a status per gate, the exit code, a trimmed excerpt of the output that keeps the first failure, and the names of the failing tests. The run loop ([run-loop.md](run-loop.md)) stores the full output in the attempt folder and feeds failures into the retry prompt ([context](context.md)); `spool gates run` runs them by hand.
 
 The code is `services/gates/`: the results in `model.py`, command splitting and the environment in `command.py`, running one process in `process.py`, the output rules in `output.py` and `run_gates` / `check_done_when` in `runner.py`. It imports no other service package (an import-linter contract checks this); callers pass the worktree path, the commands and the timeouts in as plain values.
 

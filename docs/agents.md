@@ -1,6 +1,6 @@
 # Agents
 
-A coding agent implements one ticket in its own worktree. SpoolHQ talks to agents through one interface, `AgentRunner`, so the run loop (T13) does not care which backend is behind it. The first backend, `claude-code-cli`, drives the user's own installed `claude` CLI, so a Claude subscription is enough; there is no API key to manage.
+A coding agent implements one ticket in its own worktree. SpoolHQ talks to agents through one interface, `AgentRunner`, so the run loop ([run-loop.md](run-loop.md)) does not care which backend is behind it. The first backend, `claude-code-cli`, drives the user's own installed `claude` CLI, so a Claude subscription is enough; there is no API key to manage.
 
 This is the security core of SpoolHQ: the agent must not be able to touch anything outside its worktree. SpoolHQ does not enforce that itself. Claude Code does, in four layers that SpoolHQ configures and then checks took effect.
 
@@ -60,7 +60,7 @@ All are frozen dataclasses with a `kind`:
 
 SpoolHQ never passes `--dangerously-skip-permissions` or `bypassPermissions`; a test fails if either appears in `services/agents/` outside comments and docstrings.
 
-**Checking it took effect.** The first message of every run is `system`/`init`. If it lists any tool that wasn't requested (anything outside `--tools`, any `mcp__*`, `WebFetch` or `WebSearch`) or a permission mode other than `dontAsk`, the parser raises `PolicyViolation` and the adapter stops the run with outcome `error` and `policy not enforced: …`. A message before `init` is a violation too. One exception: with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, Claude Code 2.1.302 forces and reports the `default` mode; with `--permission-prompts none` every call that would prompt there is denied as in `dontAsk`, so the adapter also accepts `default` (DECISIONS 98). Every other mode stops the run.
+**Checking it took effect.** The first message of every run is `system`/`init`. If it lists any tool that wasn't requested (anything outside `--tools`, any `mcp__*`, `WebFetch` or `WebSearch`) or a permission mode other than `dontAsk`, the parser raises `PolicyViolation` and the adapter stops the run with outcome `error` and `policy not enforced: …`. A message before `init` is a violation too. One exception: with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, Claude Code 2.1.302 forces and reports the `default` mode; with `--permission-prompts none` every call that would prompt there is denied as in `dontAsk`, so the adapter also accepts `default` (DECISIONS 98), but only when that variable is `1` in the environment actually passed to `claude` and `--permission-prompts none` is on its command line (`permission_modes(env, argv)`); otherwise `default` is a violation too. Every other mode stops the run.
 
 ### The command line
 
@@ -144,7 +144,7 @@ Worktrees live inside the SpoolHQ home by default (`~/.spoolhq/worktrees/<projec
 
 ## Usage limits
 
-A subscription usage limit is not a failure. The runner returns outcome `usage_limited` with `reset_at` (from the `rate_limit_event`'s `rate_limit_info.resetsAt`, or the epoch after `usage limit…|` in the error text, or `None` if neither is known), and `error` is `None`. T13 turns it into a paused run that resumes after `reset_at`.
+A subscription usage limit is not a failure. The runner returns outcome `usage_limited` with `reset_at` (from the `rate_limit_event`'s `rate_limit_info.resetsAt`, or the epoch after `usage limit…|` in the error text, or `None` if neither is known), and `error` is `None`. The run loop turns it into a paused run that resumes after `reset_at` ([run-loop.md](run-loop.md#paused-blocked-cancelled-interrupted)).
 
 The `rate_limit_event` fields, as observed from Claude Code 2.1.302 and in the Agent SDK's `SDKRateLimitEvent` type: `{"type": "rate_limit_event", "rate_limit_info": {"status": "allowed" | "allowed_warning" | "rejected", "resetsAt": <epoch seconds>, "rateLimitType": …, …}}`. Values above 10¹¹ are read as milliseconds.
 
@@ -182,7 +182,7 @@ It exits 0 even when nothing is installed; the output then says how to install C
 ## Known limits
 
 - **Sandboxed commands can still read files not on the deny list.** The sandbox restricts writes and network, not reads in general; a test the agent writes can read other files in your home folder. It cannot send them anywhere (no network) or write them outside the worktree and the temp folder, but it could copy them into the worktree, where they would end up in the diff. Docker isolation (later phase) closes this.
-- **`files_changed` comes from the file tools.** A file changed by a command (`just install` writing a lockfile, a code generator) is not in it; T13 should also use `git status` in the worktree.
+- **`files_changed` comes from the file tools.** A file changed by a command (`just install` writing a lockfile, a code generator) is not in it; the run loop takes the files changed from git instead.
 - **Scrub stubs at the top of the worktree.** During a run the placeholders above exist in the worktree (Claude Code probably uses them to write-protect those files for sandboxed commands; not verified). An agent that legitimately creates one of these as an empty file loses it at cleanup.
 - **The temp folder is writable.** Sandboxed commands may write to the system temp folder, which other processes can read.
 - Claude Code's `permission_denied` messages are best-effort; the result's `permission_denials` is the complete list, and the parser reports a denial found only there too.

@@ -70,6 +70,20 @@ To have a second, read-only agent review a ticket's committed work against its "
 uv run --directory daemon spool review my-app T07 [--path <worktree>] [--base <ref>]   # diff: <base>...HEAD
 ```
 
+## Run tickets
+
+With the daemon running (below), the run loop takes a ready ticket through its worktree, the implementer, the gates and the reviewer, with retries ([run loop](docs/run-loop.md)). Until merging lands (T14), an approved ticket waits in `awaiting_approval` with its worktree kept.
+
+```sh
+uv run --directory daemon spool run next my-app [T04]   # start and follow: one line per phase change
+uv run --directory daemon spool run all my-app          # ready tickets one after another
+uv run --directory daemon spool run status my-app
+uv run --directory daemon spool run pause|resume|cancel my-app [--run 12]
+uv run --directory daemon spool run discard my-app T04  # remove an interrupted or blocked ticket's worktree
+```
+
+Ctrl-C stops following, not the run: it continues in the daemon.
+
 ## Run the daemon
 
 ```sh

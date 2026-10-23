@@ -10,7 +10,16 @@ from spoolhq.core.daemon_lock import acquire_lock
 from spoolhq.services.agents import AgentPolicy, FakeRunner
 from spoolhq.services.git import WorktreeManager
 from spoolhq.services.projects import load_project, save_project
-from spoolhq.services.runloop import RUN_LOCK, NotFoundError, RunActiveError, RunLoopError
+from spoolhq.services.runloop import (
+    RUN_LOCK,
+    IntegrationResult,
+    IntegrationStatus,
+    NotFoundError,
+    RunActiveError,
+    RunContext,
+    RunLoop,
+    RunLoopError,
+)
 from spoolhq.services.runloop.lock import take_run_lock
 from spoolhq.services.runs import AttemptKind, RunLog, RunRegistry, RunStatus, recover_interrupted
 from spoolhq.services.scheduler import apply_transition
@@ -436,3 +445,49 @@ def test_current_lists_the_phase_lines(make_loop: LoopFactory, transcripts: Tran
     assert "T01 attempt 1 · gates · ✓ passed" in lines
     assert "T01 attempt 1 · review · approve" in lines
     assert lines[-1] == "T01 · done"
+
+
+def test_shutdown_leaves_the_run_for_recovery(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    registry: RunRegistry,
+    worktrees: Path,
+    project: Path,
+) -> None:
+    holder: list[RunLoop] = []
+    started = threading.Event()
+
+    def wait_for_shutdown(_policy: AgentPolicy) -> None:
+        started.set()
+        holder[0]._active["demo"].flags.cancel.wait(10)
+
+    loop, _ = make_loop(Hooked(FakeRunner([transcripts.implement()]), wait_for_shutdown))
+    holder.append(loop)
+    run = loop.start("demo")
+    assert started.wait(10)
+
+    loop.close()
+
+    log = registry.get("demo").run_log
+    assert log.get_run(run.id).status is RunStatus.RUNNING  # recovery marks it interrupted
+    assert [a.status.value for a in log.list_attempts(run.id)] == ["interrupted"]
+    assert (worktrees / "demo" / "T01").is_dir()
+    assert lock_is_free(project)
+
+
+def test_integration_conflict_blocks(
+    make_loop: LoopFactory, transcripts: Transcripts, registry: RunRegistry
+) -> None:
+    class Conflicting:
+        def integrate(self, ctx: RunContext) -> IntegrationResult:
+            return IntegrationResult(IntegrationStatus.CONFLICT, "hello.py")
+
+    loop, _ = make_loop(
+        [transcripts.implement()], [transcripts.review("approve")], integrator=Conflicting()
+    )
+
+    run = loop.start("demo")
+    loop.wait("demo")
+
+    final = registry.get("demo").run_log.get_run(run.id)
+    assert (final.status, final.reason) == (RunStatus.BLOCKED, "integration conflict: hello.py")

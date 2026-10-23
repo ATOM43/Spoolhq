@@ -187,3 +187,39 @@ def fake_tool_cmd(*args: str) -> str:
     """A gate command string that runs ``fake_tool.py`` (forward slashes, so it splits the
     same on Windows)."""
     return shlex.join([Path(sys.executable).as_posix(), FAKE_TOOL.as_posix(), *args])
+
+
+@pytest.fixture
+def run_project(workspace: Path, git_repo: Path, projects_dir: Path) -> Path:
+    """``demo`` with the ready T07 fixture ticket, passing gates (``fake_tool.py``) and a
+    repository identity, so the run loop can commit."""
+    from spoolhq.services.projects import load_project, save_project
+
+    set_identity(git_repo)
+    tickets = workspace / "tickets"
+    tickets.mkdir(exist_ok=True)
+    shutil.copy(REVIEW_FIXTURES / "T07-parse-slug.md", tickets / "T07-parse-slug.md")
+    project = load_project("demo", projects_dir=projects_dir)
+    for name in ("install", "lint", "test"):
+        setattr(project.commands, name, fake_tool_cmd("pass"))
+    save_project(project, projects_dir=projects_dir)
+    return workspace
+
+
+@pytest.fixture
+def run_client(run_project: Path, token: str) -> Iterator[TestClient]:
+    """The app with fake agents: the implementer writes hello.txt, the reviewer approves."""
+    from spoolhq.services.agents import FakeRunner
+    from spoolhq.services.runloop import Agents
+
+    settings = load_settings()
+    app = create_app(
+        settings,
+        token=token,
+        agents=Agents(
+            implementer=FakeRunner(AGENT_FIXTURES / "success_writes_file.jsonl"),
+            reviewer=FakeRunner(REVIEW_FIXTURES / "approve.jsonl"),
+        ),
+    )
+    with TestClient(app, base_url=f"http://127.0.0.1:{settings.port}") as test_client:
+        yield test_client

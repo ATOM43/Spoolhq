@@ -36,9 +36,11 @@ class ApiClient:
         )
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> Self:
+    def from_settings(cls, settings: Settings, *, timeout: float = 5.0) -> Self:
         """Connect to the port in settings with the token from the home folder."""
-        return cls(f"http://{settings.host}:{settings.port}", read_token(home_dir()))
+        return cls(
+            f"http://{settings.host}:{settings.port}", read_token(home_dir()), timeout=timeout
+        )
 
     def close(self) -> None:
         self._http.close()
@@ -50,8 +52,14 @@ class ApiClient:
         self.close()
 
     def get(self, path: str) -> Any:
+        return self._request("GET", path)
+
+    def post(self, path: str, body: dict[str, Any] | None = None) -> Any:
+        return self._request("POST", path, body)
+
+    def _request(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
         try:
-            response = self._http.get(path)
+            response = self._http.request(method, path, json=body)
         except httpx.ConnectError as exc:
             raise DaemonNotRunning(f"daemon not running at {self._http.base_url}") from exc
         except httpx.TimeoutException as exc:
@@ -60,6 +68,11 @@ class ApiClient:
             raise ApiError(f"request to daemon failed: {exc}") from exc
         if response.status_code == 401:
             raise ApiError(f"daemon rejected the token in {token_path(home_dir())}")
+        if response.status_code in (404, 409):
+            # The run endpoints explain a refusal in "detail"; a bare 404 is a missing route.
+            detail = _detail(response)
+            if detail is not None and detail != "Not Found":
+                raise ApiError(detail)
         if response.is_error:
             raise ApiError(f"daemon returned HTTP {response.status_code} for {path}")
         return response.json()
@@ -71,3 +84,11 @@ class ApiClient:
             # Something else answers on the port: HTML, or JSON without a version.
             base_url = str(self._http.base_url).rstrip("/")
             raise ApiError(f"not a SpoolHQ daemon at {base_url}") from exc
+
+
+def _detail(response: httpx.Response) -> str | None:
+    try:
+        detail = response.json().get("detail")
+    except (ValueError, AttributeError):
+        return None
+    return detail if isinstance(detail, str) else None

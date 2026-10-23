@@ -4,7 +4,7 @@
 (``RunLog``); each attempt has a folder of files under ``<workspace>/runs/``; an
 in-process ``EventBus`` fans committed events out to subscribers; and
 ``recover_interrupted`` closes runs a stopped daemon left active. The run loop that
-drives these comes later (T13). See ``docs/runs.md``.
+drives these is ``services/runloop``. See ``docs/runs.md``.
 """
 
 from spoolhq.services.runs.bus import EventBus, Subscription

@@ -1,6 +1,6 @@
 # Runs
 
-The run log is the record of everything the loop does: every run, every attempt inside it, and an append-only stream of events. It lives in the project workspace, next to the tickets, and survives daemon restarts. The run loop that drives it comes in T13; the WebSocket that streams events to the desktop app comes in T19.
+The run log is the record of everything the loop does: every run, every attempt inside it, and an append-only stream of events. It lives in the project workspace, next to the tickets, and survives daemon restarts. The run loop ([run-loop.md](run-loop.md)) drives it; the WebSocket that streams events to the desktop app comes in T19.
 
 The code is `services/runs/`: the database in `db.py`, `RunLog` in `log.py`, the stored columns, rows and event payloads in `rows.py`, statuses and records in `model.py`, attempt files in `files.py`, the event bus in `bus.py`, crash recovery in `recovery.py` and the daemon's per-workspace registry in `registry.py`.
 
@@ -11,14 +11,16 @@ A **run** is one execution of the loop for one ticket, from being picked until i
 | Status | Meaning |
 | --- | --- |
 | `running` | The loop is working on the ticket. |
-| `paused` | Waiting for a subscription usage-limit reset. |
+| `paused` | Waiting for a subscription usage-limit reset (`reset_at`), or paused by the user. |
 | `awaiting_approval` | A PR or local approval is pending. Survives restarts. |
 | `done` | Finished and merged. Terminal. |
 | `blocked` | Stopped; a person has to step in. Terminal. |
 | `cancelled` | Stopped on request. Terminal. |
 | `interrupted` | The daemon stopped while the run was active (see [Recovery](#recovery)). Terminal. |
 
-A terminal status sets `ended_at`, and a run that has ended can't change again: `set_run_status` raises `run 12 is already done`, and `start_attempt` refuses it too.
+A terminal status sets `ended_at`, and a run that has ended can't change again: `set_run_status` raises `run 12 is already done`, and `start_attempt` refuses it too. The one exception is `reopen_run(run_id)`: the run loop resumes an `interrupted` run in its kept worktree, which moves it back to `running` under the current daemon instance and clears `ended_at` and `reason` (event `run.status` with reason `resumed`).
+
+`set_run_status(run_id, status, reason, reset_at=None)` stores `reset_at` (when a usage limit resets) on a paused run and clears it on any other change; `set_progress_note(run_id, note)` stores the implementer's `<progress>` note for T14.
 
 An **attempt** is one implementer pass inside a run, together with its gates and review.
 
@@ -33,12 +35,12 @@ An **attempt** is one implementer pass inside a run, together with its gates and
 
 - Every connection sets `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON` and `busy_timeout=5000`. A committed transaction survives a crash of the process; a power loss can drop the last few transactions.
 - One connection per `RunLog`, opened with `check_same_thread=False` and guarded by a lock, so a `RunLog` can be shared between threads. `isolation_level=None`: each method is one explicit `BEGIN IMMEDIATE` … `COMMIT`.
-- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 1.
-- A database newer than the code is refused: `state.db: schema version 3 is newer than this SpoolHQ supports (1); upgrade SpoolHQ.`
+- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 2.
+- A database newer than the code is refused: `state.db: schema version 3 is newer than this SpoolHQ supports (2); upgrade SpoolHQ.`
 - A file that isn't a SQLite database is refused: `state.db: not a SpoolHQ database (file is not a database)`.
 - All SQL takes its values as parameters; ticket text and agent output never become SQL.
 
-### Schema (version 1)
+### Schema (version 2)
 
 ```sql
 CREATE TABLE runs (
@@ -48,7 +50,9 @@ CREATE TABLE runs (
     reason TEXT,
     daemon_instance TEXT NOT NULL,   -- the daemon that started the run
     started_at TEXT NOT NULL,
-    ended_at TEXT
+    ended_at TEXT,
+    progress_note TEXT,              -- version 2: the implementer's <progress> note
+    reset_at TEXT                    -- version 2: when a paused run's usage limit resets
 );
 
 CREATE TABLE attempts (
@@ -112,8 +116,9 @@ Every lifecycle change appends its event in the same transaction:
 | Kind | Written by | Payload |
 | --- | --- | --- |
 | `run.started` | `start_run` | `{"ticket_id"}` |
-| `run.status` | `set_run_status` | `{"from", "to", "reason"}` |
+| `run.status` | `set_run_status`, `reopen_run` | `{"from", "to", "reason"}`, plus `"reset_at"` when set |
 | `run.interrupted` | `recover_interrupted` | `{"from", "reason", "attempt_ids"}` |
+| `run.phase` | the run loop | `{"phase", "text"}`: one per phase change; `text` is the line `spool run` prints |
 | `attempt.started` | `start_attempt` | `{"number", "kind", "dir", "backend", "model"}` |
 | `attempt.finished` | `finish_attempt` | `{"number", "status"}` |
 | `agent.message`, `agent.tool_call`, `agent.file_edit`, `agent.usage`, `gate.result`, `review.verdict`, `log` | `append_event` (the run loop) | free-form |
@@ -154,7 +159,7 @@ A subscriber's callback or queue error never reaches the publisher or other subs
 - `awaiting_approval`, `done`, `blocked` and `cancelled` runs are untouched (approval survives restarts), and so are the current daemon's own runs.
 - A second call finds nothing and adds no events.
 
-Recovery touches only the database. Reconciling the ticket files' statuses is the run loop's job (T13). Leftover worktrees are removed right after it, at the same startup ([git.md](git.md#crash-recovery)).
+Recovery touches only the database. The interrupted runs' tickets stay `running`, and the run loop resumes or discards them on request ([run-loop.md](run-loop.md#paused-blocked-cancelled-interrupted)). Leftover worktrees are removed right after it, at the same startup ([git.md](git.md#crash-recovery)).
 
 The daemon runs recovery at startup, for every workspace under the projects folder (`projects_dir`), under a fresh `daemon_instance` (`uuid4().hex`). A workspace whose `state.db` can't be opened is logged as an error with its path and skipped; it doesn't stop startup. Each recovered run gets one log line (`run interrupted by a daemon restart`, with project, run id and ticket). The open `RunLog` and `EventBus` of every workspace are kept in `app.state.runs` and closed on shutdown.
 

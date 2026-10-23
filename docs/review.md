@@ -1,6 +1,6 @@
 # Review
 
-After the gates pass, a second agent reviews the ticket's change: a fresh, read-only Claude Code run that checks the committed diff against the ticket's "Done when" items and returns a verdict SpoolHQ validates. The run loop (T13) will call `review()` and turn the verdict into a retry, a block or an integration; for now `spool review` is the only caller.
+After the gates pass, a second agent reviews the ticket's change: a fresh, read-only Claude Code run that checks the committed diff against the ticket's "Done when" items and returns a verdict SpoolHQ validates. The run loop ([run-loop.md](run-loop.md)) calls `review()` after the gates pass and turns the verdict into a retry, a block or an integration; `spool review` runs it by hand.
 
 The code is `services/review/`: the inputs and result in `model.py`, the `<verdict>` parser in `verdict.py`, diff trimming in `diff.py` and `review()` in `reviewer.py`. The default prompt is `services/context/prompts/reviewer.md.j2`. It may import only `services.agents` (the runner, policy and result types) and `services.context` (`render_template`, `escape_closing_tag`); an import-linter contract checks this.
 
