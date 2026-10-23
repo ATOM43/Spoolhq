@@ -26,11 +26,11 @@ from typing import IO, Any
 
 from spoolhq.services.agents.claude_config import (
     API_KEY_VAR,
-    PERMISSION_MODES,
     build_argv,
     check_worktree,
     child_env,
     existing_stubs,
+    permission_modes,
     remove_new_stubs,
     requested_tools,
     with_config_dir,
@@ -264,7 +264,7 @@ class ClaudeCliRunner:
             billing=info.billing,
             requested_tools=requested_tools(policy),
             exact_tools=policy.read_only,
-            permission_modes=PERMISSION_MODES,
+            permission_modes=permission_modes(env, argv),
             backend_version=info.version or "",
         )
         stubs = existing_stubs(policy.worktree)

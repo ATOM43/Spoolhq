@@ -51,6 +51,7 @@ class EventKind(StrEnum):
     RUN_STARTED = "run.started"
     RUN_STATUS = "run.status"
     RUN_INTERRUPTED = "run.interrupted"
+    RUN_PHASE = "run.phase"
     ATTEMPT_STARTED = "attempt.started"
     ATTEMPT_FINISHED = "attempt.finished"
     AGENT_MESSAGE = "agent.message"
@@ -73,6 +74,10 @@ class Run:
     daemon_instance: str
     started_at: str
     ended_at: str | None
+    progress_note: str | None = None
+    """The implementer's ``<progress>`` note from its last completed attempt, for T14."""
+    reset_at: str | None = None
+    """When a run paused by a usage limit may resume; ``None`` otherwise."""
 
 
 @dataclass(frozen=True)

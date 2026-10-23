@@ -11,8 +11,10 @@ from spoolhq.services.agents.claude_config import (
     build_argv,
     check_worktree,
     child_env,
+    permission_modes,
     sandbox_settings,
 )
+from spoolhq.services.agents.claude_stream import ClaudeStreamParser, PolicyViolation
 from tests.conftest import AGENT_PROMPT, AGENT_SECRETS
 
 BUDGET = Budget(max_turns=30, max_usd=None, max_tokens=None)
@@ -261,3 +263,37 @@ def test_read_only_policy_has_no_commands(worktree: Path, home: Path) -> None:
     assert policy.bash_rules() == ()
     writing = AgentPolicy.for_worktree(worktree, {}, home)
     assert policy.denied_read_paths == writing.denied_read_paths
+
+
+# --- init permission mode -------------------------------------------------------------
+
+INIT = {
+    "type": "system",
+    "subtype": "init",
+    "tools": ["Bash", "Edit", "Glob", "Grep", "Read", "Write"],
+    "model": "m",
+    "permissionMode": "default",
+}
+
+
+def test_default_mode_needs_the_scrub_variable_and_no_prompts(
+    policy: AgentPolicy, worktree: Path
+) -> None:
+    argv = build_argv(["claude"], policy, BUDGET, billing="subscription")
+    env = child_env({"PATH": "/usr/bin"}, billing="subscription", platform="linux")
+    no_prompts_flag = [arg for arg in argv if arg not in ("--permission-prompts", "none")]
+
+    assert permission_modes(env, argv) == {"dontAsk", "default"}
+    assert permission_modes({**env, "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "0"}, argv) == {"dontAsk"}
+    assert permission_modes({"PATH": "/usr/bin"}, argv) == {"dontAsk"}
+    assert permission_modes(env, no_prompts_flag) == {"dontAsk"}
+
+    accepting = ClaudeStreamParser(
+        worktree, billing="subscription", permission_modes=permission_modes(env, argv)
+    )
+    assert accepting.feed(INIT)[0].kind == "started"
+    refusing = ClaudeStreamParser(
+        worktree, billing="subscription", permission_modes=permission_modes({}, argv)
+    )
+    with pytest.raises(PolicyViolation, match="permission mode 'default', expected dontAsk"):
+        refusing.feed(INIT)

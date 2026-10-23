@@ -4,7 +4,7 @@ import json
 import sqlite3
 import threading
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -19,7 +19,9 @@ from spoolhq.services.runs import (
     RunLog,
     RunLogError,
     RunStatus,
+    db,
     format_ts,
+    recover_interrupted,
     state_db_path,
 )
 from tests.conftest import FixedClock
@@ -38,14 +40,14 @@ def raw(workspace: Path) -> sqlite3.Connection:
 # Schema -------------------------------------------------------------------------------
 
 
-def test_fresh_database_has_version_1_and_all_tables(workspace: Path) -> None:
+def test_fresh_database_has_version_2_and_all_tables(workspace: Path) -> None:
     assert not (workspace / ".spoolhq").exists()
     with RunLog(workspace, daemon_instance="A"):
         pass
 
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 1
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
         tables = {
             name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
@@ -66,7 +68,7 @@ def test_opening_twice_is_idempotent(workspace: Path) -> None:
         assert [run.ticket_id for run in log.list_runs()] == ["T04"]
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
     finally:
         conn.close()
 
@@ -81,7 +83,7 @@ def test_newer_schema_is_refused(workspace: Path) -> None:
     with pytest.raises(RunLogError) as info:
         RunLog(workspace, daemon_instance="A")
     assert str(info.value) == (
-        "state.db: schema version 3 is newer than this SpoolHQ supports (1); upgrade SpoolHQ."
+        "state.db: schema version 3 is newer than this SpoolHQ supports (2); upgrade SpoolHQ."
     )
     with pytest.raises(RunLogError, match="schema version 3 is newer"):
         RunLog.open_read_only(workspace)
@@ -539,3 +541,59 @@ def test_concurrent_appends_get_increasing_ids(workspace: Path, clock: FixedCloc
                 received.append(event.id)
             assert received == ids
             assert not sub.lagged
+
+
+def test_paused_run_keeps_reset_at_until_the_next_change(run_log: RunLog) -> None:
+    run = run_log.start_run("T04")
+    reset = datetime(2026, 10, 18, 14, 0, tzinfo=UTC)
+
+    paused = run_log.set_run_status(run.id, RunStatus.PAUSED, "usage limit", reset_at=reset)
+    assert paused.reset_at == "2026-10-18T14:00:00.000Z"
+    assert run_log.events_since(0)[-1].payload["reset_at"] == "2026-10-18T14:00:00.000Z"
+    assert run_log.set_run_status(run.id, RunStatus.RUNNING).reset_at is None
+
+
+def test_reopen_run_only_from_interrupted(workspace: Path) -> None:
+    with RunLog(workspace, daemon_instance="old") as old:
+        run = old.start_run("T04")
+    with RunLog(workspace, daemon_instance="new") as log:
+        with pytest.raises(ValueError, match="run 1 is running, not interrupted"):
+            log.reopen_run(run.id)
+        recover_interrupted(log)
+
+        reopened = log.reopen_run(run.id)
+
+        assert reopened.status is RunStatus.RUNNING
+        assert reopened.ended_at is None and reopened.reason is None
+        assert reopened.daemon_instance == "new"
+        assert log.events_since(0)[-1].payload == {
+            "from": "interrupted",
+            "to": "running",
+            "reason": "resumed",
+        }
+
+
+def test_progress_note_is_stored_on_the_run(run_log: RunLog) -> None:
+    run = run_log.start_run("T04")
+    assert run.progress_note is None
+    assert run_log.set_progress_note(run.id, "Added X.").progress_note == "Added X."
+    assert run_log.get_run(run.id).progress_note == "Added X."
+
+
+def test_version_1_database_is_migrated(workspace: Path) -> None:
+    path = state_db_path(workspace)
+    path.parent.mkdir()
+    conn = sqlite3.connect(path)
+    for statement in db._statements(db.MIGRATIONS[0]):
+        conn.execute(statement)
+    conn.execute(
+        "INSERT INTO runs (ticket_id, status, daemon_instance, started_at) "
+        "VALUES ('T04', 'done', 'A', '2026-10-18T09:00:00.000Z')"
+    )
+    conn.execute("PRAGMA user_version = 1")
+    conn.commit()
+    conn.close()
+
+    with RunLog(workspace, daemon_instance="A") as log:
+        run = log.get_run(1)
+    assert (run.status, run.progress_note, run.reset_at) == (RunStatus.DONE, None, None)

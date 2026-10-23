@@ -71,7 +71,13 @@ CREATE INDEX attempts_run_id ON attempts (run_id);
 CREATE INDEX events_run_id_id ON events (run_id, id);
 """
 
-MIGRATIONS: tuple[str, ...] = (_V1,)
+# The run loop (T13): the progress note for T14 and a paused run's usage-limit reset.
+_V2 = """
+ALTER TABLE runs ADD COLUMN progress_note TEXT;
+ALTER TABLE runs ADD COLUMN reset_at TEXT;
+"""
+
+MIGRATIONS: tuple[str, ...] = (_V1, _V2)
 """Migration ``n`` (1-based) takes the database from version ``n - 1`` to ``n``."""
 
 SCHEMA_VERSION = len(MIGRATIONS)

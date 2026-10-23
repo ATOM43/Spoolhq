@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from spoolhq.services.agents.claude_config import PERMISSION_MODES, requested_tools
+from spoolhq.services.agents.claude_config import ENV_SET, permission_modes, requested_tools
 from spoolhq.services.agents.claude_stream import ClaudeStreamParser, PolicyViolation
 from spoolhq.services.agents.model import (
     AgentPolicy,
@@ -75,7 +75,8 @@ class FakeRunner:
             billing="subscription",
             requested_tools=requested_tools(policy),
             exact_tools=policy.read_only,
-            permission_modes=PERMISSION_MODES,
+            # The environment and flags the real adapter always passes.
+            permission_modes=permission_modes(ENV_SET, ("--permission-prompts", "none")),
             backend=self.name,
             backend_version=FAKE_VERSION,
         )

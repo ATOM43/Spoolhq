@@ -2,6 +2,7 @@
 
 import logging
 import sqlite3
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,9 +25,11 @@ class WorkspaceRuns:
 class RunRegistry:
     """Open run logs by project name. ``close`` closes them all."""
 
-    def __init__(self, daemon_instance: str) -> None:
+    def __init__(self, daemon_instance: str, clock: Clock = utc_now) -> None:
         self.daemon_instance = daemon_instance
+        self._clock = clock
         self._workspaces: dict[str, WorkspaceRuns] = {}
+        self._lock = threading.Lock()
 
     @classmethod
     def start(
@@ -37,7 +40,7 @@ class RunRegistry:
         A workspace whose ``state.db`` cannot be opened is logged as an error and
         skipped. Call this only while holding the daemon single-instance lock.
         """
-        registry = cls(daemon_instance)
+        registry = cls(daemon_instance, clock)
         try:
             for workspace in list_workspaces(projects_dir):
                 registry._open(workspace, clock)
@@ -86,6 +89,17 @@ class RunRegistry:
                 },
             )
         self._workspaces[project] = WorkspaceRuns(project=project, run_log=run_log, bus=bus)
+
+    def open(self, workspace: Path) -> WorkspaceRuns:
+        """The workspace's run log, opened (and recovered) now if the project was created
+        after the daemon started. Raises RunLogError if it can't be opened."""
+        with self._lock:
+            if workspace.name not in self._workspaces:
+                self._open(workspace, self._clock)
+            try:
+                return self._workspaces[workspace.name]
+            except KeyError:
+                raise RunLogError(f"cannot open the run log of {workspace.name!r}") from None
 
     @property
     def projects(self) -> list[str]:

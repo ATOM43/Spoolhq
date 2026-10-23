@@ -21,11 +21,22 @@ _LOCK_OFFSET = 1 << 20
 _PID_READ_BYTES = 64
 
 
-class DaemonAlreadyRunning(Exception):
+class LockHeld(Exception):
+    """Another process (or another ``acquire_lock`` in this one) holds the lock."""
+
     def __init__(self, pid: int | None) -> None:
         self.pid = pid
-        holder = f"pid {pid}" if pid is not None else "pid unknown"
-        super().__init__(f"another SpoolHQ daemon is already running ({holder})")
+        super().__init__(f"lock held by {holder(pid)}")
+
+
+class DaemonAlreadyRunning(LockHeld):
+    def __init__(self, pid: int | None) -> None:
+        super().__init__(pid)
+        self.args = (f"another SpoolHQ daemon is already running ({holder(pid)})",)
+
+
+def holder(pid: int | None) -> str:
+    return f"pid {pid}" if pid is not None else "pid unknown"
 
 
 def lock_path(home: Path) -> Path:
@@ -101,7 +112,19 @@ def acquire_daemon_lock(home: Path) -> DaemonLock:
     Raises DaemonAlreadyRunning, with the holder's pid when the file has one, if
     another process (or another ``acquire_daemon_lock`` in this one) holds it.
     """
-    path = lock_path(home)
+    try:
+        return acquire_lock(lock_path(home))
+    except LockHeld as exc:
+        raise DaemonAlreadyRunning(exc.pid) from None
+
+
+def acquire_lock(path: Path) -> DaemonLock:
+    """Take the OS lock on ``path`` (created if missing) and write this pid into it.
+
+    Raises LockHeld, with the holder's pid when the file has one, if another process
+    or another ``acquire_lock`` in this one holds it. The run loop's per-project
+    ``run.lock`` uses this too.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     # O_BINARY: no newline translation on Windows.
     fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
@@ -110,7 +133,7 @@ def acquire_daemon_lock(home: Path) -> DaemonLock:
     except OSError:
         pid = _read_pid(fd)
         os.close(fd)
-        raise DaemonAlreadyRunning(pid) from None
+        raise LockHeld(pid) from None
     try:
         data = f"{os.getpid()}\n".encode("ascii")
         os.lseek(fd, 0, os.SEEK_SET)

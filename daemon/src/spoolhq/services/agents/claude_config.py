@@ -21,13 +21,14 @@ API_KEY_VAR = "ANTHROPIC_API_KEY"
 ENV_SET = {
     # Claude Code removes its own credentials from the environment of the commands
     # the agent runs.
-    "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
+    "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",  # SCRUB_VAR
     "DISABLE_AUTOUPDATER": "1",
 }
 # With CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1, Claude Code 2.1.302 reports (and uses) the
 # "default" mode instead of dontAsk. With --permission-prompts none, every call that
 # would prompt there is denied, as in dontAsk; any other mode stops the run.
 PERMISSION_MODES = frozenset({"dontAsk", "default"})
+SCRUB_VAR = "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"
 
 # Empty files and folders Claude Code 2.1.302 creates in its working folder when
 # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1 is set (mount points that write-protect them in the
@@ -143,6 +144,19 @@ def build_argv(
         argv += ["--model", model]
     argv += ["--settings", json.dumps(sandbox_settings(policy), separators=(",", ":"))]
     return argv
+
+
+def permission_modes(env: Mapping[str, str], argv: Sequence[str]) -> frozenset[str]:
+    """The ``init`` permission modes a run accepts: ``dontAsk``, plus ``default`` only
+    when the child environment really has ``CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`` and
+    the command line has ``--permission-prompts none``."""
+    prompts_none = any(
+        flag == "--permission-prompts" and value == "none"
+        for flag, value in zip(argv, argv[1:], strict=False)
+    )
+    if env.get(SCRUB_VAR) == "1" and prompts_none:
+        return PERMISSION_MODES
+    return frozenset({"dontAsk"})
 
 
 def existing_stubs(folder: Path) -> frozenset[str]:

@@ -2,13 +2,19 @@
 
 import json
 import sqlite3
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from typing import Any
 
+from spoolhq.services.runs import db
+from spoolhq.services.runs.db import Clock
 from spoolhq.services.runs.model import Event, EventKind, Run, RunStatus
 
 MAX_PAYLOAD_BYTES = 64 * 1024
 
-RUN_COLUMNS = "id, ticket_id, status, reason, daemon_instance, started_at, ended_at"
+RUN_COLUMNS = (
+    "id, ticket_id, status, reason, daemon_instance, started_at, ended_at, progress_note, reset_at"
+)
 ATTEMPT_COLUMNS = (
     "id, run_id, ticket_id, number, kind, status, dir, backend, model, input_tokens, "
     "output_tokens, cost_micro_usd, started_at, ended_at"
@@ -59,6 +65,8 @@ def to_run(row: tuple[Any, ...]) -> Run:
         daemon_instance=row[4],
         started_at=row[5],
         ended_at=row[6],
+        progress_note=row[7],
+        reset_at=row[8],
     )
 
 
@@ -71,3 +79,50 @@ def to_event(row: tuple[Any, ...]) -> Event:
         kind=EventKind(row[4]),
         payload=json.loads(row[5]),
     )
+
+
+@dataclass
+class Transaction:
+    """An open write transaction: the connection plus the events to publish on commit."""
+
+    conn: sqlite3.Connection
+    clock: Clock
+    events: list[Event] = field(default_factory=list)
+    _undo: list[Callable[[], object]] = field(default_factory=list)
+
+    def on_rollback(self, undo: Callable[[], object]) -> None:
+        """Run ``undo`` if the transaction does not commit (to remove files it made)."""
+        self._undo.append(undo)
+
+    def rolled_back(self) -> None:
+        for undo in reversed(self._undo):
+            undo()
+
+    def now(self) -> str:
+        return db.format_ts(self.clock())
+
+    def append_event(
+        self,
+        run_id: int,
+        kind: EventKind | str,
+        payload: Mapping[str, Any],
+        attempt_id: int | None = None,
+    ) -> Event:
+        kind = event_kind(kind)
+        text = encode_payload(payload)
+        ts = self.now()
+        cursor = self.conn.execute(
+            "INSERT INTO events (run_id, attempt_id, ts, kind, payload) VALUES (?, ?, ?, ?, ?)",
+            (run_id, attempt_id, ts, kind.value, text),
+        )
+        assert cursor.lastrowid is not None  # noqa: S101 - an INSERT always sets it
+        event = Event(
+            id=cursor.lastrowid,
+            run_id=run_id,
+            attempt_id=attempt_id,
+            ts=ts,
+            kind=kind,
+            payload=json.loads(text),
+        )
+        self.events.append(event)
+        return event

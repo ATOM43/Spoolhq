@@ -5,14 +5,13 @@ transaction. Events reach the bus only after their transaction commits, in id or
 a failed transaction publishes nothing.
 """
 
-import json
 import os
 import shutil
 import sqlite3
 import threading
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
@@ -35,6 +34,7 @@ from spoolhq.services.runs.rows import (
     ATTEMPT_COLUMNS,
     EVENT_COLUMNS,
     RUN_COLUMNS,
+    Transaction,
     encode_payload,
     event_kind,
     fetch_run,
@@ -56,53 +56,6 @@ def _check_count(name: str, value: int) -> None:
 def attempt_dir_name(ticket_id: str, number: int) -> str:
     """``runs/<ticket>/<NNN>``, always with forward slashes."""
     return f"{RUNS_DIR}/{check_ticket_id(ticket_id)}/{number:03d}"
-
-
-@dataclass
-class Transaction:
-    """An open write transaction: the connection plus the events to publish on commit."""
-
-    conn: sqlite3.Connection
-    clock: Clock
-    events: list[Event] = field(default_factory=list)
-    _undo: list[Callable[[], object]] = field(default_factory=list)
-
-    def on_rollback(self, undo: Callable[[], object]) -> None:
-        """Run ``undo`` if the transaction does not commit (to remove files it made)."""
-        self._undo.append(undo)
-
-    def rolled_back(self) -> None:
-        for undo in reversed(self._undo):
-            undo()
-
-    def now(self) -> str:
-        return db.format_ts(self.clock())
-
-    def append_event(
-        self,
-        run_id: int,
-        kind: EventKind | str,
-        payload: Mapping[str, Any],
-        attempt_id: int | None = None,
-    ) -> Event:
-        kind = event_kind(kind)
-        text = encode_payload(payload)
-        ts = self.now()
-        cursor = self.conn.execute(
-            "INSERT INTO events (run_id, attempt_id, ts, kind, payload) VALUES (?, ?, ?, ?, ?)",
-            (run_id, attempt_id, ts, kind.value, text),
-        )
-        assert cursor.lastrowid is not None  # noqa: S101 - an INSERT always sets it
-        event = Event(
-            id=cursor.lastrowid,
-            run_id=run_id,
-            attempt_id=attempt_id,
-            ts=ts,
-            kind=kind,
-            payload=json.loads(text),
-        )
-        self.events.append(event)
-        return event
 
 
 class RunLog:
@@ -259,26 +212,61 @@ class RunLog:
             return run
 
     def set_run_status(
-        self, run_id: int, status: RunStatus | str, reason: str | None = None
+        self,
+        run_id: int,
+        status: RunStatus | str,
+        reason: str | None = None,
+        *,
+        reset_at: datetime | None = None,
     ) -> Run:
         """Move a run to ``status``; a terminal status sets ``ended_at``.
 
-        Raises ValueError if the run has already ended. Event ``run.status``.
+        ``reset_at`` is stored for a run paused by a usage limit and cleared by any other
+        change. Raises ValueError if the run has already ended. Event ``run.status``.
         """
         new = RunStatus(status)
+        reset = db.format_ts(reset_at) if reset_at is not None else None
         with self.transaction() as tx:
             run = self._run(tx.conn, run_id)
             self._check_open(run)
             ended_at = tx.now() if new.is_terminal else None
             tx.conn.execute(
-                "UPDATE runs SET status = ?, reason = ?, ended_at = ? WHERE id = ?",
-                (new.value, reason, ended_at, run_id),
+                "UPDATE runs SET status = ?, reason = ?, ended_at = ?, reset_at = ? WHERE id = ?",
+                (new.value, reason, ended_at, reset, run_id),
+            )
+            payload = {"from": run.status.value, "to": new.value, "reason": reason}
+            if reset is not None:
+                payload["reset_at"] = reset
+            tx.append_event(run_id, EventKind.RUN_STATUS, payload)
+            return self._run(tx.conn, run_id)
+
+    def reopen_run(self, run_id: int) -> Run:
+        """Move an ``interrupted`` run back to ``running`` under this daemon instance.
+
+        The one way out of a terminal status: the run loop resumes a run a stopped
+        daemon left behind, in its kept worktree. Event ``run.status``.
+        """
+        with self.transaction() as tx:
+            run = self._run(tx.conn, run_id)
+            if run.status is not RunStatus.INTERRUPTED:
+                raise ValueError(f"run {run_id} is {run.status.value}, not interrupted")
+            tx.conn.execute(
+                "UPDATE runs SET status = ?, reason = NULL, ended_at = NULL, reset_at = NULL, "
+                "daemon_instance = ? WHERE id = ?",
+                (RunStatus.RUNNING.value, self.daemon_instance, run_id),
             )
             tx.append_event(
                 run_id,
                 EventKind.RUN_STATUS,
-                {"from": run.status.value, "to": new.value, "reason": reason},
+                {"from": run.status.value, "to": RunStatus.RUNNING.value, "reason": "resumed"},
             )
+            return self._run(tx.conn, run_id)
+
+    def set_progress_note(self, run_id: int, note: str | None) -> Run:
+        """Store the implementer's progress note on the run (T14 appends it to PROGRESS.md)."""
+        with self.transaction() as tx:
+            self._run(tx.conn, run_id)
+            tx.conn.execute("UPDATE runs SET progress_note = ? WHERE id = ?", (note, run_id))
             return self._run(tx.conn, run_id)
 
     def start_attempt(
