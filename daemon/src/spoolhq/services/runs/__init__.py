@@ -23,6 +23,13 @@ from spoolhq.services.runs.files import (
     attempt_files,
     write_artifact,
 )
+from spoolhq.services.runs.journal import (
+    Integration,
+    IntegrationState,
+    open_integrations,
+    set_integration_state,
+    start_integration,
+)
 from spoolhq.services.runs.log import RunLog
 from spoolhq.services.runs.model import (
     TERMINAL_RUN_STATUSES,
@@ -50,6 +57,8 @@ __all__ = [
     "AttemptKind",
     "AttemptStatus",
     "Event",
+    "Integration",
+    "IntegrationState",
     "EventBus",
     "EventKind",
     "Run",
@@ -64,7 +73,10 @@ __all__ = [
     "attempt_dir",
     "attempt_files",
     "format_ts",
+    "open_integrations",
     "recover_interrupted",
+    "set_integration_state",
+    "start_integration",
     "state_db_path",
     "utc_now",
     "write_artifact",

@@ -61,6 +61,7 @@ class EventKind(StrEnum):
     GATE_RESULT = "gate.result"
     REVIEW_VERDICT = "review.verdict"
     LOG = "log"
+    INTEGRATE = "integrate"
 
 
 @dataclass(frozen=True)

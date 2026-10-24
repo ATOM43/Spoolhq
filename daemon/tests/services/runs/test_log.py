@@ -40,18 +40,18 @@ def raw(workspace: Path) -> sqlite3.Connection:
 # Schema -------------------------------------------------------------------------------
 
 
-def test_fresh_database_has_version_2_and_all_tables(workspace: Path) -> None:
+def test_fresh_database_has_version_3_and_all_tables(workspace: Path) -> None:
     assert not (workspace / ".spoolhq").exists()
     with RunLog(workspace, daemon_instance="A"):
         pass
 
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
         tables = {
             name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
-        assert {"runs", "attempts", "events"} <= tables
+        assert {"runs", "attempts", "events", "integrations"} <= tables
         assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         indexes = {
             name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
@@ -68,7 +68,7 @@ def test_opening_twice_is_idempotent(workspace: Path) -> None:
         assert [run.ticket_id for run in log.list_runs()] == ["T04"]
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
     finally:
         conn.close()
 
@@ -77,15 +77,15 @@ def test_newer_schema_is_refused(workspace: Path) -> None:
     with RunLog(workspace, daemon_instance="A"):
         pass
     conn = raw(workspace)
-    conn.execute("PRAGMA user_version = 3")
+    conn.execute("PRAGMA user_version = 4")
     conn.close()
 
     with pytest.raises(RunLogError) as info:
         RunLog(workspace, daemon_instance="A")
     assert str(info.value) == (
-        "state.db: schema version 3 is newer than this SpoolHQ supports (2); upgrade SpoolHQ."
+        "state.db: schema version 4 is newer than this SpoolHQ supports (3); upgrade SpoolHQ."
     )
-    with pytest.raises(RunLogError, match="schema version 3 is newer"):
+    with pytest.raises(RunLogError, match="schema version 4 is newer"):
         RunLog.open_read_only(workspace)
 
 

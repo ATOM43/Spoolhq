@@ -77,7 +77,24 @@ ALTER TABLE runs ADD COLUMN progress_note TEXT;
 ALTER TABLE runs ADD COLUMN reset_at TEXT;
 """
 
-MIGRATIONS: tuple[str, ...] = (_V1, _V2)
+# Local integration (T14): the journal that makes merging into main crash-safe.
+_V3 = """
+CREATE TABLE integrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL REFERENCES runs(id),
+    ticket_id TEXT NOT NULL,
+    default_branch TEXT NOT NULL,
+    main_sha TEXT NOT NULL,
+    commit_sha TEXT,
+    state TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX integrations_state ON integrations (state);
+"""
+
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3)
 """Migration ``n`` (1-based) takes the database from version ``n - 1`` to ``n``."""
 
 SCHEMA_VERSION = len(MIGRATIONS)
