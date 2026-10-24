@@ -255,7 +255,11 @@ def test_max_turns_uses_a_gate_retry_and_keeps_the_work(
     assert log.get_run(run.id).status is RunStatus.DONE
     assert kinds(log.list_attempts(run.id)) == [("initial", "error"), ("gate_retry", "approved")]
     retry_prompt = loop.agents.implementer.calls[1][0]  # type: ignore[attr-defined]
-    assert "your last attempt stopped before the checks ran (max_turns)" in retry_prompt
+    assert (
+        "Note from SpoolHQ:\n\nYour last attempt stopped before the checks ran (max_turns)"
+        in retry_prompt
+    )
+    assert "Note from the user" not in retry_prompt
 
 
 def test_budget_used_up_blocks_before_the_next_attempt(
@@ -317,7 +321,9 @@ def test_default_integrator_holds_the_approved_ticket(
     final = log.get_run(run.id)
     path = worktrees / "demo" / "T01"
     assert final.status is RunStatus.AWAITING_APPROVAL
-    assert final.reason == f"T01 approved; merging arrives in T14 — worktree kept at {path}"
+    assert final.reason == (
+        f"T01 approved; merge it with `spool run integrate demo T01` — worktree kept at {path}"
+    )
     assert ticket_status(projects_dir) == "awaiting_approval"
     assert ticket_status(projects_dir, "T02") == "ready"  # run all stopped there
     assert path.is_dir()

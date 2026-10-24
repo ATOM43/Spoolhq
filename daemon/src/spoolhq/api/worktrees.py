@@ -1,5 +1,7 @@
-"""Startup worktree recovery: the daemon's wiring between the run log and git.
+"""Startup recovery wiring: integrations, then worktrees, between the run log and git.
 
+``recover_all_integrations`` finishes or undoes the integrations a stopped daemon left
+open (``services/runloop``), before any worktree is removed.
 ``services/git`` knows nothing about runs, so the ``keep`` rule (a ticket whose latest
 run is blocked, awaiting approval or interrupted keeps its worktree) is built here, from
 each workspace's ``RunLog``.
@@ -19,6 +21,7 @@ from spoolhq.services.git import (
     recover_worktrees,
 )
 from spoolhq.services.projects import ProjectError, list_workspaces, load_project
+from spoolhq.services.runloop import recover_integrations
 from spoolhq.services.runs import RunLog, RunLogError, RunRegistry, RunStatus
 
 logger = logging.getLogger("spoolhq.daemon")
@@ -59,6 +62,30 @@ def check_git() -> None:
         logger.error("git check failed", extra={"error": str(exc)})
         return
     logger.info("git found", extra={"git_version": ".".join(str(part) for part in version)})
+
+
+def recover_all_integrations(
+    projects_dir: Path, worktrees_dir: Path, runs: RunRegistry
+) -> dict[str, list[str]]:
+    """Run ``recover_integrations`` for every workspace; a failing one is logged and skipped."""
+    reports: dict[str, list[str]] = {}
+    for workspace in list_workspaces(projects_dir):
+        name = workspace.name
+        try:
+            run_log = runs.get(name).run_log
+            project = load_project(name, projects_dir=projects_dir)
+            reports[name] = recover_integrations(run_log, project, projects_dir, worktrees_dir)
+        except (KeyError, ProjectError):
+            continue  # no run log or a broken project.yaml: logged elsewhere at startup
+        except Exception as exc:
+            logger.error(
+                "cannot recover integrations; skipping this project",
+                extra={"project": name, "path": str(workspace), "error": str(exc)},
+            )
+            continue
+        for line in reports[name]:
+            logger.warning("integration recovered", extra={"project": name, "action": line})
+    return reports
 
 
 def recover_all_worktrees(

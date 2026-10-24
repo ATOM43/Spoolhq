@@ -71,6 +71,7 @@ def test_valid_project_loads(projects_dir: Path, git_repo: Path) -> None:
     assert project.git.remote is None
     assert project.context.max_chars == 120_000
     assert project.gates.timeouts.model_dump() == {"install": 600, "lint": 300, "test": 900}
+    assert project.run.integration == "local"
 
 
 def test_example_from_task_md_is_valid(projects_dir: Path, git_repo: Path) -> None:
@@ -173,6 +174,7 @@ def test_missing_required_field_is_named(projects_dir: Path, git_repo: Path, fie
         ("merge_policy.max_direct_diff_lines", 0, "must be greater than 0"),
         ("commands.test", "  ", "must not be empty"),
         ("tracker.kind", "jira", "must be one of 'clickup'"),
+        ("run.integration", "github", "must be one of 'local' or 'hold'"),
         ("context.max_chars", 10000, "must be at least 20000"),
         ("context.max_chars", 2_000_001, "must be at most 2000000"),
         ("gates.timeouts.test", 5, "must be at least 10"),

@@ -1,8 +1,8 @@
 """The integration seam: what happens to an approved attempt.
 
-T14 provides the real integrator (rebase, squash-merge, tag, PROGRESS.md). Until then
-``HoldForIntegration`` holds the approved work: the ticket and the run wait in
-``awaiting_approval`` and the worktree is kept.
+The real one is ``LocalIntegrator`` (``integration.py``). ``HoldForIntegration`` is for
+projects with ``run.integration: hold``: the approved work waits in
+``awaiting_approval`` with its worktree until ``spool run integrate``.
 """
 
 from dataclasses import dataclass
@@ -18,6 +18,8 @@ class IntegrationStatus(StrEnum):
     FAILED = "failed"
     HELD = "held"
     """Not merged yet: waiting for integration or a person's approval."""
+    GATES_FAILED = "gates_failed"
+    """The gates failed on the merged code; ``message`` is the first failing command."""
 
 
 @dataclass(frozen=True)
@@ -31,11 +33,11 @@ class Integrator(Protocol):
 
 
 class HoldForIntegration:
-    """The default until T14: approved work waits in ``awaiting_approval``."""
+    """``run.integration: hold``: approved work waits in ``awaiting_approval``."""
 
     def integrate(self, ctx: RunContext) -> IntegrationResult:
         return IntegrationResult(
             IntegrationStatus.HELD,
-            f"{ctx.ticket_id} approved; merging arrives in T14 — "
-            f"worktree kept at {ctx.worktree.path}",
+            f"{ctx.ticket_id} approved; merge it with `spool run integrate "
+            f"{ctx.project.name} {ctx.ticket_id}` — worktree kept at {ctx.worktree.path}",
         )

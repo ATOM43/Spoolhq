@@ -20,7 +20,7 @@ A **run** is one execution of the loop for one ticket, from being picked until i
 
 A terminal status sets `ended_at`, and a run that has ended can't change again: `set_run_status` raises `run 12 is already done`, and `start_attempt` refuses it too. The one exception is `reopen_run(run_id)`: the run loop resumes an `interrupted` run in its kept worktree, which moves it back to `running` under the current daemon instance and clears `ended_at` and `reason` (event `run.status` with reason `resumed`).
 
-`set_run_status(run_id, status, reason, reset_at=None)` stores `reset_at` (when a usage limit resets) on a paused run and clears it on any other change; `set_progress_note(run_id, note)` stores the implementer's `<progress>` note for T14.
+`set_run_status(run_id, status, reason, reset_at=None)` stores `reset_at` (when a usage limit resets) on a paused run and clears it on any other change; `set_progress_note(run_id, note)` stores the implementer's `<progress>` note, which integration uses for the commit message and `PROGRESS.md`.
 
 An **attempt** is one implementer pass inside a run, together with its gates and review.
 
@@ -35,12 +35,12 @@ An **attempt** is one implementer pass inside a run, together with its gates and
 
 - Every connection sets `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON` and `busy_timeout=5000`. A committed transaction survives a crash of the process; a power loss can drop the last few transactions.
 - One connection per `RunLog`, opened with `check_same_thread=False` and guarded by a lock, so a `RunLog` can be shared between threads. `isolation_level=None`: each method is one explicit `BEGIN IMMEDIATE` … `COMMIT`.
-- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 2.
-- A database newer than the code is refused: `state.db: schema version 3 is newer than this SpoolHQ supports (2); upgrade SpoolHQ.`
+- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 3.
+- A database newer than the code is refused: `state.db: schema version 4 is newer than this SpoolHQ supports (3); upgrade SpoolHQ.`
 - A file that isn't a SQLite database is refused: `state.db: not a SpoolHQ database (file is not a database)`.
 - All SQL takes its values as parameters; ticket text and agent output never become SQL.
 
-### Schema (version 2)
+### Schema (version 3)
 
 ```sql
 CREATE TABLE runs (
@@ -83,6 +83,8 @@ CREATE TABLE events (
 );
 ```
 
+Version 3 adds the integration journal, `integrations` ([integration.md](integration.md#the-journal-schema-version-3)).
+
 Triggers `BEFORE UPDATE` and `BEFORE DELETE` on `events` raise `events are append-only`, so not even a hand-written statement can change history. Indexes: `runs(ticket_id)`, `runs(status)`, `attempts(run_id)`, `events(run_id, id)`.
 
 Timestamps are UTC ISO 8601 with milliseconds and `Z`, like `2026-10-18T09:00:00.000Z`. They come from the `RunLog`'s `clock` (default `datetime.now(UTC)`); a clock that returns a naive datetime raises `ValueError`.
@@ -119,6 +121,7 @@ Every lifecycle change appends its event in the same transaction:
 | `run.status` | `set_run_status`, `reopen_run` | `{"from", "to", "reason"}`, plus `"reset_at"` when set |
 | `run.interrupted` | `recover_interrupted` | `{"from", "reason", "attempt_ids"}` |
 | `run.phase` | the run loop | `{"phase", "text"}`: one per phase change; `text` is the line `spool run` prints |
+| `integrate` | integration | `{"commit", "tag"}`: the ticket's squash commit landed on the default branch |
 | `attempt.started` | `start_attempt` | `{"number", "kind", "dir", "backend", "model"}` |
 | `attempt.finished` | `finish_attempt` | `{"number", "status"}` |
 | `agent.message`, `agent.tool_call`, `agent.file_edit`, `agent.usage`, `gate.result`, `review.verdict`, `log` | `append_event` (the run loop) | free-form |

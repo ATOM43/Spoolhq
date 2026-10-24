@@ -9,8 +9,7 @@ them between steps. See ``docs/run-loop.md``.
 
 import logging
 import threading
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -18,7 +17,8 @@ from typing import Literal
 from spoolhq.services.gates import run_gates
 from spoolhq.services.git import GitError, Worktree, WorktreeManager, ensure_clean
 from spoolhq.services.git import ensure_no_operation_in_progress as ensure_no_operation
-from spoolhq.services.projects import Project, ProjectError, load_project, project_dir
+from spoolhq.services.projects import Project, load_project, project_dir
+from spoolhq.services.runloop.integration import LocalIntegrator
 from spoolhq.services.runloop.integrator import HoldForIntegration, Integrator
 from spoolhq.services.runloop.lock import active_message, take_run_lock
 from spoolhq.services.runloop.machine import drive, next_kind
@@ -35,6 +35,7 @@ from spoolhq.services.runloop.model import (
     RunContext,
     RunLoopError,
     record_phase,
+    user_errors,
 )
 from spoolhq.services.runloop.resume import ResumeTimer
 from spoolhq.services.runs import (
@@ -47,27 +48,13 @@ from spoolhq.services.runs import (
     format_ts,
     utc_now,
 )
-from spoolhq.services.scheduler import (
-    SchedulerError,
-    apply_transition,
-    explain_idle,
-    next_ready,
-)
-from spoolhq.services.tickets import Ticket, TicketError, list_tickets, load_ticket
+from spoolhq.services.scheduler import apply_transition, explain_idle, next_ready
+from spoolhq.services.tickets import Ticket, list_tickets, load_ticket
 
 logger = logging.getLogger(__name__)
 
 Mode = Literal["next", "all"]
 SHUTDOWN_WAIT_S = 20.0
-
-
-@contextmanager
-def _user_errors() -> Iterator[None]:
-    """Errors from the other services become RunLoopError, whose message is for the user."""
-    try:
-        yield
-    except (ProjectError, TicketError, SchedulerError, GitError) as exc:
-        raise RunLoopError(str(exc)) from exc
 
 
 class RunLoop:
@@ -91,7 +78,7 @@ class RunLoop:
         self.worktrees_dir = worktrees_dir
         self.home = home
         self.agents = agents
-        self.integrator: Integrator = integrator or HoldForIntegration()
+        self.integrator: Integrator = integrator or LocalIntegrator(clock=clock)
         self.gates = gates
         self._mutex = threading.RLock()
         self._active: dict[str, Active] = {}
@@ -103,7 +90,7 @@ class RunLoop:
         workspace = project_dir(project, self.projects_dir) if project else Path()
         if not project or not workspace.is_dir():
             raise NotFoundError(f"no project '{project}'")
-        with _user_errors():
+        with user_errors():
             settings = load_project(project, projects_dir=self.projects_dir)
         return settings, workspace, self._registry.open(workspace).run_log
 
@@ -130,7 +117,11 @@ class RunLoop:
         run: Run,
         manager: WorktreeManager,
         worktree: Worktree,
+        integrator: Integrator | None = None,
     ) -> RunContext:
+        if integrator is None:
+            hold = settings.run.integration == "hold"
+            integrator = HoldForIntegration() if hold else self.integrator
         return RunContext(
             project=settings,
             workspace=workspace,
@@ -142,7 +133,7 @@ class RunLoop:
             worktrees=manager,
             worktree=worktree,
             agents=self.agents,
-            integrator=self.integrator,
+            integrator=integrator,
             gates=self.gates,
             flags=Flags(),
         )
@@ -203,7 +194,7 @@ class RunLoop:
                 self._end(ctx, ending)
                 if not all_ or ending.kind is not EndKind.DONE or active.flags.stop.is_set():
                     break
-                with _user_errors():
+                with user_errors():
                     ticket = self._pick(ctx.project.name, None)
                     if ticket is None:
                         break
@@ -225,7 +216,8 @@ class RunLoop:
             if kind is EndKind.DONE:
                 ctx.worktrees.teardown(ctx.worktree)
                 self._ticket_status(project, tid, "done")
-                ctx.run = log.set_run_status(run_id, RunStatus.DONE)
+                if ctx.run.status is not RunStatus.DONE:  # the integrator may have closed it
+                    ctx.run = log.set_run_status(run_id, RunStatus.DONE)
                 ctx.phase("done", f"{tid} · done")
             elif kind is EndKind.HELD:
                 self._ticket_status(project, tid, "awaiting_approval")
@@ -276,7 +268,7 @@ class RunLoop:
             self._check_free(project)
             lock = take_run_lock(workspace, project)
             try:
-                with _user_errors():
+                with user_errors():
                     ticket = self._pick(project, ticket_id)
                     if ticket is None:
                         listing = list_tickets(project, projects_dir=self.projects_dir)
@@ -323,7 +315,7 @@ class RunLoop:
             # Paused: no worker, so clean up here.
             self.timer.cancel(project)
             del self._active[project]
-            with _user_errors():
+            with user_errors():
                 self._manager(settings).teardown(active.ticket_id)
                 run = run_log.set_run_status(
                     active.run_id, RunStatus.CANCELLED, "cancelled by the user"
@@ -354,7 +346,7 @@ class RunLoop:
             active = self._active.get(project)
             if active is not None and active.thread is not None:
                 self._check_free(project)
-            with _user_errors():
+            with user_errors():
                 found = (
                     run_log.get_run(active.run_id)
                     if active is not None
@@ -364,9 +356,22 @@ class RunLoop:
                 raise RunLoopError(f"nothing to resume in '{project}'")
             if run_id is not None and run_id != found.id:
                 raise NotFoundError(f"run {run_id} is not the run to resume in '{project}'")
+            return self._continue(settings, workspace, run_log, found, None)
+
+    def _continue(
+        self,
+        settings: Project,
+        workspace: Path,
+        run_log: RunLog,
+        found: Run,
+        integrator: Integrator | None,
+    ) -> Run:
+        """Pick ``found`` up again in its kept worktree, from where its attempts left off."""
+        project = settings.name
+        with self._mutex:
             lock = take_run_lock(workspace, project)
             try:
-                with _user_errors():
+                with user_errors():
                     ticket = load_ticket(project, found.ticket_id, projects_dir=self.projects_dir)
                     manager = self._manager(settings)
                     worktree = manager.resume(ticket.id)
@@ -374,6 +379,8 @@ class RunLoop:
                         run = run_log.reopen_run(found.id)
                     else:
                         run = run_log.set_run_status(found.id, RunStatus.RUNNING)
+                    if found.status is RunStatus.AWAITING_APPROVAL:
+                        self._ticket_status(project, ticket.id, "running")
                     if worktree is None:
                         reason = (
                             f"the worktree of {ticket.id} is gone; "
@@ -384,7 +391,7 @@ class RunLoop:
                         self._ticket_status(project, ticket.id, "blocked")
                         raise RunLoopError(reason)
                     ctx = self._context(
-                        settings, workspace, run_log, ticket, run, manager, worktree
+                        settings, workspace, run_log, ticket, run, manager, worktree, integrator
                     )
             except BaseException:
                 lock.release()
@@ -396,6 +403,21 @@ class RunLoop:
             self._spawn(active, ctx, next_kind(run_log.list_attempts(found.id)), False)
             return ctx.run
 
+    def integrate_ticket(self, project: str, ticket_id: str) -> Run:
+        """Integrate an approved ticket waiting in ``awaiting_approval`` (a dirty main
+        checkout, an interrupted integration, or ``run.integration: hold``)."""
+        settings, workspace, run_log = self._project(project)
+        with self._mutex:
+            self._check_free(project)
+            with user_errors():
+                ticket = load_ticket(project, ticket_id, projects_dir=self.projects_dir)
+                runs = run_log.list_runs(ticket_id=ticket_id, limit=1)
+            latest, status = runs[0] if runs else None, ticket.meta.status
+            if status != "awaiting_approval" or latest is None or latest.status != status:
+                raise RunLoopError(f"{ticket_id} is {status}, not awaiting approval")
+            # Always the real integrator: this is how a held ticket gets merged.
+            return self._continue(settings, workspace, run_log, latest, self.integrator)
+
     def discard(self, project: str, ticket_id: str) -> None:
         """Remove the worktree of an interrupted or blocked ticket; ticket back to ``ready``."""
         settings, _, run_log = self._project(project)
@@ -406,7 +428,7 @@ class RunLoop:
                     f"{ticket_id} has an active run (run {active.run_id}); "
                     "cancel it with `spool run cancel`"
                 )
-            with _user_errors():
+            with user_errors():
                 ticket = load_ticket(project, ticket_id, projects_dir=self.projects_dir)
                 runs = run_log.list_runs(ticket_id=ticket_id, limit=1)
                 status = ticket.meta.status

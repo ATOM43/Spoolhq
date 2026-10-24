@@ -10,7 +10,7 @@ from fastapi import FastAPI
 import spoolhq
 from spoolhq.api.routers import health, runs, version
 from spoolhq.api.security import LocalOnlyMiddleware
-from spoolhq.api.worktrees import check_git, recover_all_worktrees
+from spoolhq.api.worktrees import check_git, recover_all_integrations, recover_all_worktrees
 from spoolhq.core.auth import load_or_create_token
 from spoolhq.core.config import Settings, ensure_home, home_dir
 from spoolhq.services.agents import available_runners
@@ -38,12 +38,13 @@ def create_app(
 
     On startup the app opens every workspace's run log and recovers the runs a previous
     daemon left active (``app.state.runs``), under a fresh ``daemon_instance`` unless
-    one is given; then it checks git and removes the worktrees those runs left behind
+    one is given; then it checks git, finishes or undoes interrupted integrations
+    (``app.state.integration_recovery``), removes the worktrees those runs left behind
     (``app.state.worktree_recovery``), and starts the run loop (``app.state.runloop``)
     with ``agents`` (default: the installed Claude Code for both roles) and
-    ``integrator`` (default: hold for integration). On shutdown the loop stops its
-    agents and leaves their runs for the next startup's recovery. The caller must hold
-    the daemon single-instance lock while it runs.
+    ``integrator`` (default: ``LocalIntegrator``; ``run.integration: hold`` per project).
+    On shutdown the loop stops its agents and leaves their runs for the next startup's
+    recovery. The caller must hold the daemon single-instance lock while it runs.
     """
     if token is None:
         token = load_or_create_token(ensure_home())
@@ -60,6 +61,9 @@ def create_app(
         app.state.runs = registry
         try:
             check_git()
+            app.state.integration_recovery = recover_all_integrations(
+                settings.projects_dir, settings.worktrees_dir, registry
+            )
             app.state.worktree_recovery = recover_all_worktrees(
                 settings.projects_dir, settings.worktrees_dir, registry
             )

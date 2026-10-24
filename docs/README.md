@@ -12,4 +12,5 @@ User and developer documentation will live here: architecture, the daemon API, t
 - [gates.md](gates.md): the install, lint and test gates
 - [review.md](review.md): the reviewer agent and its verdict
 - [run-loop.md](run-loop.md): the run loop: retries, pause, resume, cancel and the integration seam
+- [integration.md](integration.md): merging an approved ticket into the local default branch
 - [testing.md](testing.md): running and writing tests

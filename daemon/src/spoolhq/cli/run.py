@@ -1,4 +1,5 @@
-"""`spool run`: start, follow, pause, resume, cancel and discard runs in the daemon.
+"""`spool run`: start, follow, pause, resume, cancel, integrate and discard runs in the
+daemon.
 
 The daemon owns the loop, so these commands only call its API. `next` and `all` start
 a run and then print one line per phase change until it ends; Ctrl-C detaches and
@@ -113,6 +114,16 @@ def cancel_command(project: ProjectArg, run_id: RunOption = None) -> None:
     """Cancel the run: stop the agent, remove its worktree, ticket back to ready."""
     run = _call("POST", f"{_base(project)}/runs/{_current_run_id(project, run_id)}/cancel")
     typer.echo(f"cancelling run {run['id']} ({run['ticket_id']})")
+
+
+@run_app.command("integrate")
+def integrate_command(
+    project: ProjectArg,
+    ticket: Annotated[str, typer.Argument(metavar="TICKET", help="Ticket id, like T04.")],
+) -> None:
+    """Merge an approved ticket waiting for integration, and follow it."""
+    _call("POST", f"{_base(project)}/tickets/{ticket}/integrate")
+    _follow(project)
 
 
 @run_app.command("discard")

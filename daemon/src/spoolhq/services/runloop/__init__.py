@@ -2,11 +2,13 @@
 
 ``RunLoop`` runs each project's active run in a worker thread inside the daemon, with
 retries, pause, resume (after a usage limit or a crash), cancel and discard, and hands
-an approved attempt to an ``Integrator``. The state machine itself is plain functions
+an approved attempt to an ``Integrator`` (``LocalIntegrator``: one squash commit on the
+local default branch). The state machine itself is plain functions
 over a ``RunContext`` in ``machine.py``. This is the one service that imports the
 others; no service imports it. See ``docs/run-loop.md``.
 """
 
+from spoolhq.services.runloop.integration import LocalIntegrator, recover_integrations
 from spoolhq.services.runloop.integrator import (
     HoldForIntegration,
     IntegrationResult,
@@ -41,6 +43,7 @@ __all__ = [
     "IntegrationResult",
     "IntegrationStatus",
     "Integrator",
+    "LocalIntegrator",
     "Mode",
     "NotFoundError",
     "ResumeTimer",
@@ -50,5 +53,6 @@ __all__ = [
     "RunLoopError",
     "drive",
     "next_kind",
+    "recover_integrations",
     "take_run_lock",
 ]

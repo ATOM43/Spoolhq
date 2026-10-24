@@ -1,8 +1,8 @@
 # Git
 
-Every run of a ticket works in a disposable git worktree of the project's repository, on its own branch. The main working copy is never touched: SpoolHQ only reads it, adds and removes worktrees, creates and deletes its own branches, and keeps one config entry per branch. There is no fetch or push yet (T17 adds remotes) and nothing merges into the default branch yet (T14). The run loop ([run-loop.md](run-loop.md)) drives these APIs.
+Every run of a ticket works in a disposable git worktree of the project's repository, on its own branch. The main working copy is never touched: SpoolHQ only reads it, adds and removes worktrees, creates and deletes its own branches, and keeps one config entry per branch. There is no fetch or push yet (T17 adds remotes). Integration ([integration.md](integration.md), `integrate.py`) merges main into a run's worktree and builds the squash commit there; in the main checkout it only fast-forwards the default branch (`merge --ff-only` or `update-ref`) and adds the tag. The run loop ([run-loop.md](run-loop.md)) drives these APIs.
 
-The code is `services/git/`: the git runner in `runner.py`, branch names in `naming.py`, main-repository checks in `repo.py`, `WorktreeManager` in `worktrees.py` and crash recovery in `recovery.py`. It imports no other service package (an import-linter contract checks this); what it needs from the run log is passed in as a callable.
+The code is `services/git/`: the git runner in `runner.py`, branch names in `naming.py`, main-repository checks in `repo.py`, `WorktreeManager` in `worktrees.py`, crash recovery in `recovery.py` and the integration mechanics in `integrate.py`. It imports no other service package (an import-linter contract checks this); what it needs from the run log is passed in as a callable.
 
 ## One worktree per run
 
@@ -144,7 +144,7 @@ It only reads; cleanup happens when the daemon starts.
 
 ## Crash recovery
 
-A daemon that stops mid-run leaves its worktree behind. At startup, after the run log's recovery ([runs.md](runs.md#recovery)), the daemon runs `recover_worktrees` for every workspace whose `project.yaml` loads. Its `keep(ticket_id)` callable is true when the ticket's latest run is `blocked` or `awaiting_approval` (those worktrees wait for a person) or `interrupted` (the run loop resumes from its commits). Recovery in the run log has just marked every run a stopped daemon left `running` or `paused` as `interrupted`, so a crash, reboot or restart keeps that run's worktree and branch.
+A daemon that stops mid-run leaves its worktree behind. At startup, after the run log's recovery ([runs.md](runs.md#recovery)) and the integration journal's ([integration.md](integration.md#crash-recovery)), the daemon runs `recover_worktrees` for every workspace whose `project.yaml` loads. Its `keep(ticket_id)` callable is true when the ticket's latest run is `blocked` or `awaiting_approval` (those worktrees wait for a person) or `interrupted` (the run loop resumes from its commits). Recovery in the run log has just marked every run a stopped daemon left `running` or `paused` as `interrupted`, so a crash, reboot or restart keeps that run's worktree and branch.
 
 1. `git worktree prune` drops registered worktrees whose folder is gone: **pruned**. Their branch stays; the next `create` for the ticket recreates it if it is marked.
 2. Each registered worktree under `<root>/<project>/` whose ticket isn't kept is torn down: **removed**. Its branch is deleted only if it carries the marker.

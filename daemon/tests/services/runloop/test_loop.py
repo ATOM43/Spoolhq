@@ -475,19 +475,26 @@ def test_shutdown_leaves_the_run_for_recovery(
     assert lock_is_free(project)
 
 
-def test_integration_conflict_blocks(
+def test_integration_conflict_goes_back_once_then_blocks(
     make_loop: LoopFactory, transcripts: Transcripts, registry: RunRegistry
 ) -> None:
+    message = "merge conflict with main in: hello.py"
+
     class Conflicting:
         def integrate(self, ctx: RunContext) -> IntegrationResult:
-            return IntegrationResult(IntegrationStatus.CONFLICT, "hello.py")
+            return IntegrationResult(IntegrationStatus.CONFLICT, message)
 
     loop, _ = make_loop(
-        [transcripts.implement()], [transcripts.review("approve")], integrator=Conflicting()
+        [transcripts.implement(), transcripts.implement()],
+        [transcripts.review("approve"), transcripts.review("approve")],
+        integrator=Conflicting(),
     )
 
     run = loop.start("demo")
     loop.wait("demo")
 
-    final = registry.get("demo").run_log.get_run(run.id)
-    assert (final.status, final.reason) == (RunStatus.BLOCKED, "integration conflict: hello.py")
+    log = registry.get("demo").run_log
+    final = log.get_run(run.id)
+    assert (final.status, final.reason) == (RunStatus.BLOCKED, message)
+    attempts = [(a.kind.value, a.status.value) for a in log.list_attempts(run.id)]
+    assert attempts == [("initial", "approved"), ("conflict_retry", "approved")]

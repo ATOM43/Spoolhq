@@ -65,6 +65,9 @@ class PreviousAttempt:
     review_notes: tuple[ReviewNote, ...] = ()
     conflict_files: tuple[str, ...] = ()
     user_note: str | None = None
+    """What the user wrote for this retry ("Note from the user")."""
+    system_note: str | None = None
+    """SpoolHQ's own explanation: a timeout, a turn limit, a conflict ("Note from SpoolHQ")."""
 
     def __post_init__(self) -> None:
         if self.kind not in ATTEMPT_KINDS:

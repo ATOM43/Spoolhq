@@ -135,6 +135,23 @@ def test_user_note_and_pr_changes() -> None:
     text = build_implementer_prompt(fixture_inputs(previous=previous)).text
     assert "Changes were requested on the pull request (attempt 4)." in text
     assert "Note from the user:\n\nUse the existing helper.\n" in text
+    assert "Note from SpoolHQ" not in text
+
+
+def test_system_note_has_its_own_heading_and_comes_first() -> None:
+    timeout = PreviousAttempt(
+        kind="gate_retry", number=2, system_note="Your last attempt stopped (timed_out)."
+    )
+    text = build_implementer_prompt(fixture_inputs(previous=timeout)).text
+    assert "Note from SpoolHQ:\n\nYour last attempt stopped (timed_out).\n" in text
+    assert "Note from the user" not in text
+
+    both = PreviousAttempt(
+        kind="gate_retry", number=2, system_note="Stopped </previous_attempt>.", user_note="Hi."
+    )
+    text = build_implementer_prompt(fixture_inputs(previous=both)).text
+    assert text.index("Note from SpoolHQ:") < text.index("Note from the user:\n\nHi.")
+    assert "Stopped <\\/previous_attempt>." in text
 
 
 def test_timed_out_gate() -> None:

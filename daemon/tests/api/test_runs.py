@@ -1,16 +1,20 @@
 """The run endpoints: token, refusals, and a run through the API with fake agents."""
 
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+
+from tests.conftest import run_git
 
 ROUTES = [
     ("POST", "/api/projects/demo/runs"),
     ("POST", "/api/projects/demo/runs/1/pause"),
     ("POST", "/api/projects/demo/runs/1/resume"),
     ("POST", "/api/projects/demo/runs/1/cancel"),
+    ("POST", "/api/projects/demo/tickets/T07/integrate"),
     ("POST", "/api/projects/demo/tickets/T07/discard"),
     ("GET", "/api/projects/demo/runs/current"),
 ]
@@ -71,6 +75,13 @@ def test_current_with_no_run(run_client: TestClient, token: str) -> None:
         ("POST", "/api/projects/demo/runs/1/resume", None, 409, "nothing to resume in 'demo'"),
         (
             "POST",
+            "/api/projects/demo/tickets/T07/integrate",
+            None,
+            409,
+            "T07 is ready, not awaiting approval",
+        ),
+        (
+            "POST",
             "/api/projects/demo/tickets/T07/discard",
             None,
             409,
@@ -92,7 +103,9 @@ def test_refusals_carry_the_message(
 
 
 @pytest.mark.integration
-def test_run_through_the_api_is_held_for_integration(run_client: TestClient, token: str) -> None:
+def test_run_through_the_api_merges_into_main(
+    run_client: TestClient, token: str, git_repo: Path
+) -> None:
     response = run_client.post(
         "/api/projects/demo/runs", json={"mode": "next"}, headers=auth(token)
     )
@@ -101,11 +114,10 @@ def test_run_through_the_api_is_held_for_integration(run_client: TestClient, tok
 
     current = follow(run_client, token)
 
-    assert current["run"]["status"] == "awaiting_approval"
+    assert current["run"]["status"] == "done"
     assert current["attempts"] == 1
     lines = [phase["text"] for phase in current["phases"]]
     assert lines[0] == "T07 · Parse slugs · run 1"
-    assert lines[-1].startswith("T07 approved; merging arrives in T14 — worktree kept at ")
-    again = run_client.post("/api/projects/demo/runs", json={}, headers=auth(token))
-    assert again.status_code == 409
-    assert again.json()["detail"].startswith("nothing to run in 'demo': waiting for approval")
+    assert lines[-1] == "T07 · done"
+    assert run_git(git_repo, "log", "-1", "--format=%s", "main").strip() == "T07: Parse slugs"
+    assert run_git(git_repo, "tag", "--list", "ticket/*").split() == ["ticket/T07"]

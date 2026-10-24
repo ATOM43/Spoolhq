@@ -40,6 +40,8 @@ gates:
     install: 600
     lint: 300
     test: 900
+run:
+  integration: local                          # local | hold
 ```
 
 ## Fields
@@ -65,6 +67,7 @@ gates:
 | `git.remote` | no | | A GitHub URL: `https://github.com/<owner>/<repo>` (optionally ending in `.git`) or `git@github.com:<owner>/<repo>.git`. The owner is 1–39 letters, digits or hyphens; the repository is 1–100 letters, digits, `.`, `_` or `-`; neither may start with `-` or `.`. |
 | `context.max_chars` | no | `120000` | Whole number from 20,000 to 2,000,000: the most characters the implementer's prompt may have ([context](context.md)). |
 | `gates.timeouts.install`, `gates.timeouts.lint`, `gates.timeouts.test` | no | `600`, `300`, `900` | Whole number of seconds from 10 to 7,200. When it passes, the gate's whole process tree is stopped ([gates](gates.md#timeouts)). |
+| `run.integration` | no | `local` | `local` merges each approved ticket into the default branch as one commit ([integration](integration.md)); `hold` keeps it in `awaiting_approval` until `spool run integrate`. |
 | `tracker.kind` | no | `clickup` | Only `clickup` for now. |
 | `tracker.list_id` | when `tracker` is set | | Non-empty string; quote it (`"901"`) if it is all digits. |
 
@@ -93,6 +96,7 @@ Every problem is reported at once, one line each, as `project.yaml: <dotted.path
 | Empty command | `project.yaml: commands.lint: must not be empty` |
 | Shell syntax in a command | `project.yaml: commands.test: shell syntax isn't supported; put it in a justfile recipe` |
 | Unclosed quote in a command | `project.yaml: commands.test: can't be split into arguments: No closing quotation` |
+| Unknown integration mode | `project.yaml: run.integration: must be one of 'local' or 'hold'` |
 | Gate timeout out of range | `project.yaml: gates.timeouts.test: must be at least 10` (or `must be at most 7200`) |
 | Wrong type | `project.yaml: merge_policy.always_pr: input should be a valid boolean, unable to interpret input` |
 | YAML syntax error | `project.yaml: line 3, column 1: expected the node content, but found '<stream end>'` |

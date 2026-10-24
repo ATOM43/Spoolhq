@@ -9,14 +9,14 @@ The code is `services/runloop/`: the values (`RunContext`, `Ending`, `Flags`, th
 For each run:
 
 1. **Pick.** `next_ready()` ([scheduler](scheduler.md)), or the ticket named by the user if it is `ready`. The main repository must be clean with nothing in progress, or nothing starts. The ticket moves to `running`, the run row is created (`run.started`) and the worktree with its branch ([git](git.md)): one worktree per run, so every retry builds on the earlier attempts' work.
-2. **Implement.** A new attempt row (`initial`, `gate_retry` or `review_retry`). The prompt is rendered ([context](context.md)); on a retry its `<previous_attempt>` block is read from the last finished attempt's `gates.json` and `review.json`: the failing tests and failing gates, or the review items that are not met with their reasons. The implementer runs with the writing policy ([agents](agents.md)) and a budget of 100 turns, 30 minutes and, if the project has a token budget, the tokens left. Its `<progress>` note is taken from the full final text (not the 4,000-character summary) and stored on the run for T14.
+2. **Implement.** A new attempt row (`initial`, `gate_retry`, `review_retry` or `conflict_retry`). The prompt is rendered ([context](context.md)); on a retry its `<previous_attempt>` block is read from the last finished attempt's `gates.json` and `review.json`: the failing tests and failing gates, or the review items that are not met with their reasons. The implementer runs with the writing policy ([agents](agents.md)) and a budget of 100 turns, 30 minutes and, if the project has a token budget, the tokens left. Its `<progress>` note is taken from the full final text (not the 4,000-character summary) and stored on the run for integration.
 3. **Commit.** SpoolHQ commits everything in the worktree on the run's branch, as `spool: T04 attempt 2`, with hooks and signing disabled (T08's `commit_all`); the agent never commits. The files changed come from git (`git diff --name-only`), not from the agent's edit events. `diff.patch` gets `git diff <base>...HEAD`.
 4. **Gates** ([gates](gates.md)), their logs in the attempt folder and the results in `gates.json`. If any gate fails: the attempt ends `gates_failed`; with gate retries left, a `gate_retry` attempt starts at step 2, else the run is blocked: `gates failed after 3 retries: just test` (the first failing gate's command).
 5. **Review** ([review](review.md)) of `git diff <base>...HEAD`, with the items the gates checked taken from `check_done_when`. The worktree's `HEAD` and `git status` must be the same before and after; if not, the run is blocked with `reviewer changed the worktree`. The verdict goes to `review.json`.
    - `approve`: the attempt ends `approved`; step 6.
    - `changes_requested`: with review retries left, a `review_retry` attempt starts at step 2 with the unmet items as review notes, else blocked: `changes requested after 2 retries`.
    - `needs_human`: blocked at once: `the reviewer asked for a person: <summary>`.
-6. **Integrate.** The `Integrator` gets the approved run (see [The integration seam](#the-integration-seam)).
+6. **Integrate.** The `Integrator` gets the approved run (see [The integration seam](#the-integration-seam) and [integration.md](integration.md)). A merge conflict with main starts one `conflict_retry` attempt; gates failing on the merged code start a `gate_retry`.
 
 Before each attempt the loop checks `agents.budget_per_ticket` (tokens and/or USD) against the run's total usage; when it is used up the run is blocked: `budget used up: 2,104,331 of 2,000,000 tokens` (or `budget used up: $2.10 of $2.00`).
 
@@ -32,7 +32,7 @@ T04 attempt 2 · implement (gate_retry)
 T04 attempt 2 · commit · 81d0e4b (1 files)
 T04 attempt 2 · gates · ✓ passed
 T04 attempt 2 · review · approve
-T04 · integrate · merged
+T04 · integrate · merged 3f2a9c1 · ticket/T04
 T04 · done
 ```
 
@@ -54,7 +54,7 @@ The attempt folder `runs/<ticket>/<NNN>/` holds `transcript.jsonl` (the implemen
 | `error` (a policy violation included) | blocked at once with the error text; never retried | same |
 | `cancelled` | see [Cancel](#cancel) | same |
 
-After an early stop the next prompt's `<previous_attempt>` says so (`your last attempt stopped before the checks ran (max_turns)…` or `the reviewer stopped before giving a verdict…`), under the "Note from the user" heading of the template.
+After an early stop the next prompt's `<previous_attempt>` says so (`Your last attempt stopped before the checks ran (max_turns)…` or `The reviewer stopped before giving a verdict…`), under the template's "Note from SpoolHQ" heading; "Note from the user" is only for what a user wrote.
 
 ## Paused, blocked, cancelled, interrupted
 
@@ -64,7 +64,7 @@ After an early stop the next prompt's `<previous_attempt>` says so (`your last a
 | `blocked` | retries used up, `needs_human`, an agent error, budget used up, the reviewer changed the worktree, an internal error | `blocked` | kept, for inspection | fix it, then `spool run discard` and run again |
 | `cancelled` | `spool run cancel` | `ready` | removed, with its branch | — |
 | `interrupted` | the daemon stopped while the run was active ([runs](runs.md#recovery)) | `running` | kept | `spool run resume`, or `spool run discard` |
-| `awaiting_approval` | approved and held for integration | `awaiting_approval` | kept | T14 merges it |
+| `awaiting_approval` | approved, and held (`run.integration: hold`), waiting for a clean main checkout, or its integration was interrupted | `awaiting_approval` | kept | `spool run integrate` |
 | `done` | approved and merged | `done` | removed | — |
 
 **Usage limits pause, never block.** When the implementer or the reviewer returns `usage_limited`, the current attempt becomes `interrupted`, the run `paused` with `reset_at` stored on the run row, and the daemon schedules a resume at `reset_at` plus 60 s. The timer reads the loop's clock once a second on its own thread and is cancelled when the daemon shuts down. Without a known `reset_at`, the run waits for `spool run resume`.
@@ -93,7 +93,7 @@ The loop keeps a record of active runs (which also covers a paused run with no t
 
 ## `run all`
 
-`run all` loops `next_ready()` until no ticket is ready or a ticket doesn't end `done`: blocked, paused, cancelled or held for integration. With the default integrator it therefore stops after the first approval until T14 lands.
+`run all` loops `next_ready()` until no ticket is ready or a ticket doesn't end `done`: blocked, paused, cancelled or held for integration.
 
 ## The integration seam
 
@@ -102,19 +102,25 @@ class Integrator(Protocol):
     def integrate(self, ctx: RunContext) -> IntegrationResult: ...
 ```
 
-`IntegrationResult.status` is `merged`, `conflict`, `failed` (with a message) or `held`. `merged` makes the ticket and the run `done` and removes the worktree; `conflict` and `failed` block the run (`integration conflict: …`; conflict retries come with T14); `held` puts the ticket and the run in `awaiting_approval` and keeps the worktree.
+`IntegrationResult.status` is `merged`, `conflict`, `gates_failed`, `failed` or `held`, with a message.
 
-The default is `HoldForIntegration`, which holds every approved run:
+- `merged` makes the ticket and the run `done` and removes the worktree.
+- `conflict` starts a `conflict_retry` attempt the first time in a run and blocks the run with the message after that.
+- `gates_failed` (the gates failed on the merged code; the message is the first failing command) starts a `gate_retry` while gate retries last.
+- `failed` blocks the run with the message.
+- `held` puts the ticket and the run in `awaiting_approval` and keeps the worktree.
+
+The default is `LocalIntegrator` ([integration.md](integration.md)). With `run.integration: hold` in `project.yaml`, the project gets `HoldForIntegration`, which holds every approved run:
 
 ```text
-T04 approved; merging arrives in T14 — worktree kept at /home/u/.spoolhq/worktrees/demo/T04
+T04 approved; merge it with `spool run integrate demo T04` — worktree kept at /home/u/.spoolhq/worktrees/demo/T04
 ```
 
-T14 provides the real integrator (rebase, squash-merge, tag, `PROGRESS.md` from the run's progress note). Tests use a fake one that returns `merged`.
+Tests use a fake one that returns `merged`.
 
 ## Dependencies are injected
 
-`RunLoop(registry, projects_dir=…, worktrees_dir=…, home=…, agents=Agents(implementer, reviewer), integrator=…, clock=…, gates=…)`: tests pass `FakeRunner`s with transcript sequences, a fake clock and fake gates. The daemon builds it in its lifespan with the installed Claude Code for both roles and `HoldForIntegration`. Event bus listeners stay cheap: the loop never does real work inside a bus callback, and the resume timer only starts a worker.
+`RunLoop(registry, projects_dir=…, worktrees_dir=…, home=…, agents=Agents(implementer, reviewer), integrator=…, clock=…, gates=…)`: tests pass `FakeRunner`s with transcript sequences, a fake clock and fake gates. The daemon builds it in its lifespan with the installed Claude Code for both roles and `LocalIntegrator`. Event bus listeners stay cheap: the loop never does real work inside a bus callback, and the resume timer only starts a worker.
 
 ## API and CLI
 
@@ -126,6 +132,7 @@ All routes need the token. Unknown projects, runs and tickets give 404; refusals
 | `POST /api/projects/{name}/runs/{id}/pause` | pause after the current step |
 | `POST /api/projects/{name}/runs/{id}/resume` | resume a paused or interrupted run |
 | `POST /api/projects/{name}/runs/{id}/cancel` | cancel |
+| `POST /api/projects/{name}/tickets/{id}/integrate` | integrate a ticket waiting in `awaiting_approval` ([integration](integration.md#spool-run-integrate)) |
 | `POST /api/projects/{name}/tickets/{id}/discard` | discard an interrupted or blocked ticket's worktree |
 | `GET /api/projects/{name}/runs/current` | `active`, `working`, the active (else latest) run, its attempts, tokens and phase lines |
 
@@ -133,11 +140,12 @@ All routes need the token. Unknown projects, runs and tickets give 404; refusals
 spool run next <project> [<ticket>]     # start, then follow: one line per phase change
 spool run all <project>
 spool run pause|resume|cancel <project> [--run <id>]
+spool run integrate <project> <ticket>
 spool run discard <project> <ticket>
 spool run status <project>              # or: no active run in 'demo'
 ```
 
-`next`, `all` and `resume` poll `runs/current` once a second until no worker is on the run, and exit 1 if it ended `blocked` or `cancelled`. Ctrl-C detaches and prints `run continues in the daemon; spool run status to check`; it does not cancel.
+`next`, `all`, `resume` and `integrate` poll `runs/current` once a second until no worker is on the run, and exit 1 if it ended `blocked` or `cancelled`. Ctrl-C detaches and prints `run continues in the daemon; spool run status to check`; it does not cancel.
 
 ## The real run
 

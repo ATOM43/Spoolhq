@@ -1,5 +1,7 @@
 """`spool run`: the commands call the daemon's run endpoints and follow the run."""
 
+from pathlib import Path
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -9,6 +11,7 @@ from spoolhq.cli import run as run_cli
 from spoolhq.cli.client import ApiClient
 from spoolhq.cli.main import app
 from spoolhq.services.agents import FakeRunner
+from spoolhq.services.projects import load_project, save_project
 from spoolhq.services.runloop import Agents
 from tests.conftest import REVIEW_FIXTURES
 
@@ -50,8 +53,29 @@ def test_next_follows_the_run_to_its_end(daemon: TestClient) -> None:
     assert any(line.startswith("T07 attempt 1 · commit · ") for line in lines)
     assert "T07 attempt 1 · gates · ✓ passed" in lines
     assert "T07 attempt 1 · review · approve" in lines
-    assert lines[-1].startswith("T07 approved; merging arrives in T14 — worktree kept at ")
+    assert any(line.startswith("T07 · integrate · merged ") for line in lines)
+    assert lines[-1] == "T07 · done"
     assert runner.invoke(app, ["run", "status", "demo"]).output == "no active run in 'demo'\n"
+
+
+@pytest.mark.integration
+def test_integrate_merges_a_held_ticket(daemon: TestClient, projects_dir: Path) -> None:
+    settings = load_project("demo", projects_dir=projects_dir)
+    settings.run.integration = "hold"
+    save_project(settings, projects_dir=projects_dir)
+    held = runner.invoke(app, ["run", "next", "demo"])
+    assert held.exit_code == 0, held.output
+    assert "spool run integrate demo T07" in held.output.splitlines()[-1]
+
+    result = runner.invoke(app, ["run", "integrate", "demo", "T07"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert any(line.startswith("T07 · integrate · merged ") for line in lines)
+    assert lines[-1] == "T07 · done"
+    again = runner.invoke(app, ["run", "integrate", "demo", "T07"])
+    assert again.exit_code == 1
+    assert "error: T07 is done, not awaiting approval" in again.output
 
 
 def test_status_of_an_active_run(monkeypatch: pytest.MonkeyPatch) -> None:

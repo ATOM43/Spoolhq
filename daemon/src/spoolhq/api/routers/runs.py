@@ -1,6 +1,7 @@
-"""Run endpoints: start, pause, resume and cancel a project's run, discard a ticket's
-leftover worktree, and read the current run (token required). Thin: the work is
-``services.runloop.RunLoop``'s; the full REST and WebSocket API comes in T19.
+"""Run endpoints: start, pause, resume and cancel a project's run, integrate an approved
+ticket, discard a ticket's leftover worktree, and read the current run (token
+required). Thin: the work is ``services.runloop.RunLoop``'s; the full REST and
+WebSocket API comes in T19.
 """
 
 from collections.abc import Iterator
@@ -53,6 +54,12 @@ def resume_run(name: str, run_id: int, request: Request) -> RunView:
 def cancel_run(name: str, run_id: int, request: Request) -> RunView:
     with _errors():
         return RunView.of(_loop(request).cancel(name, run_id))
+
+
+@router.post("/tickets/{ticket_id}/integrate")
+def integrate_ticket(name: str, ticket_id: str, request: Request) -> RunView:
+    with _errors():
+        return RunView.of(_loop(request).integrate_ticket(name, ticket_id))
 
 
 @router.post("/tickets/{ticket_id}/discard")

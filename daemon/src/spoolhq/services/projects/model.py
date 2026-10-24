@@ -129,6 +129,13 @@ class GatesSettings(_Strict):
     timeouts: GateTimeouts = Field(default_factory=GateTimeouts)
 
 
+class RunSettings(_Strict):
+    """``integration``: ``local`` merges approved tickets into the default branch;
+    ``hold`` waits for ``spool run integrate`` (docs/integration.md)."""
+
+    integration: Literal["local", "hold"] = "local"
+
+
 class Tracker(_Strict):
     kind: Literal["clickup"] = "clickup"
     list_id: NonEmptyStr
@@ -147,6 +154,7 @@ class Project(_Strict):
     tracker: Tracker | None = None
     context: ContextSettings = Field(default_factory=ContextSettings)
     gates: GatesSettings = Field(default_factory=GatesSettings)
+    run: RunSettings = Field(default_factory=RunSettings)
 
     @property
     def repo_path(self) -> Path:

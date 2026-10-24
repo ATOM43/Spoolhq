@@ -1,7 +1,8 @@
 """The run loop's values: the context one run works in, how it ends, and its errors."""
 
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -11,10 +12,11 @@ from typing import TYPE_CHECKING
 from spoolhq.core.daemon_lock import DaemonLock
 from spoolhq.services.agents import AgentRunner
 from spoolhq.services.gates import GateRun
-from spoolhq.services.git import Worktree, WorktreeManager
-from spoolhq.services.projects import Project
+from spoolhq.services.git import GitError, Worktree, WorktreeManager
+from spoolhq.services.projects import Project, ProjectError
 from spoolhq.services.runs import Attempt, EventKind, Run, RunLog, Usage
-from spoolhq.services.tickets import Ticket
+from spoolhq.services.scheduler import SchedulerError
+from spoolhq.services.tickets import Ticket, TicketError
 
 if TYPE_CHECKING:
     from spoolhq.services.runloop.integrator import Integrator
@@ -25,6 +27,15 @@ GatesFn = Callable[[Path, Mapping[str, str], Mapping[str, float], Path], GateRun
 
 class RunLoopError(Exception):
     """A request the run loop refuses: nothing to run, a run already active, a bad state."""
+
+
+@contextmanager
+def user_errors() -> Iterator[None]:
+    """Errors from the other services become RunLoopError, whose message is for the user."""
+    try:
+        yield
+    except (ProjectError, TicketError, SchedulerError, GitError) as exc:
+        raise RunLoopError(str(exc)) from exc
 
 
 class NotFoundError(RunLoopError):

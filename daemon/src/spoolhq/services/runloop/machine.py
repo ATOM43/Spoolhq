@@ -25,7 +25,13 @@ from spoolhq.services.context import (
     extract_progress_note,
 )
 from spoolhq.services.gates import GateRun, check_done_when
-from spoolhq.services.git import run_git
+from spoolhq.services.git import (
+    conclude_merge,
+    conflict_files,
+    merge_head,
+    run_git,
+    unresolved_files,
+)
 from spoolhq.services.review import GateLine, ReviewInputs, ReviewResult, review
 from spoolhq.services.runloop.integrator import IntegrationStatus
 from spoolhq.services.runloop.model import Ending, EndKind, RunContext
@@ -184,14 +190,22 @@ def previous_attempt(ctx: RunContext, kind: AttemptKind) -> PreviousAttempt | No
     if ArtifactName.REVIEW.value in files:
         reviewed = json.loads(files[ArtifactName.REVIEW.value].read_text(encoding="utf-8"))
     note = None
-    if "stopped" in gates:
+    conflicts: tuple[str, ...] = ()
+    if kind is AttemptKind.CONFLICT_RETRY:
+        conflicts = conflict_files(ctx.worktree.path)
         note = (
-            f"SpoolHQ: your last attempt stopped before the checks ran ({gates['stopped']}). "
+            f"SpoolHQ merged the latest {ctx.project.default_branch} into your branch and these "
+            "files conflict. Resolve every conflict marker in them and keep the intent of both "
+            "sides; don't run git commands that change anything."
+        )
+    elif "stopped" in gates:
+        note = (
+            f"Your last attempt stopped before the checks ran ({gates['stopped']}). "
             "Your changes so far are committed; continue from them."
         )
     elif "stopped" in reviewed:
         note = (
-            f"SpoolHQ: the reviewer stopped before giving a verdict ({reviewed['stopped']}). "
+            f"The reviewer stopped before giving a verdict ({reviewed['stopped']}). "
             'Check your work against every "Done when" item.'
         )
     tests = [name for result in gates.get("results", []) for name in result["failing_tests"]]
@@ -205,7 +219,8 @@ def previous_attempt(ctx: RunContext, kind: AttemptKind) -> PreviousAttempt | No
             for item in reviewed.get("items", [])
             if not item["met"]
         ),
-        user_note=note,
+        conflict_files=conflicts,
+        system_note=note,
     )
 
 
@@ -278,7 +293,10 @@ def implement(ctx: RunContext, attempt: Attempt) -> tuple[RunResult, str]:
 def commit(ctx: RunContext, attempt: Attempt, label: str) -> None:
     """Commit everything in the worktree; the files changed come from git."""
     before = _git(ctx, "rev-parse", "HEAD").strip()
-    sha = ctx.worktrees.commit_all(ctx.worktree, f"spool: {ctx.ticket_id} attempt {attempt.number}")
+    message = f"spool: {ctx.ticket_id} attempt {attempt.number}"
+    sha = ctx.worktrees.commit_all(ctx.worktree, message)
+    if sha is None and merge_head(ctx.worktree.path):  # a resolved merge with no change
+        sha = conclude_merge(ctx.worktree.path, message)
     files = _git(ctx, "diff", "--name-only", before, sha).splitlines() if sha else []
     text = f"{sha[:7]} ({len(files)} files)" if sha else "no changes"
     ctx.phase("commit", f"{label} · commit · {text}", attempt)
@@ -353,25 +371,50 @@ def run_review(ctx: RunContext, attempt: Attempt, gate_run: GateRun) -> ReviewRe
     return result if _worktree_state(ctx) == before else None
 
 
-def integrate(ctx: RunContext) -> Ending:
-    """Hand the approved work to the integrator (T14; held until then)."""
+def integrate(ctx: RunContext) -> Step:
+    """Hand the approved work to the integrator. A conflict goes back to the implementer
+    once, and gates failing on the merged code use the gate retries."""
     result = ctx.integrator.integrate(ctx)
     tid = ctx.ticket_id
     if result.status is IntegrationStatus.MERGED:
-        ctx.phase("integrate", f"{tid} · integrate · merged")
+        detail = f" {result.message}" if result.message else ""
+        ctx.phase("integrate", f"{tid} · integrate · merged{detail}")
         return Ending(EndKind.DONE)
     if result.status is IntegrationStatus.HELD:
         ctx.phase("integrate", result.message)
         return Ending(EndKind.HELD, result.message)
     ctx.phase("integrate", f"{tid} · integrate · {result.status}")
-    return Ending(EndKind.BLOCKED, f"integration {result.status}: {result.message}")
+    if result.status is IntegrationStatus.GATES_FAILED:
+        return retry_or_block(ctx, AttemptKind.GATE_RETRY, "gates failed", result.message)
+    if result.status is IntegrationStatus.CONFLICT and not any(
+        attempt.kind is AttemptKind.CONFLICT_RETRY
+        and attempt.status is not AttemptStatus.INTERRUPTED
+        for attempt in ctx.run_log.list_attempts(ctx.run.id)
+    ):
+        return AttemptKind.CONFLICT_RETRY
+    return Ending(EndKind.BLOCKED, result.message)
+
+
+def check_resolved(ctx: RunContext, attempt: Attempt, conflicted: tuple[str, ...]) -> Ending | None:
+    """After a conflict retry: nothing unmerged and no marker left, else blocked."""
+    left = unresolved_files(ctx.worktree.path, conflicted)
+    if not left:
+        return None
+    ctx.run_log.finish_attempt(attempt.id, AttemptStatus.CONFLICT)
+    return Ending(EndKind.BLOCKED, f"merge conflict with main in: {', '.join(left)}")
 
 
 def attempt_once(ctx: RunContext, attempt: Attempt) -> Step:
     """One attempt: implement, commit, gates, review. The next step of the run."""
     label = f"{ctx.ticket_id} attempt {attempt.number}"
     ctx.phase("implement", f"{label} · implement ({attempt.kind})", attempt)
+    resolving = attempt.kind is AttemptKind.CONFLICT_RETRY
+    conflicted = conflict_files(ctx.worktree.path) if resolving else ()
     result, final_text = implement(ctx, attempt)
+    if resolving and result.outcome in (Outcome.COMPLETED, *EARLY_STOPS):
+        # Committing would conclude the merge, so the markers are checked first.
+        if ending := check_resolved(ctx, attempt, conflicted):
+            return ending
     if result.outcome in EARLY_STOPS:
         commit(ctx, attempt, label)  # keep what it did; the retry continues from it
     if result.outcome is not Outcome.COMPLETED:
@@ -416,16 +459,13 @@ def attempt_once(ctx: RunContext, attempt: Attempt) -> Step:
 
 
 def drive(ctx: RunContext, kind: AttemptKind | None) -> Ending:
-    """Run attempts from ``kind`` until the run ends; ``None`` only integrates."""
-    if kind is None:
-        return integrate(ctx)
-    while True:
+    """Run attempts from ``kind`` until the run ends; ``None`` starts at the integration."""
+    step: Step = integrate(ctx) if kind is None else kind
+    while not isinstance(step, Ending):
         if ending := interrupted(ctx, None):
             return ending
         if reason := over_budget(ctx):
             return Ending(EndKind.BLOCKED, reason)
-        attempt = ctx.run_log.start_attempt(ctx.run.id, kind, backend=ctx.agents.implementer.name)
+        attempt = ctx.run_log.start_attempt(ctx.run.id, step, backend=ctx.agents.implementer.name)
         step = attempt_once(ctx, attempt)
-        if isinstance(step, Ending):
-            return step
-        kind = step
+    return step

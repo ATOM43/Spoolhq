@@ -67,6 +67,12 @@ Files with conflicts:
 - {{ path | code }}
 {% endfor %}
 {% endif %}
+{% if previous.system_note %}
+
+Note from SpoolHQ:
+
+{{ previous.system_note }}
+{% endif %}
 {% if previous.user_note %}
 
 Note from the user:
