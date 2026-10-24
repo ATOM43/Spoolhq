@@ -79,7 +79,7 @@ If an override renders more than `max_chars` despite the trimming, `build_implem
 
 ## The progress note
 
-The agent ends its final message with exactly one `<progress>…</progress>` block of 1–3 sentences saying what the ticket added. It comes back in the message, not as a file, so it can never end up in the ticket's diff.
+The agent ends its final message with exactly one `<progress>…</progress>` block of 1–3 sentences saying what the ticket added. It comes back in the message, not as a file, so it can never end up in the ticket's diff. The prompt also tells the agent not to edit `PROGRESS.md` itself: in M1 it did, and the merge then held two T29 entries.
 
 - `extract_progress_note(final_text)` returns the last block's text (tags in any case), stripped, with whitespace collapsed to single spaces and cut to at most 1,000 characters at a word boundary, ending with `…`. No block, or an empty one, gives `None`.
 - `format_progress_entry(ticket_id, title, note, merged_on)` gives the entry integration appends to the repository's `PROGRESS.md` in the ticket's squash commit ([integration](integration.md#progressmd)):

@@ -344,3 +344,5 @@ The daemon binds to 127.0.0.1.
 ## When you're done
 
 End your final message with exactly one `<progress>…</progress>` block of 1–3 sentences saying what this ticket added, for the next agent to read.
+
+Don't edit `PROGRESS.md`; end with the `<progress>` block and SpoolHQ adds the entry.

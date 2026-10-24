@@ -190,13 +190,6 @@ Structure only; no routes, commands, UI or security rules changed.
 
 - The implementer no longer gets `install` (`Commands.for_implementer()`); the diff guard drops `.pnpm-store/`, `.npm/` and `.yarn/cache/` and blocks symlinks pointing outside the repo; the reviewer ignores sandbox placeholder files (with a new prompt snapshot); `.gitignore` ignores `.pnpm-store/`; DECISIONS 195–199.
 
-## T29 · Commit and tag in `spool run status`
-
-- `services/runs/journal.py`: `last_integration(run_log)`, the newest `done` integration. `services/runloop/`: `Merged` (`ticket_id`, `commit`, `tag`) and `last_merged(run_log)` in `integration.py`; `Current.last_merged`, filled by `RunLoop.current`.
-- API: `runs/current` returns `last_merged` (`ticket_id`, full `commit`, `tag`, or `null`). CLI: with no active run, `spool run status` prints `no active run in 'demo'` and then `last merged: T07 · 1a2b3c4 · ticket/T07`.
-- Docs: `docs/run-loop.md`; DECISIONS 200.
-- Tests: `last_integration` (none, committed only, abandoned skipped, the newest done); the CLI after a real merge through the in-process daemon (the sha checked against `ticket/T07` and `main`) and with a canned response; the API's empty `last_merged`.
-
 ## T29 · Show the commit and tag in spool run status after a merge (2026-10-24)
 
 T29 made `spool run status` show `last merged: ticket · short sha · ticket/id` under `no active run in 'project'`. The data comes from the newest finished row in the integration journal (`last_integration` → `last_merged` → `Current.last_merged`), and `runs/current` returns it as `last_merged`. A CLI test after a real merge covers it.

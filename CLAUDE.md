@@ -7,7 +7,7 @@ Conventions for coding agents (and humans) changing SpoolHQ.
 - **Never commit secrets**: no API keys, tokens, `.env` files or personal paths.
 - **Keep changes inside the ticket's scope.** If you find something else that needs doing, note it in your report instead of doing it.
 - **Work directly on main. No branches, no pull requests.** See `CONTRIBUTING.md`.
-- Record notable choices in `DECISIONS.md` and add a `PROGRESS.md` entry for each finished ticket.
+- Record notable choices in `DECISIONS.md` and add a `PROGRESS.md` entry for each finished ticket. Agents started by SpoolHQ leave `PROGRESS.md` alone: SpoolHQ adds the entry from their `<progress>` block when it merges.
 
 ## Code graph
 
