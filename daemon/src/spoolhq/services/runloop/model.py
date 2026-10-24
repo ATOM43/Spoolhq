@@ -122,6 +122,15 @@ class Active:
 
 
 @dataclass(frozen=True)
+class Merged:
+    """The last ticket merged into the default branch: its squash commit and tag."""
+
+    ticket_id: str
+    commit: str
+    tag: str
+
+
+@dataclass(frozen=True)
 class Current:
     """``runs/current``: the active run, or the project's latest one."""
 
@@ -133,6 +142,8 @@ class Current:
     usage: Usage | None
     phases: tuple[tuple[int, str], ...]
     """``(event id, line)`` for each phase change of ``run``."""
+    last_merged: Merged | None = None
+    """The most recently finished integration in the project, if any."""
 
 
 def record_phase(

@@ -18,7 +18,7 @@ from spoolhq.services.gates import run_gates
 from spoolhq.services.git import GitError, Worktree, WorktreeManager, ensure_clean
 from spoolhq.services.git import ensure_no_operation_in_progress as ensure_no_operation
 from spoolhq.services.projects import Project, load_project, project_dir
-from spoolhq.services.runloop.integration import LocalIntegrator
+from spoolhq.services.runloop.integration import LocalIntegrator, last_merged
 from spoolhq.services.runloop.integrator import HoldForIntegration, Integrator
 from spoolhq.services.runloop.lock import active_message, take_run_lock
 from spoolhq.services.runloop.machine import drive, next_kind
@@ -466,6 +466,7 @@ class RunLoop:
                 for event in events
                 if event.kind is EventKind.RUN_PHASE
             ),
+            last_merged=last_merged(run_log),
         )
 
     def wait(self, project: str, timeout: float | None = None) -> None:

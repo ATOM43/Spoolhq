@@ -13,7 +13,7 @@ from spoolhq.cli.main import app
 from spoolhq.services.agents import FakeRunner
 from spoolhq.services.projects import load_project, save_project
 from spoolhq.services.runloop import Agents
-from tests.conftest import REVIEW_FIXTURES
+from tests.conftest import REVIEW_FIXTURES, run_git
 
 runner = CliRunner()
 
@@ -43,7 +43,7 @@ def test_status_with_no_run(daemon: TestClient) -> None:
 
 
 @pytest.mark.integration
-def test_next_follows_the_run_to_its_end(daemon: TestClient) -> None:
+def test_next_follows_the_run_to_its_end(daemon: TestClient, git_repo: Path) -> None:
     result = runner.invoke(app, ["run", "next", "demo"])
 
     assert result.exit_code == 0, result.output
@@ -55,7 +55,13 @@ def test_next_follows_the_run_to_its_end(daemon: TestClient) -> None:
     assert "T07 attempt 1 · review · approve" in lines
     assert any(line.startswith("T07 · integrate · merged ") for line in lines)
     assert lines[-1] == "T07 · done"
-    assert runner.invoke(app, ["run", "status", "demo"]).output == "no active run in 'demo'\n"
+    status = runner.invoke(app, ["run", "status", "demo"])
+    sha = run_git(git_repo, "rev-parse", "ticket/T07").strip()
+    assert sha == run_git(git_repo, "rev-parse", "main").strip()
+    assert status.exit_code == 0
+    assert status.output == (
+        f"no active run in 'demo'\nlast merged: T07 · {sha[:7]} · ticket/T07\n"
+    )
 
 
 @pytest.mark.integration
@@ -95,6 +101,21 @@ def test_status_of_an_active_run(monkeypatch: pytest.MonkeyPatch) -> None:
         "run 12 · T04 · paused · 2 attempts · 1,234 tokens\n"
         "T04 · paused · the implementer hit a usage limit\n"
     )
+
+
+def test_status_after_a_merge_shows_the_last_merged_ticket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current = {
+        "active": False,
+        "run": {"id": 3, "ticket_id": "T04", "status": "done"},
+        "last_merged": {"ticket_id": "T04", "commit": "0123456789abcdef" * 2, "tag": "ticket/T04"},
+    }
+    monkeypatch.setattr(run_cli, "_call", lambda method, path, body=None: current)
+
+    result = runner.invoke(app, ["run", "status", "demo"])
+
+    assert result.output == "no active run in 'demo'\nlast merged: T04 · 0123456 · ticket/T04\n"
 
 
 def test_errors_from_the_daemon_exit_1(daemon: TestClient) -> None:

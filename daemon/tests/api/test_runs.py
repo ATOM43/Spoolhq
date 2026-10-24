@@ -55,6 +55,7 @@ def test_current_with_no_run(run_client: TestClient, token: str) -> None:
         "input_tokens": 0,
         "output_tokens": 0,
         "phases": [],
+        "last_merged": None,
     }
 
 

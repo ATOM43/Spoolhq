@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from spoolhq.services.runloop import Current
+from spoolhq.services.runloop import Current, Merged
 from spoolhq.services.runs import Run
 
 
@@ -44,6 +44,17 @@ class PhaseLine(BaseModel):
     text: str
 
 
+class MergedView(BaseModel):
+    ticket_id: str
+    commit: str
+    """The squash commit's full sha on the default branch."""
+    tag: str
+
+    @classmethod
+    def of(cls, merged: Merged) -> "MergedView":
+        return cls(ticket_id=merged.ticket_id, commit=merged.commit, tag=merged.tag)
+
+
 class CurrentRun(BaseModel):
     project: str
     active: bool
@@ -56,6 +67,8 @@ class CurrentRun(BaseModel):
     input_tokens: int
     output_tokens: int
     phases: list[PhaseLine]
+    last_merged: MergedView | None = None
+    """The ticket the project's latest finished integration merged."""
 
     @classmethod
     def of(cls, current: Current) -> "CurrentRun":
@@ -69,6 +82,7 @@ class CurrentRun(BaseModel):
             input_tokens=usage.input_tokens if usage else 0,
             output_tokens=usage.output_tokens if usage else 0,
             phases=[PhaseLine(id=event_id, text=text) for event_id, text in current.phases],
+            last_merged=MergedView.of(current.last_merged) if current.last_merged else None,
         )
 
 

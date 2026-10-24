@@ -26,6 +26,7 @@ from spoolhq.services.runs.files import (
 from spoolhq.services.runs.journal import (
     Integration,
     IntegrationState,
+    last_integration,
     open_integrations,
     set_integration_state,
     start_integration,
@@ -73,6 +74,7 @@ __all__ = [
     "attempt_dir",
     "attempt_files",
     "format_ts",
+    "last_integration",
     "open_integrations",
     "recover_interrupted",
     "set_integration_state",

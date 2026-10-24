@@ -115,3 +115,14 @@ def open_integrations(run_log: RunLog) -> list[Integration]:
             tuple(state.value for state in OPEN_STATES),
         ).fetchall()
     return [_to_integration(row) for row in rows]
+
+
+def last_integration(run_log: RunLog) -> Integration | None:
+    """The integration that finished (``done``) most recently, if any."""
+    with run_log.transaction() as tx:
+        row = tx.conn.execute(
+            f"SELECT {COLUMNS} FROM integrations WHERE state = ? "  # noqa: S608 - constant columns
+            "ORDER BY updated_at DESC, id DESC LIMIT 1",
+            (IntegrationState.DONE.value,),
+        ).fetchone()
+    return _to_integration(row) if row is not None else None

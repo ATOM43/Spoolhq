@@ -45,13 +45,14 @@ from spoolhq.services.git import (
 from spoolhq.services.projects import Project
 from spoolhq.services.runloop.integrator import IntegrationResult, IntegrationStatus
 from spoolhq.services.runloop.machine import run_gates
-from spoolhq.services.runloop.model import RunContext
+from spoolhq.services.runloop.model import Merged, RunContext
 from spoolhq.services.runs import (
     EventKind,
     Integration,
     IntegrationState,
     RunLog,
     RunStatus,
+    last_integration,
     open_integrations,
     set_integration_state,
     start_integration,
@@ -73,6 +74,14 @@ Checkpoint = Callable[[str], None]
 
 def tag_name(ticket_id: str) -> str:
     return f"ticket/{ticket_id}"
+
+
+def last_merged(run_log: RunLog) -> Merged | None:
+    """The ticket the latest finished integration merged, with its commit and tag."""
+    journal = last_integration(run_log)
+    if journal is None or journal.commit_sha is None:
+        return None
+    return Merged(journal.ticket_id, journal.commit_sha, tag_name(journal.ticket_id))
 
 
 def _hint(project: str, ticket_id: str) -> str:

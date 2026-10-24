@@ -134,7 +134,7 @@ All routes need the token. Unknown projects, runs and tickets give 404; refusals
 | `POST /api/projects/{name}/runs/{id}/cancel` | cancel |
 | `POST /api/projects/{name}/tickets/{id}/integrate` | integrate a ticket waiting in `awaiting_approval` ([integration](integration.md#spool-run-integrate)) |
 | `POST /api/projects/{name}/tickets/{id}/discard` | discard an interrupted or blocked ticket's worktree |
-| `GET /api/projects/{name}/runs/current` | `active`, `working`, the active (else latest) run, its attempts, tokens and phase lines |
+| `GET /api/projects/{name}/runs/current` | `active`, `working`, the active (else latest) run, its attempts, tokens and phase lines, and `last_merged` (`ticket_id`, full `commit`, `tag` of the latest finished integration, or `null`) |
 
 ```sh
 spool run next <project> [<ticket>]     # start, then follow: one line per phase change
@@ -144,6 +144,8 @@ spool run integrate <project> <ticket>
 spool run discard <project> <ticket>
 spool run status <project>              # or: no active run in 'demo'
 ```
+
+With no active run, `spool run status` adds the last merged ticket once a ticket has been integrated: `last merged: T04 · 1a2b3c4 · ticket/T04` (the squash commit's first 7 hex digits and its tag).
 
 `next`, `all`, `resume` and `integrate` poll `runs/current` once a second until no worker is on the run, and exit 1 if it ended `blocked` or `cancelled`. Ctrl-C detaches and prints `run continues in the daemon; spool run status to check`; it does not cancel.
 

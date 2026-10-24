@@ -28,6 +28,7 @@ POLL_S = 1.0
 # Starting a run creates its worktree; give the daemon more than the default 5 s.
 TIMEOUT_S = 60.0
 DETACHED = "run continues in the daemon; spool run status to check"
+SHORT_SHA = 7
 
 
 def _client() -> ApiClient:
@@ -138,11 +139,15 @@ def discard_command(
 
 @run_app.command("status")
 def status_command(project: ProjectArg) -> None:
-    """Show the project's active run."""
+    """Show the project's active run, or else the last ticket merged."""
     current = _call("GET", f"{_base(project)}/runs/current")
     run = current["run"]
     if not current["active"] or run is None:
         typer.echo(f"no active run in '{project}'")
+        merged = current.get("last_merged")
+        if merged is not None:
+            sha = merged["commit"][:SHORT_SHA]
+            typer.echo(f"last merged: {merged['ticket_id']} · {sha} · {merged['tag']}")
         return
     tokens = current["input_tokens"] + current["output_tokens"]
     typer.echo(
