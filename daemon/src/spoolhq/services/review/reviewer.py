@@ -129,6 +129,7 @@ def review(
             diff_trimmed=trimmed,
             input_tokens=sum(r.input_tokens for r in results),
             output_tokens=sum(r.output_tokens for r in results),
+            cache_read_tokens=sum(r.cache_read_tokens for r in results),
             cost_micro_usd=sum(costs) if costs else None,
             reset_at=results[-1].reset_at,
             **fields,

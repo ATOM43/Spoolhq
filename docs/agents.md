@@ -150,7 +150,7 @@ The `rate_limit_event` fields, as observed from Claude Code 2.1.302 and in the A
 
 ## Cost and tokens
 
-- **Tokens**: `input_tokens` counts every input token: uncached, cache writes and cache reads; `output_tokens` the output. They come from the `result` message's `usage`, or, without one, from the assistant messages, each message id counted once. `Usage` events keep the breakdown. The `max_tokens` budget compares input plus output.
+- **Tokens**: `input_tokens` counts every input token: uncached, cache writes and cache reads; `cache_read_tokens` the part of it read from the cache; `output_tokens` the output. They come from the `result` message's `usage`, or, without one, from the assistant messages, each message id counted once. `Usage` events keep the breakdown. The `max_tokens` budget compares weighted tokens: input plus output, with cache reads counting a tenth.
 - **Cost**: subscription runs report `cost_micro_usd=None`, even though Claude Code prints an estimate. API-key runs report `total_cost_usd` converted to integer micro-USD with `Decimal` (`0.0123` → `12300`), like the run log stores it.
 
 ## The fake runner

@@ -25,7 +25,7 @@ runs_app = typer.Typer(
 
 ProjectArg = Annotated[str, typer.Argument(help="Project name.")]
 
-LIST_COLUMNS = ("ID", "TICKET", "STATUS", "STARTED", "ATTEMPTS", "TOKENS")
+LIST_COLUMNS = ("ID", "TICKET", "STATUS", "STARTED", "ATTEMPTS", "TOKENS", "WEIGHTED")
 ATTEMPT_COLUMNS = ("#", "KIND", "STATUS", "INPUT", "OUTPUT", "COST", "FOLDER")
 NONE = "-"
 
@@ -62,7 +62,10 @@ def _cost(micro_usd: int | None) -> str:
 
 
 def _tokens(usage: Usage) -> str:
-    return f"{usage.input_tokens} in · {usage.output_tokens} out"
+    return (
+        f"{usage.input_tokens} in · {usage.output_tokens} out · "
+        f"{usage.cache_read_tokens} cache reads · {usage.weighted_tokens} weighted"
+    )
 
 
 @runs_app.command("list")
@@ -91,6 +94,7 @@ def list_command(
                         run.started_at,
                         str(len(attempts)),
                         str(usage.total_tokens),
+                        str(usage.weighted_tokens),
                     )
                 )
     if not rows:

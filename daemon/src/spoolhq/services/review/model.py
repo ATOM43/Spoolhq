@@ -65,6 +65,7 @@ class ReviewResult:
     output_tokens: int
     cost_micro_usd: int | None
     reset_at: datetime | None
+    cache_read_tokens: int = 0
 
     def unmet(self) -> tuple[ItemVerdict, ...]:
         """The items that are not met, for T10's ``review_notes`` on a retry."""

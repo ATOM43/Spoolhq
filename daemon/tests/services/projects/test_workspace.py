@@ -70,6 +70,7 @@ def test_valid_project_loads(projects_dir: Path, git_repo: Path) -> None:
     assert project.merge_policy.always_pr is False
     assert project.git.remote is None
     assert project.context.max_chars == 120_000
+    assert (project.context.progress_entries, project.context.decisions_lines) == (3, 20)
     assert project.gates.timeouts.model_dump() == {"install": 600, "lint": 300, "test": 900}
     assert project.run.integration == "local"
 
@@ -177,6 +178,8 @@ def test_missing_required_field_is_named(projects_dir: Path, git_repo: Path, fie
         ("run.integration", "github", "must be one of 'local' or 'hold'"),
         ("context.max_chars", 10000, "must be at least 20000"),
         ("context.max_chars", 2_000_001, "must be at most 2000000"),
+        ("context.progress_entries", 0, "must be at least 1"),
+        ("context.decisions_lines", 10_001, "must be at most 10000"),
         ("gates.timeouts.test", 5, "must be at least 10"),
         ("gates.timeouts.install", 7_201, "must be at most 7200"),
         ("commands.test", "just test && rm -rf /", SHELL_SYNTAX),

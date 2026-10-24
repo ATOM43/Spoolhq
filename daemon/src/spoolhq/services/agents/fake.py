@@ -95,7 +95,7 @@ class FakeRunner:
             self._apply_writes(parser, message)
             for event in events:
                 on_event(event)
-            if budget.max_tokens is not None and parser.total_tokens > budget.max_tokens:
+            if budget.max_tokens is not None and parser.weighted_tokens > budget.max_tokens:
                 return parser.finish(Outcome.BUDGET_EXHAUSTED)
         return parser.finish()
 

@@ -23,6 +23,9 @@ ENV_SET = {
     # the agent runs.
     "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",  # SCRUB_VAR
     "DISABLE_AUTOUPDATER": "1",
+    # pnpm 10 would otherwise try to install from the network before each `pnpm run`;
+    # the deps come from the gates' install.
+    "npm_config_verify_deps_before_run": "false",
 }
 # With CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1, Claude Code 2.1.302 reports (and uses) the
 # "default" mode instead of dontAsk. With --permission-prompts none, every call that

@@ -138,7 +138,7 @@ def test_usage_is_counted_once_per_message_id(worktree: Path) -> None:
         Usage(input_tokens=100, output_tokens=10, cache_read_tokens=0, cache_creation_tokens=0),
         Usage(input_tokens=50, output_tokens=5, cache_read_tokens=0, cache_creation_tokens=0),
     ]
-    assert parser.total_tokens == 165
+    assert parser.weighted_tokens == 165
     # Without a result message, the totals come from the assistant messages.
     run = parser.finish()
     assert (run.input_tokens, run.output_tokens, run.num_turns) == (150, 15, 2)
@@ -475,3 +475,54 @@ def test_exact_tools_requires_every_requested_tool(worktree: Path) -> None:
     with pytest.raises(PolicyViolation, match=r"missing requested tools: \['Grep'\]"):
         parser.feed(init)
     parser.feed({**init, "tools": ["Grep", "Read", "Glob"]})
+
+
+# --- weighted tokens ----------------------------------------------------------------
+
+# T29's implementer, per call: (input, output, cache read, cache write), from its transcript.
+T29_CALLS = [
+    (2, 5, 5379, 25202), (2, 16, 30581, 740), (2, 9, 31321, 5463), (2, 5, 36784, 4454),
+    (2, 16, 41238, 850), (2, 8, 42088, 7669), (2, 16, 49757, 2065), (2, 8, 51822, 1179),
+    (2, 8, 53001, 1840), (2, 37, 54841, 1877), (2, 38, 56718, 504), (2, 24, 57222, 1905),
+    (2, 5, 59127, 493), (2, 3, 59620, 1151), (2, 16, 60771, 1027), (2, 6, 61798, 618),
+    (2, 16, 62416, 1153), (2, 16, 63569, 1086), (2, 2, 64655, 976), (2, 2, 65631, 1371),
+    (2, 17, 67002, 475), (2, 3, 67477, 589), (2, 8, 68066, 2022), (2, 16, 70088, 691),
+    (2, 7, 70779, 4870), (2, 10, 75649, 960), (2, 9, 76609, 3964), (2, 3, 80573, 3572),
+    (2, 16, 84145, 1709), (2, 16, 85854, 449), (2, 16, 86303, 812), (2, 8, 87115, 1136),
+    (2, 8, 88251, 642), (2, 6, 88893, 1072),
+]  # fmt: skip
+
+
+def test_t29_weighs_cache_reads_at_a_tenth(worktree: Path) -> None:
+    parser = ClaudeStreamParser(worktree, billing="subscription")
+    calls = [
+        assistant(
+            message_id=f"m{n}",
+            input_tokens=i,
+            output_tokens=o,
+            cache_read_input_tokens=cr,
+            cache_creation_input_tokens=cc,
+        )
+        for n, (i, o, cr, cc) in enumerate(T29_CALLS)
+    ]
+    replay(parser, [INIT, *calls])
+    # About 2.2M raw, but 2.1M of it is cache reads: about 300k weighted.
+    assert parser.input_tokens + parser.output_tokens == 2_190_196
+    assert parser.cache_read_tokens == 2_105_143
+    assert parser.weighted_tokens == 68 + 399 + 84_586 + 210_514 == 295_567
+
+    # The result's usage (T29's real totals) wins over the per-call sums.
+    final = {
+        "input_tokens": 68,
+        "output_tokens": 16221,
+        "cache_read_input_tokens": 2_105_143,
+        "cache_creation_input_tokens": 84_586,
+    }
+    replay(parser, [result(usage=final)])
+    run = parser.finish()
+    assert (run.input_tokens, run.output_tokens, run.cache_read_tokens) == (
+        2_189_797,
+        16_221,
+        2_105_143,
+    )
+    assert run.weighted_tokens == 311_389

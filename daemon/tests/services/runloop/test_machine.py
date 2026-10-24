@@ -284,9 +284,30 @@ def test_budget_used_up_blocks_before_the_next_attempt(
     # Attempt 1 used 1,250 tokens; attempt 2 got the 750 left and stopped at 1,250.
     assert (final.status, final.reason) == (
         RunStatus.BLOCKED,
-        "budget used up: 2,500 of 2,000 tokens",
+        "budget used up: 2,500 of 2,000 weighted tokens",
     )
     assert len(log.list_attempts(run.id)) == 2
+
+
+def test_budget_counts_cache_reads_at_a_tenth(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    registry: RunRegistry,
+    projects_dir: Path,
+) -> None:
+    settings = load_project("demo", projects_dir=projects_dir)
+    settings.agents.budget_per_ticket = ProjectBudget(tokens=2000)
+    save_project(settings, projects_dir=projects_dir)
+    implement = transcripts.implement(tokens=250, cache_reads=10_000)
+    loop, _ = make_loop([implement, implement, implement], gates=[failing("tests/t.py::test_a")])
+
+    run = run_once(loop)
+
+    log = log_of(registry)
+    # Each attempt: 10,312 raw tokens, 1,312 weighted. Raw counting would stop after one.
+    assert log.get_run(run.id).reason == "budget used up: 2,624 of 2,000 weighted tokens"
+    assert len(log.list_attempts(run.id)) == 2
+    assert log.run_usage(run.id).cache_read_tokens == 20_000
 
 
 def test_reviewer_that_changes_the_worktree_blocks(

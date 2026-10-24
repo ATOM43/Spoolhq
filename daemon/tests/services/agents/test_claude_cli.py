@@ -264,6 +264,17 @@ def test_environment_is_scrubbed(
     assert {"PATH", "HOME", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", "DISABLE_AUTOUPDATER"} <= names
 
 
+@pytest.mark.integration
+def test_pnpm_skips_its_dependency_check_in_the_child(
+    tmp_path: Path, policy: AgentPolicy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("npm_config_verify_deps_before_run", raising=False)
+    run(runner(tmp_path), policy)
+    # The record has names only; test_child_env_is_an_allowlist checks the value.
+    names = {name.lower() for name in read_record(tmp_path)["env"]}
+    assert "npm_config_verify_deps_before_run" in names
+
+
 PROXY_AND_CA = {
     "https_proxy": "http://proxy:3128",
     "http_proxy": "http://proxy:3128",

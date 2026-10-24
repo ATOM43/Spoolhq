@@ -110,8 +110,8 @@ def over_budget(ctx: RunContext) -> str | None:
     if budget is None:
         return None
     usage = ctx.run_log.run_usage(ctx.run.id)
-    if budget.tokens is not None and usage.total_tokens >= budget.tokens:
-        return f"budget used up: {usage.total_tokens:,} of {budget.tokens:,} tokens"
+    if budget.tokens is not None and usage.weighted_tokens >= budget.tokens:
+        return f"budget used up: {usage.weighted_tokens:,} of {budget.tokens:,} weighted tokens"
     if budget.usd is not None and usage.cost_micro_usd is not None:
         spent = usage.cost_micro_usd / 1_000_000
         if spent >= budget.usd:
@@ -251,6 +251,8 @@ def implementer_prompt(ctx: RunContext, kind: AttemptKind) -> str:
         commands=ctx.project.commands.for_implementer(),
         previous=previous_attempt(ctx, kind),
         max_chars=ctx.project.context.max_chars,
+        progress_entries=ctx.project.context.progress_entries,
+        decisions_lines=ctx.project.context.decisions_lines,
     )
     return build_implementer_prompt(inputs, override_dir=ctx.workspace / PROMPTS_DIR).text
 
@@ -267,7 +269,7 @@ def implement(ctx: RunContext, attempt: Attempt) -> tuple[RunResult, str]:
     budget = ctx.project.agents.budget_per_ticket
     left = None
     if budget is not None and budget.tokens is not None:
-        left = max(budget.tokens - ctx.run_log.run_usage(ctx.run.id).total_tokens, 1)
+        left = max(budget.tokens - ctx.run_log.run_usage(ctx.run.id).weighted_tokens, 1)
     final: list[str] = []
 
     def on_raw(message: dict[str, Any]) -> None:
@@ -285,7 +287,11 @@ def implement(ctx: RunContext, attempt: Attempt) -> tuple[RunResult, str]:
         cancel=ctx.flags.cancel,
     )
     ctx.run_log.record_usage(
-        attempt.id, result.input_tokens, result.output_tokens, result.cost_micro_usd
+        attempt.id,
+        result.input_tokens,
+        result.output_tokens,
+        result.cost_micro_usd,
+        result.cache_read_tokens,
     )
     return result, final[-1] if final else result.summary
 
@@ -363,7 +369,11 @@ def run_review(ctx: RunContext, attempt: Attempt, gate_run: GateRun) -> ReviewRe
         cancel=ctx.flags.cancel,
     )
     ctx.run_log.record_usage(
-        attempt.id, result.input_tokens, result.output_tokens, result.cost_micro_usd
+        attempt.id,
+        result.input_tokens,
+        result.output_tokens,
+        result.cost_micro_usd,
+        result.cache_read_tokens,
     )
     write_artifact(
         attempt, ArtifactName.REVIEW, json.dumps(dataclasses.asdict(result), default=str)

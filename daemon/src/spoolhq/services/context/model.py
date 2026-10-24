@@ -8,6 +8,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 DEFAULT_MAX_CHARS = 120_000
+DEFAULT_PROGRESS_ENTRIES = 3
+DEFAULT_DECISIONS_LINES = 20
 ATTEMPT_KINDS: tuple[str, ...] = ("gate_retry", "review_retry", "conflict_retry", "pr_changes")
 
 
@@ -87,10 +89,16 @@ class ContextInputs:
     """The project's stack commands, by name, in the order to list them."""
     previous: PreviousAttempt | None = None
     max_chars: int = DEFAULT_MAX_CHARS
+    progress_entries: int = DEFAULT_PROGRESS_ENTRIES
+    """The newest ``PROGRESS.md`` entries to include, before the character budget."""
+    decisions_lines: int = DEFAULT_DECISIONS_LINES
+    """The newest non-blank ``DECISIONS.md`` lines to include, before the budget."""
 
     def __post_init__(self) -> None:
         if self.max_chars < 1:
             raise ValueError(f"max_chars must be positive, got {self.max_chars}")
+        if self.progress_entries < 1 or self.decisions_lines < 1:
+            raise ValueError("progress_entries and decisions_lines must be positive")
 
 
 @dataclass(frozen=True)

@@ -94,7 +94,12 @@ CREATE TABLE integrations (
 CREATE INDEX integrations_state ON integrations (state);
 """
 
-MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3)
+# Weighted token budget: the part of input_tokens read from the prompt cache.
+_V4 = """
+ALTER TABLE attempts ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+"""
+
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4)
 """Migration ``n`` (1-based) takes the database from version ``n - 1`` to ``n``."""
 
 SCHEMA_VERSION = len(MIGRATIONS)

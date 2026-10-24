@@ -36,6 +36,8 @@ from spoolhq.services.context.budget import (
     cap_excerpt,
     keep_head,
     keep_newest_entries,
+    newest_entries,
+    newest_lines,
     select_spec,
     words,
 )
@@ -252,11 +254,12 @@ _SLOTS: tuple[tuple[str, str, _Trimmer], ...] = (
 
 def _slot_sources(inputs: ContextInputs) -> dict[str, str | None]:
     docs = inputs.repo_docs
+    progress, decisions = docs.progress_md, docs.decisions_md
     return {
         "claude_md": docs.claude_md,
         "spec": inputs.spec,
-        "progress_log": docs.progress_md,
-        "decisions": docs.decisions_md,
+        "progress_log": newest_entries(progress, inputs.progress_entries) if progress else progress,
+        "decisions": newest_lines(decisions, inputs.decisions_lines) if decisions else decisions,
     }
 
 

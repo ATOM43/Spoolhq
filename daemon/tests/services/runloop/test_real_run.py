@@ -5,6 +5,7 @@ with one tiny ticket, real gates (this interpreter's pytest) and the test integr
 Prints the outcome, the attempts and the tokens (run with ``-s`` to see them).
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -13,7 +14,7 @@ import pytest
 from spoolhq.services.agents import ClaudeCliRunner
 from spoolhq.services.projects import init_project, load_project, save_project
 from spoolhq.services.runloop import Agents, RunLoop
-from spoolhq.services.runs import RunRegistry, RunStatus
+from spoolhq.services.runs import RunRegistry, RunStatus, attempt_dir
 from tests.services.agents.test_real_run import REAL, logged_in
 from tests.services.runloop.conftest import Merging
 
@@ -46,6 +47,15 @@ test for it in `test_hello.py`.
 - [ ] `test_hello.py` has a test that calls `hello()`
 - [ ] `{TEST_COMMAND}` passes
 """
+
+
+def model_calls(attempt_dir: Path) -> int:
+    """Distinct assistant message ids in an attempt's transcript (both roles)."""
+    transcript = attempt_dir / "transcript.jsonl"
+    if not transcript.is_file():
+        return 0
+    messages = [json.loads(line) for line in transcript.read_text(encoding="utf-8").splitlines()]
+    return len({m["message"]["id"] for m in messages if m.get("type") == "assistant"})
 
 
 def test_real_run_implements_and_approves_a_tiny_ticket(
@@ -84,6 +94,10 @@ def test_real_run_implements_and_approves_a_tiny_ticket(
     print("\n".join(lines))
     print(f"outcome: {final.status.value} ({final.reason})")
     print("attempts:", [(a.number, a.kind.value, a.status.value) for a in attempts])
-    print(f"tokens: {usage.input_tokens:,} in, {usage.output_tokens:,} out")
+    print(f"model calls: {sum(model_calls(attempt_dir(workspace, a)) for a in attempts)}")
+    print(
+        f"tokens: {usage.input_tokens:,} in ({usage.cache_read_tokens:,} cache reads), "
+        f"{usage.output_tokens:,} out, {usage.weighted_tokens:,} weighted"
+    )
     print(f"progress note: {final.progress_note}")
     assert final.status is RunStatus.DONE, final.reason

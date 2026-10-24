@@ -16,6 +16,7 @@ from typing import Literal
 
 from spoolhq.core.agent_policy import READ_ONLY_GIT
 from spoolhq.core.auth import token_path
+from spoolhq.core.tokens import weighted_tokens
 
 CREDENTIAL_PATHS: tuple[str, ...] = (
     "~/.ssh",
@@ -154,7 +155,7 @@ class Budget:
     max_usd: Decimal | None
     """Estimated spend cap; only API-billed runs can enforce it."""
     max_tokens: int | None
-    """Token cap (input, cached input and output), enforced by the runner."""
+    """Cap on weighted tokens (cache reads count a tenth), enforced by the runner."""
     timeout_s: float = 1800
 
 
@@ -251,6 +252,12 @@ class RunResult:
     error: str | None
     debug: Mapping[str, int] = field(default_factory=dict)
     """Counters for troubleshooting, such as ``unknown_events``."""
+    cache_read_tokens: int = 0
+    """The part of ``input_tokens`` read from the prompt cache."""
+
+    @property
+    def weighted_tokens(self) -> int:
+        return weighted_tokens(self.input_tokens, self.output_tokens, self.cache_read_tokens)
 
 
 @dataclass(frozen=True)

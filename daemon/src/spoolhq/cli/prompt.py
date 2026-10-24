@@ -84,6 +84,8 @@ def show_command(
         ),
         commands=project_settings.commands.for_implementer(),
         max_chars=project_settings.context.max_chars,
+        progress_entries=project_settings.context.progress_entries,
+        decisions_lines=project_settings.context.decisions_lines,
     )
     try:
         prompt = build_implementer_prompt(inputs, override_dir=workspace / PROMPTS_DIR)

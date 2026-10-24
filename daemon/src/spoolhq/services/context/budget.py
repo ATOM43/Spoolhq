@@ -74,6 +74,26 @@ def keep_head(text: str, room: int, *, cap: int | None = None) -> Trimmed:
     return Trimmed("".join(kept), f"[trimmed: kept the first {size:,} of {len(text):,} characters]")
 
 
+def newest_entries(text: str, count: int) -> str:
+    """The preamble and the newest ``count`` ``## `` entries; all of a file without any."""
+    lines = _lines(text)
+    starts = [i for i, line in enumerate(lines) if line.startswith(_ENTRY_HEADING)]
+    if len(starts) <= count:
+        return text
+    return "".join(lines[: starts[0]] + lines[starts[-count] :])
+
+
+def newest_lines(text: str, count: int) -> str:
+    """From the ``count``-th last non-blank line to the end."""
+    lines = _lines(text)
+    seen = 0
+    for i in range(len(lines) - 1, -1, -1):
+        seen += bool(lines[i].strip())
+        if seen == count:
+            return "".join(lines[i:])
+    return text
+
+
 def keep_newest_entries(text: str, room: int, *, cap: int) -> Trimmed:
     """Keep the newest ``## `` entries (the last in the file), then the preamble if it fits.
 

@@ -193,3 +193,8 @@ Structure only; no routes, commands, UI or security rules changed.
 ## T29 · Show the commit and tag in spool run status after a merge (2026-10-24)
 
 T29 made `spool run status` show `last merged: ticket · short sha · ticket/id` under `no active run in 'project'`. The data comes from the newest finished row in the integration journal (`last_integration` → `last_merged` → `Current.last_merged`), and `runs/current` returns it as `last_merged`. A CLI test after a real merge covers it.
+
+## Chore · Cut tokens per ticket
+
+- The token budget counts weighted tokens (cache reads at a tenth), with `cache_read_tokens` stored per attempt (schema 4) and the weighted total in `spool runs list|show`; the implementer prompt asks for fewer, larger turns; the prompt keeps the newest 3 `PROGRESS.md` entries and 20 `DECISIONS.md` lines (`context.progress_entries`, `context.decisions_lines`); the implementer's env sets `npm_config_verify_deps_before_run=false`; DECISIONS 202–205.
+- Real run (the T13 hello ticket): 1 attempt, 6 model calls, 60,551 in (49,447 cache reads) and 1,848 out, 17,896 weighted. Before (T13): 47,383 in and 1,627 out, cache reads and calls not recorded.

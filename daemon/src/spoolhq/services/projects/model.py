@@ -117,9 +117,13 @@ class GitSettings(_Strict):
 
 
 class ContextSettings(_Strict):
-    """The implementer prompt's size budget, in characters (see docs/context.md)."""
+    """The implementer prompt's size budget and history depth (see docs/context.md)."""
 
     max_chars: int = Field(default=120_000, ge=20_000, le=2_000_000)
+    progress_entries: int = Field(default=3, ge=1, le=1_000)
+    """How many of the newest ``PROGRESS.md`` entries the prompt includes."""
+    decisions_lines: int = Field(default=20, ge=1, le=10_000)
+    """How many of the newest non-blank ``DECISIONS.md`` lines the prompt includes."""
 
 
 class GateTimeouts(_Strict):

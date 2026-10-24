@@ -16,7 +16,7 @@ def seed(workspace: Path, clock: FixedClock) -> tuple[int, int]:
     with RunLog(workspace, clock=clock, daemon_instance="old") as log:
         first = log.start_run("T04")
         a1 = log.start_attempt(first.id, AttemptKind.INITIAL, backend="claude", model="m1")
-        log.record_usage(a1.id, 100, 50, 1500)
+        log.record_usage(a1.id, 100, 50, 1500, cache_read_tokens=80)
         log.finish_attempt(a1.id, AttemptStatus.GATES_FAILED)
         a2 = log.start_attempt(first.id, AttemptKind.GATE_RETRY)
         log.record_usage(a2.id, 10, 5)
@@ -34,9 +34,26 @@ def test_runs_list_shows_newest_first(workspace: Path, clock: FixedClock) -> Non
 
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
-    assert lines[0].split() == ["ID", "TICKET", "STATUS", "STARTED", "ATTEMPTS", "TOKENS"]
-    assert lines[1].split() == [str(second), "T05", "running", lines[1].split()[3], "1", "0"]
-    assert lines[2].split() == [str(first), "T04", "done", "2026-10-18T09:00:00.000Z", "2", "165"]
+    assert lines[0].split() == [
+        "ID",
+        "TICKET",
+        "STATUS",
+        "STARTED",
+        "ATTEMPTS",
+        "TOKENS",
+        "WEIGHTED",
+    ]
+    assert lines[1].split() == [str(second), "T05", "running", lines[1].split()[3], "1", "0", "0"]
+    # 165 raw; the 80 cache reads count 8, so 165 - 80 + 8 = 93 weighted.
+    assert lines[2].split() == [
+        str(first),
+        "T04",
+        "done",
+        "2026-10-18T09:00:00.000Z",
+        "2",
+        "165",
+        "93",
+    ]
 
 
 def test_runs_list_filters_by_ticket(workspace: Path, clock: FixedClock) -> None:
@@ -65,7 +82,7 @@ def test_runs_show_lists_attempts_with_folders(workspace: Path, clock: FixedCloc
     assert f"id:         {first}" in out
     assert "ticket:     T04" in out
     assert "status:     done" in out
-    assert "tokens:     110 in · 55 out" in out
+    assert "tokens:     110 in · 55 out · 80 cache reads · 93 weighted" in out
     assert "cost:       $0.001500" in out
     assert "Attempts (2):" in out
     attempt_lines = [line.split() for line in out.splitlines() if "runs/T04/" in line]

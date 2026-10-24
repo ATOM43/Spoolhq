@@ -188,6 +188,7 @@ class RunLog:
             started_at=row[12],
             ended_at=row[13],
             workspace=self.workspace,
+            cache_read_tokens=row[14],
         )
 
     @staticmethod
@@ -352,14 +353,19 @@ class RunLog:
         input_tokens: int,
         output_tokens: int,
         cost_micro_usd: int | None = None,
+        cache_read_tokens: int = 0,
     ) -> Attempt:
         """Add tokens and cost (micro-USD) to an attempt's totals.
 
-        A None cost leaves the stored cost as it is; a stored NULL plus a value becomes
-        that value. Negative numbers raise ValueError.
+        ``cache_read_tokens`` is the part of ``input_tokens`` read from the cache. A
+        None cost leaves the stored cost as it is; a stored NULL plus a value becomes
+        that value. Negative numbers, or more cache reads than input, raise ValueError.
         """
         _check_count("input_tokens", input_tokens)
         _check_count("output_tokens", output_tokens)
+        _check_count("cache_read_tokens", cache_read_tokens)
+        if cache_read_tokens > input_tokens:
+            raise ValueError("cache_read_tokens is part of input_tokens and can't exceed it")
         if cost_micro_usd is not None:
             _check_count("cost_micro_usd", cost_micro_usd)
         with self.transaction() as tx:
@@ -367,10 +373,18 @@ class RunLog:
             tx.conn.execute(
                 "UPDATE attempts SET input_tokens = input_tokens + ?, "
                 "output_tokens = output_tokens + ?, "
+                "cache_read_tokens = cache_read_tokens + ?, "
                 "cost_micro_usd = CASE WHEN ? IS NULL THEN cost_micro_usd "
                 "ELSE COALESCE(cost_micro_usd, 0) + ? END "
                 "WHERE id = ?",
-                (input_tokens, output_tokens, cost_micro_usd, cost_micro_usd, attempt_id),
+                (
+                    input_tokens,
+                    output_tokens,
+                    cache_read_tokens,
+                    cost_micro_usd,
+                    cost_micro_usd,
+                    attempt_id,
+                ),
             )
             return self._attempt(tx.conn, attempt_id)
 
@@ -430,10 +444,16 @@ class RunLog:
             self._run(conn, run_id)
             row = conn.execute(
                 "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0), "
-                "SUM(cost_micro_usd) FROM attempts WHERE run_id = ?",
+                "SUM(cost_micro_usd), COALESCE(SUM(cache_read_tokens), 0) "
+                "FROM attempts WHERE run_id = ?",
                 (run_id,),
             ).fetchone()
-        return Usage(input_tokens=row[0], output_tokens=row[1], cost_micro_usd=row[2])
+        return Usage(
+            input_tokens=row[0],
+            output_tokens=row[1],
+            cost_micro_usd=row[2],
+            cache_read_tokens=row[3],
+        )
 
     def last_event_id(self) -> int:
         """The highest event id in the database, or 0 if there are no events."""

@@ -40,14 +40,14 @@ def raw(workspace: Path) -> sqlite3.Connection:
 # Schema -------------------------------------------------------------------------------
 
 
-def test_fresh_database_has_version_3_and_all_tables(workspace: Path) -> None:
+def test_fresh_database_has_version_4_and_all_tables(workspace: Path) -> None:
     assert not (workspace / ".spoolhq").exists()
     with RunLog(workspace, daemon_instance="A"):
         pass
 
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 4
         tables = {
             name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
@@ -68,7 +68,7 @@ def test_opening_twice_is_idempotent(workspace: Path) -> None:
         assert [run.ticket_id for run in log.list_runs()] == ["T04"]
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
     finally:
         conn.close()
 
@@ -77,15 +77,15 @@ def test_newer_schema_is_refused(workspace: Path) -> None:
     with RunLog(workspace, daemon_instance="A"):
         pass
     conn = raw(workspace)
-    conn.execute("PRAGMA user_version = 4")
+    conn.execute("PRAGMA user_version = 5")
     conn.close()
 
     with pytest.raises(RunLogError) as info:
         RunLog(workspace, daemon_instance="A")
     assert str(info.value) == (
-        "state.db: schema version 4 is newer than this SpoolHQ supports (3); upgrade SpoolHQ."
+        "state.db: schema version 5 is newer than this SpoolHQ supports (4); upgrade SpoolHQ."
     )
-    with pytest.raises(RunLogError, match="schema version 4 is newer"):
+    with pytest.raises(RunLogError, match="schema version 5 is newer"):
         RunLog.open_read_only(workspace)
 
 
@@ -410,6 +410,26 @@ def test_usage_adds_up(run_log: RunLog) -> None:
     assert usage.total_tokens == 195
 
 
+def test_cache_reads_count_a_tenth_toward_weighted_tokens(run_log: RunLog) -> None:
+    run = run_log.start_run("T04")
+    attempt = run_log.start_attempt(run.id, AttemptKind.INITIAL)
+    run_log.record_usage(attempt.id, 1000, 100, cache_read_tokens=900)
+    stored = run_log.record_usage(attempt.id, 100, 0, cache_read_tokens=50)
+    assert stored.cache_read_tokens == 950
+
+    usage = run_log.run_usage(run.id)
+    assert (usage.total_tokens, usage.cache_read_tokens) == (1200, 950)
+    assert usage.weighted_tokens == 1200 - 950 + 95
+
+
+def test_more_cache_reads_than_input_raise(run_log: RunLog) -> None:
+    run = run_log.start_run("T04")
+    attempt = run_log.start_attempt(run.id, AttemptKind.INITIAL)
+    with pytest.raises(ValueError, match="part of input_tokens"):
+        run_log.record_usage(attempt.id, 10, 0, cache_read_tokens=11)
+    assert run_log.get_attempt(attempt.id).cache_read_tokens == 0
+
+
 def test_usage_without_any_cost_stays_null(run_log: RunLog) -> None:
     run = run_log.start_run("T04")
     attempt = run_log.start_attempt(run.id, AttemptKind.INITIAL)
@@ -596,4 +616,6 @@ def test_version_1_database_is_migrated(workspace: Path) -> None:
 
     with RunLog(workspace, daemon_instance="A") as log:
         run = log.get_run(1)
+        usage = log.run_usage(1)
     assert (run.status, run.progress_note, run.reset_at) == (RunStatus.DONE, None, None)
+    assert usage.cache_read_tokens == 0

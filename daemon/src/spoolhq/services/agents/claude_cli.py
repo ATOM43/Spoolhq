@@ -373,7 +373,7 @@ class _Session:
                 break
             for event in events:
                 on_event(event)
-            if budget.max_tokens is not None and parser.total_tokens > budget.max_tokens:
+            if budget.max_tokens is not None and parser.weighted_tokens > budget.max_tokens:
                 stopped = (Outcome.BUDGET_EXHAUSTED, None)
                 break
 

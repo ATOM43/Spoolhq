@@ -55,18 +55,22 @@ def _init(tools: list[str]) -> dict[str, Any]:
     }
 
 
-def _assistant(content: list[dict[str, Any]], tokens: int, msg_id: str) -> dict[str, Any]:
+def _assistant(
+    content: list[dict[str, Any]], tokens: int, msg_id: str, cache_reads: int = 0
+) -> dict[str, Any]:
     usage = {
         "input_tokens": tokens,
         "output_tokens": tokens // 4,
         "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_read_input_tokens": cache_reads,
     }
     message = {"id": msg_id, "role": "assistant", "content": content, "usage": usage}
     return {"type": "assistant", "message": message}
 
 
-def _result(text: str, tokens: int, subtype: str = "success", **extra: Any) -> dict[str, Any]:
+def _result(
+    text: str, tokens: int, subtype: str = "success", cache_reads: int = 0, **extra: Any
+) -> dict[str, Any]:
     return {
         "type": "result",
         "subtype": subtype,
@@ -76,7 +80,7 @@ def _result(text: str, tokens: int, subtype: str = "success", **extra: Any) -> d
             "input_tokens": tokens,
             "output_tokens": tokens // 4,
             "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
+            "cache_read_input_tokens": cache_reads,
         },
         "permission_denials": [],
         "result": text,
@@ -104,6 +108,7 @@ class Transcripts:
         *,
         note: str = "Added hello.",
         tokens: int = 1000,
+        cache_reads: int = 0,
         outcome: str = "success",
     ) -> Path:
         """An implementer run writing ``files``; ``outcome``: success, usage_limit,
@@ -119,7 +124,7 @@ class Transcripts:
             }
             for i, (p, c) in enumerate((files or {"hello.py": "x = 1\n"}).items())
         ]
-        lines = [_init(INIT_TOOLS), _assistant(writes, tokens, "m1")]
+        lines = [_init(INIT_TOOLS), _assistant(writes, tokens, "m1", cache_reads)]
         if outcome == "usage_limit":
             info = {"status": "rejected", "resetsAt": RESET_EPOCH, "rateLimitType": "five_hour"}
             lines.append({"type": "rate_limit_event", "rate_limit_info": info})
@@ -129,7 +134,9 @@ class Transcripts:
         elif outcome == "max_turns":
             lines.append(_result("", tokens, "error_max_turns"))
         else:
-            lines.append(_result(f"Done.\n<progress>{note}</progress>", tokens))
+            lines.append(
+                _result(f"Done.\n<progress>{note}</progress>", tokens, cache_reads=cache_reads)
+            )
         return self._write(lines)
 
     def review(

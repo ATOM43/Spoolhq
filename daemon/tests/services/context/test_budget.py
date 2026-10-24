@@ -8,6 +8,8 @@ from spoolhq.services.context.budget import (
     cap_excerpt,
     keep_head,
     keep_newest_entries,
+    newest_entries,
+    newest_lines,
     select_spec,
     words,
 )
@@ -32,7 +34,12 @@ def test_decisions_keep_the_newest_entries() -> None:
     )
     max_chars = base_chars() + 2_000
     prompt = build_implementer_prompt(
-        fixture_inputs(spec=None, repo_docs=RepoDocs(decisions_md=decisions), max_chars=max_chars)
+        fixture_inputs(
+            spec=None,
+            repo_docs=RepoDocs(decisions_md=decisions),
+            max_chars=max_chars,
+            decisions_lines=1_000,
+        )
     )
 
     assert prompt.chars <= max_chars
@@ -96,7 +103,11 @@ def test_large_spec_keeps_the_outline_and_relevant_sections() -> None:
 def test_unused_room_flows_on() -> None:
     progress = "".join(f"## T{i:02d}\n\n{'Progress detail. ' * 20}\n\n" for i in range(100))
     prompt = build_implementer_prompt(
-        fixture_inputs(spec=None, repo_docs=RepoDocs(claude_md="", progress_md=progress))
+        fixture_inputs(
+            spec=None,
+            repo_docs=RepoDocs(claude_md="", progress_md=progress),
+            progress_entries=1_000,
+        )
     )
     content = fenced_content(prompt.text, "progress_log")
     assert 23_000 < len(content) <= 24_000
@@ -164,3 +175,49 @@ def test_spec_ties_keep_document_order() -> None:
     trimmed = select_spec(spec, 260, ticket_words=set())
     assert trimmed.text.startswith("## A\nx\n")
     assert "## B\n## C\n" in trimmed.text
+
+
+def test_newest_entries_keeps_the_preamble_and_the_last_entries() -> None:
+    log = "# Progress\n\nNewest at the bottom.\n\n" + "".join(
+        f"## T{i:02d}\n\nDid {i}.\n\n" for i in range(1, 6)
+    )
+    kept = newest_entries(log, 3)
+    assert kept == "# Progress\n\nNewest at the bottom.\n\n" + "".join(
+        f"## T{i:02d}\n\nDid {i}.\n\n" for i in range(3, 6)
+    )
+    assert newest_entries(log, 5) == log
+    assert newest_entries("no headings\n", 1) == "no headings\n"
+
+
+def test_newest_lines_counts_only_non_blank_lines() -> None:
+    decisions = "# Decisions\n\n" + "".join(f"{i}. Decision {i}.\n" for i in range(1, 31)) + "\n"
+    kept = newest_lines(decisions, 20)
+    assert kept.splitlines()[0] == "11. Decision 11."
+    assert kept.endswith("30. Decision 30.\n\n")
+    assert len([line for line in kept.splitlines() if line]) == 20
+    assert newest_lines("a\n\nb\n", 5) == "a\n\nb\n"
+
+
+def test_the_prompt_takes_only_the_newest_history() -> None:
+    progress = "# Progress\n\n" + "".join(f"## T{i:02d}\n\nDid {i}.\n\n" for i in range(1, 11))
+    decisions = "".join(f"{i}. Decision {i}.\n" for i in range(1, 51))
+    prompt = build_implementer_prompt(
+        fixture_inputs(
+            spec=None,
+            repo_docs=RepoDocs(progress_md=progress, decisions_md=decisions),
+            progress_entries=2,
+            decisions_lines=4,
+        )
+    )
+    progress_block = fenced_content(prompt.text, "progress_log")
+    assert re.findall(r"^## (T\d+)$", progress_block, re.M) == ["T09", "T10"]
+    assert fenced_content(prompt.text, "decisions").splitlines() == [
+        f"{i}. Decision {i}." for i in range(47, 51)
+    ]
+    assert prompt.cuts == ()
+    assert (
+        "Older entries are in PROGRESS.md and DECISIONS.md; grep them when the ticket "
+        "touches an earlier decision." in prompt.text
+    )
+    without = build_implementer_prompt(fixture_inputs(spec=None, repo_docs=NONE))
+    assert "Older entries" not in without.text

@@ -181,6 +181,7 @@ def test_child_env_is_an_allowlist() -> None:
         "HTTPS_PROXY": "http://proxy:3128",
         "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
         "DISABLE_AUTOUPDATER": "1",
+        "npm_config_verify_deps_before_run": "false",
     }
 
 

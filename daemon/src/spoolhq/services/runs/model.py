@@ -5,6 +5,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from spoolhq.core.tokens import weighted_tokens
+
 
 class RunStatus(StrEnum):
     RUNNING = "running"
@@ -104,6 +106,8 @@ class Attempt:
     started_at: str
     ended_at: str | None
     workspace: Path = field(repr=False, compare=False)
+    cache_read_tokens: int = 0
+    """The part of ``input_tokens`` read from the prompt cache."""
 
 
 @dataclass(frozen=True)
@@ -125,7 +129,13 @@ class Usage:
     input_tokens: int
     output_tokens: int
     cost_micro_usd: int | None
+    cache_read_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens
+
+    @property
+    def weighted_tokens(self) -> int:
+        """What ``agents.budget_per_ticket.tokens`` counts: cache reads at a tenth."""
+        return weighted_tokens(self.input_tokens, self.output_tokens, self.cache_read_tokens)

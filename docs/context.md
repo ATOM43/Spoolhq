@@ -53,6 +53,8 @@ prompts/implementer.md.j2: not allowed in a SpoolHQ template: access to attribut
 
 ## The budget
 
+Before the character budget, the prompt takes only the newest history: the `PROGRESS.md` preamble and its last `context.progress_entries` `## ` entries (default 3), and `DECISIONS.md` from its `context.decisions_lines`-th last non-blank line (default 20) to the end. A file with fewer is taken whole. When either block is in the prompt, one line follows: "Older entries are in PROGRESS.md and DECISIONS.md; grep them when the ticket touches an earlier decision." Most tickets don't need the full history, and every turn re-reads the prompt.
+
 The whole rendered prompt must fit in `context.max_chars` characters (`project.yaml`, default 120,000, allowed 20,000 to 2,000,000). The budget counts characters, not tokens, so there is no tokenizer.
 
 - **Never trimmed:** the template text, the ticket block, the commands and the previous-attempt block. The one exception is gate output: each excerpt is capped at 8,000 characters, the first 6,000 and the last 2,000 with `[… 42,000 characters cut …]` between them. Failing tests and review notes are never cut.

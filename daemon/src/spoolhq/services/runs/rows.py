@@ -17,7 +17,7 @@ RUN_COLUMNS = (
 )
 ATTEMPT_COLUMNS = (
     "id, run_id, ticket_id, number, kind, status, dir, backend, model, input_tokens, "
-    "output_tokens, cost_micro_usd, started_at, ended_at"
+    "output_tokens, cost_micro_usd, started_at, ended_at, cache_read_tokens"
 )
 EVENT_COLUMNS = "id, run_id, attempt_id, ts, kind, payload"
 

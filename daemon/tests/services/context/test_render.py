@@ -91,7 +91,12 @@ def test_failing_tests_survive_when_everything_else_is_trimmed() -> None:
         fixture_inputs(previous=gate_retry(), spec=None, repo_docs=RepoDocs())
     )
     inputs = fixture_inputs(
-        previous=gate_retry(), spec=big_spec(), repo_docs=big_docs(), max_chars=base.chars + 2_500
+        previous=gate_retry(),
+        spec=big_spec(),
+        repo_docs=big_docs(),
+        max_chars=base.chars + 2_500,
+        progress_entries=1_000,
+        decisions_lines=1_000,
     )
 
     prompt = build_implementer_prompt(inputs)

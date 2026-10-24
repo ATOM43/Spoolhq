@@ -14,6 +14,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from spoolhq.core.tokens import weighted_tokens
 from spoolhq.services.agents.model import (
     AgentEvent,
     Billing,
@@ -171,9 +172,13 @@ class ClaudeStreamParser:
         return sum(o for _, o, _, _ in self._usage.values())
 
     @property
-    def total_tokens(self) -> int:
-        """Tokens so far (input, cached input and output), for the token budget."""
-        return self.input_tokens + self.output_tokens
+    def cache_read_tokens(self) -> int:
+        return sum(cr for _, _, cr, _ in self._usage.values())
+
+    @property
+    def weighted_tokens(self) -> int:
+        """Weighted tokens so far (cache reads count a tenth), for the token budget."""
+        return weighted_tokens(self.input_tokens, self.output_tokens, self.cache_read_tokens)
 
     @property
     def root(self) -> Path:
@@ -396,9 +401,10 @@ class ClaudeStreamParser:
             outcome, error = self._outcome()
         result = self._result or {}
         input_tokens, output_tokens = self.input_tokens, self.output_tokens
+        cache_read_tokens = self.cache_read_tokens
         if isinstance(result.get("usage"), Mapping):
             i, o, cr, cc = _usage_counts(result["usage"])
-            input_tokens, output_tokens = i + cr + cc, o
+            input_tokens, output_tokens, cache_read_tokens = i + cr + cc, o, cr
         cost = usd_to_micro(result.get("total_cost_usd")) if self._billing == "api" else None
         turns = result.get("num_turns")
         summary = result.get("result")
@@ -417,4 +423,5 @@ class ClaudeStreamParser:
             model=self.model,
             error=error,
             debug={"unknown_events": self.unknown_events},
+            cache_read_tokens=cache_read_tokens,
         )
