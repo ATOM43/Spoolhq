@@ -89,7 +89,8 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T22 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
-|  | **Total** |  |  | **71** |
+| T27 | Code graph with Graphify | 3 Planner and Git | T14, T16 | 2.5 |
+|  | **Total** |  |  | **73** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T22 → T23 → T26 (27.5 h).
 
@@ -280,7 +281,7 @@ Done when:
 - [ ] Fake-runner tests cover all three verdicts and an invalid response
 - [ ] On a seeded diff that skips one "Done when" item, the reviewer names that item
 
-### T13 · Run loop
+### T13 · Run loop [Done]
 
 The state machine that ties T08 to T12 together. *Depends on: T06, T07, T08, T10, T11, T12 · 3.5 h*
 
@@ -504,6 +505,18 @@ Done when:
 
 - [ ] Someone else installs it and runs a template project from the README alone
 - [ ] Every v1 item in the overview maps to a ticket, a test or a doc page
+
+### T27 · Code graph with Graphify
+
+A map of the codebase that stays current, so the agent finds the right files without re-reading the repo. *Depends on: T14, T16 · 2.5 h*
+
+- Graphify builds the graph when a project is created, and SpoolHQ refreshes it as plain code after each merged ticket. A failed refresh never blocks a merge.
+- The agent gets the graph report in its context and read-only access to query the graph. Graphify's own Claude Code hooks are never installed.
+
+Done when:
+
+- [ ] A new project starts with its graph, and the graph updates after each merged ticket
+- [ ] The implementer's prompt contains the graph report
 
 ## Later phases
 
