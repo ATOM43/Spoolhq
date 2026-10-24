@@ -1,4 +1,5 @@
 import dataclasses
+import os
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,6 +23,8 @@ CHANGES = REVIEW_FIXTURES / "changes_requested.jsonl"
 NEEDS_HUMAN = REVIEW_FIXTURES / "needs_human.jsonl"
 NO_VERDICT = REVIEW_FIXTURES / "no_verdict.jsonl"
 ITEM3_UNMET = REVIEW_FIXTURES / "item3_unmet.jsonl"
+# Read at import: the autouse ``home`` fixture clears SPOOLHQ_* before each test.
+UPDATE_SNAPSHOTS = os.environ.get("SPOOLHQ_UPDATE_SNAPSHOTS") == "1"
 
 
 def run(inputs: ReviewInputs, runner: Any, home: Path, **kwargs: Any) -> Any:
@@ -257,3 +260,17 @@ def test_replay_of_the_real_review(inputs: ReviewInputs, home: Path) -> None:
     result = run(inputs, FakeRunner([REVIEW_FIXTURES / "recorded" / "real_review.jsonl"]), home)
     assert result.verdict == "changes_requested"
     assert [item.met for item in result.items] == [True, False, False]
+
+
+def test_prompt_snapshot(inputs: ReviewInputs, home: Path) -> None:
+    """The whole prompt, byte for byte; rewrite with SPOOLHQ_UPDATE_SNAPSHOTS=1."""
+    fake = FakeRunner([CHANGES])
+    run(dataclasses.replace(inputs, gate_checked={3: True}), fake, home)
+    [(prompt, _)] = fake.calls
+
+    assert "Empty untracked placeholder files that the sandbox creates" in prompt
+    expected = REVIEW_FIXTURES / "expected" / "reviewer_prompt.md"
+    if UPDATE_SNAPSHOTS:
+        expected.parent.mkdir(exist_ok=True)
+        expected.write_text(prompt, encoding="utf-8", newline="\n")
+    assert prompt == expected.read_text(encoding="utf-8")

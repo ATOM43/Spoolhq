@@ -71,6 +71,11 @@ class Commands(_Strict):
     lint: GateCommand
     test: GateCommand
 
+    def for_implementer(self) -> dict[str, str]:
+        """The commands the implementer may run: all but ``install``, which only the gates
+        run, outside the sandbox (DECISIONS 91)."""
+        return {name: cmd for name, cmd in self.model_dump().items() if name != "install"}
+
 
 class Budget(_Strict):
     usd: float | None = Field(default=None, gt=0, allow_inf_nan=False)

@@ -58,7 +58,7 @@ def test_show_prints_the_prompt(workspace: Path, git_repo: Path, projects_dir: P
             ),
             spec=(workspace / "CONTEXT.md").read_text(encoding="utf-8"),
             repo_docs=RepoDocs(claude_md=(CONTEXT / "CLAUDE.md").read_text(encoding="utf-8")),
-            commands={"install": "just install", "lint": "just lint", "test": "just test"},
+            commands={"lint": "just lint", "test": "just test"},  # install runs only in the gates
         )
     )
     assert result.stdout == expected.text

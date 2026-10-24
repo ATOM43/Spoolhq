@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from spoolhq.services.agents import AgentPolicy, FakeRunner
+from spoolhq.services.agents import AgentPolicy, Budget, FakeRunner
+from spoolhq.services.agents.claude_config import build_argv
 from spoolhq.services.projects import Budget as ProjectBudget
 from spoolhq.services.projects import load_project, save_project
 from spoolhq.services.runloop import HoldForIntegration, RunLoop, next_kind
@@ -402,3 +403,23 @@ def test_next_kind(
         for i, (kind, status) in enumerate(statuses, start=1)
     ]
     assert next_kind(attempts) == expected
+
+
+def test_the_implementer_may_not_run_installs(
+    make_loop: LoopFactory, transcripts: Transcripts
+) -> None:
+    loop, _ = make_loop([transcripts.implement()], [transcripts.review("approve")])
+
+    run_once(loop)
+
+    prompt, policy = loop.agents.implementer.calls[0]  # type: ignore[attr-defined]
+    argv = build_argv(
+        ["claude"],
+        policy,
+        Budget(max_turns=1, max_usd=None, max_tokens=None),
+        billing="subscription",
+    )
+    rules = " ".join(argv)
+    assert "Bash(just install" not in rules
+    assert "Bash(just lint)" in rules and "Bash(just test *)" in rules
+    assert "just install" not in prompt  # not offered in the prompt either

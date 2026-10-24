@@ -7,6 +7,7 @@ orchestration (journal, gates, ticket status) is ``services/runloop/integration.
 See ``docs/integration.md``.
 """
 
+import posixpath
 import re
 import tempfile
 import textwrap
@@ -14,7 +15,7 @@ import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from spoolhq.services.git.repo import branch_sha, ensure_clean, ensure_no_operation_in_progress
 from spoolhq.services.git.runner import command_error, run_git
@@ -31,7 +32,10 @@ JUNK_DIRS = (
     ".ruff_cache",
     "node_modules",
     "*.egg-info",
+    ".pnpm-store",
+    ".npm",
 )
+JUNK_PATHS = (".yarn/cache/",)
 JUNK_FILES = ("*.pyc", ".DS_Store")
 # Likely secrets: the ticket is blocked for a person to look.
 SECRET_DIRS = (".ssh", ".claude")
@@ -75,7 +79,8 @@ def _matches(path: str, dirs: Sequence[str], files: Sequence[str]) -> bool:
 
 
 def is_junk(path: str) -> bool:
-    return _matches(path, JUNK_DIRS, JUNK_FILES)
+    nested = f"/{path.lower()}"
+    return _matches(path, JUNK_DIRS, JUNK_FILES) or any(f"/{p}" in nested for p in JUNK_PATHS)
 
 
 def is_secret(path: str) -> bool:
@@ -203,6 +208,27 @@ def too_large(worktree: Path, paths: Sequence[str]) -> tuple[str, int] | None:
         if file.is_file() and not file.is_symlink() and file.stat().st_size > MAX_FILE_BYTES:
             return path, file.stat().st_size
     return None
+
+
+def outside_symlinks(worktree: Path, main_sha: str) -> list[tuple[str, str]]:
+    """Staged symlinks (added or changed) whose target is absolute or leaves the repo.
+
+    Read from the index, not the disk, so it works where git checks symlinks out as
+    plain files (Windows). Resolved lexically from the link's folder.
+    """
+    out = _git(worktree, "diff", "--cached", "--raw", "--no-renames", "-z", main_sha)
+    fields = out.split("\0")
+    found = []
+    for meta, path in zip(fields[::2], fields[1::2], strict=False):
+        parts = meta.split()
+        if len(parts) < 5 or parts[1] != "120000" or parts[4] == "D":
+            continue
+        target = _git(worktree, "cat-file", "blob", parts[3])
+        joined = posixpath.normpath(posixpath.join(posixpath.dirname(path), target))
+        absolute = posixpath.isabs(target) or PureWindowsPath(target).is_absolute()
+        if absolute or joined == ".." or joined.startswith("../"):
+            found.append((path, target))
+    return found
 
 
 def restore_branch(worktree: Path, branch: str) -> None:

@@ -34,6 +34,7 @@ from spoolhq.services.git import (
     is_secret,
     merge_in,
     operation_in_progress,
+    outside_symlinks,
     restore_branch,
     stage,
     start_squash,
@@ -232,6 +233,13 @@ class LocalIntegrator:
         if secrets := [p for p in kept if is_secret(p)]:
             self._abandon(ctx, journal, restore=True)
             message = f"refusing to commit likely secrets: {', '.join(secrets)}"
+            return _result(IntegrationStatus.FAILED, message)
+        if links := outside_symlinks(path, main_sha):
+            self._abandon(ctx, journal, restore=True)
+            link, target = links[0]
+            message = (
+                f"refusing to commit a symlink that points outside the repo: {link} -> {target}"
+            )
             return _result(IntegrationStatus.FAILED, message)
         if big := too_large(path, kept):
             self._abandon(ctx, journal, restore=True)

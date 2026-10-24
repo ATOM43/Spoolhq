@@ -18,6 +18,7 @@ from spoolhq.services.git import (
     is_secret,
     merge_head,
     merge_in,
+    outside_symlinks,
     restore_branch,
     start_squash,
     tag_exists,
@@ -83,13 +84,27 @@ def test_control_characters_are_removed() -> None:
         ".DS_Store",
         "docs/.ds_store",
         "spoolhq.egg-info/PKG-INFO",
+        ".pnpm-store/v11/projects/92009e6764a75d37933b5affffd16167",
+        "web/.pnpm-store/v11/index.json",
+        ".yarn/cache/left-pad.zip",
+        ".npm/_cacache/index",
     ],
 )
 def test_build_junk(path: str) -> None:
     assert is_junk(path)
 
 
-@pytest.mark.parametrize("path", ["hello.py", "src/node_modules.py", "pycache.md", "a.py"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "hello.py",
+        "src/node_modules.py",
+        "pycache.md",
+        "a.py",
+        ".yarn/releases/yarn.cjs",
+        ".npmrc.md",
+    ],
+)
 def test_not_junk(path: str) -> None:
     assert not is_junk(path)
 
@@ -298,3 +313,51 @@ def test_tags(wt_repo: Path) -> None:
     assert tag_exists(wt_repo, "ticket/T04")
     assert run_git(wt_repo, "cat-file", "-t", "ticket/T04").strip() == "commit"  # lightweight
     assert is_ancestor(wt_repo, sha, sha)
+
+
+def _stage_link(worktree: Path, path: str, target: str) -> None:
+    """Stage a symlink through the index, so the test needs no symlink support."""
+    blob_file = worktree.parent / "link-target"
+    blob_file.write_bytes(target.encode("utf-8"))
+    blob = git_out(worktree, "hash-object", "-w", str(blob_file))
+    run_git(worktree, "update-index", "--add", "--cacheinfo", f"120000,{blob},{path}")
+
+
+def git_out(path: Path, *args: str) -> str:
+    return run_git(path, *args).strip()
+
+
+@pytest.mark.parametrize(
+    ("path", "target"),
+    [
+        ("link", "/etc/passwd"),
+        ("link", "C:\\Windows\\System32"),
+        ("link", "../outside"),
+        ("a/b/link", "../../../outside"),
+        ("a/link", "../.."),
+    ],
+)
+def test_symlinks_out_of_the_repo_are_found(
+    branch: Path, wt_repo: Path, path: str, target: str
+) -> None:
+    main_sha = head(wt_repo, "main")
+    _stage_link(branch, path, target)
+
+    assert outside_symlinks(branch, main_sha) == [(path, target)]
+
+
+@pytest.mark.parametrize(
+    ("path", "target"),
+    [
+        ("link", "feature.py"),
+        ("a/b/link", "../../feature.py"),
+        (".pnpm-store/v11/projects/92009e6764a75d37933b5affffd16167", "../../../desktop"),
+    ],
+)
+def test_symlinks_inside_the_repo_are_allowed(
+    branch: Path, wt_repo: Path, path: str, target: str
+) -> None:
+    main_sha = head(wt_repo, "main")
+    _stage_link(branch, path, target)
+
+    assert outside_symlinks(branch, main_sha) == []

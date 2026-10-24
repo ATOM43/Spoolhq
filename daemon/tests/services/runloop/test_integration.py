@@ -1,5 +1,6 @@
 """LocalIntegrator through the run loop: real temporary repos, fake agents and gates."""
 
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -569,3 +570,60 @@ def test_a_git_failure_mid_squash_restores_the_worktree(
     assert git(path, "symbolic-ref", "HEAD") == "refs/heads/feat/T01-say-hello-t01"
     assert git(path, "status", "--porcelain") == ""
     assert open_integrations(log_of(registry)) == []
+
+
+def _linking(transcripts: Transcripts, links: dict[str, str]) -> Hooked:
+    """An implementer that makes ``links`` (path -> target) in its worktree first."""
+
+    def make(policy: AgentPolicy) -> None:
+        for path, target in links.items():
+            link = policy.worktree / path
+            link.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.symlink(target, link)
+            except OSError:  # Windows without symlink rights; the git unit tests cover it
+                pytest.skip("symlinks are not available here")
+
+    return Hooked(FakeRunner([transcripts.implement()]), make)
+
+
+def test_a_symlink_out_of_the_repo_blocks(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    registry: RunRegistry,
+    repo: Path,
+    local: LocalIntegrator,
+) -> None:
+    implementer = _linking(transcripts, {"docs/escape": "../../outside"})
+    loop, _ = make_loop(implementer, [transcripts.review("approve")], integrator=local)
+    before = git(repo, "rev-parse", "main")
+
+    run_id = run(loop)
+
+    final = log_of(registry).get_run(run_id)
+    assert (final.status, final.reason) == (
+        RunStatus.BLOCKED,
+        "refusing to commit a symlink that points outside the repo: docs/escape -> ../../outside",
+    )
+    assert git(repo, "rev-parse", "main") == before
+
+
+def test_the_pnpm_store_symlink_from_m1_is_left_out(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    registry: RunRegistry,
+    repo: Path,
+    local: LocalIntegrator,
+) -> None:
+    store = ".pnpm-store/v11/projects/92009e6764a75d37933b5affffd16167"
+    implementer = _linking(transcripts, {store: "../../../desktop", "docs/readme": "../README.md"})
+    loop, _ = make_loop(implementer, [transcripts.review("approve")], integrator=local)
+
+    run_id = run(loop)
+
+    log = log_of(registry)
+    assert log.get_run(run_id).status is RunStatus.DONE
+    committed = git(repo, "show", "--name-only", "--format=", "main").split()
+    assert sorted(committed) == ["PROGRESS.md", "docs/readme", "hello.py"]  # inside: allowed
+    listed = [e.payload for e in log.events_since(0, run_id=run_id) if e.kind is EventKind.LOG]
+    assert listed[0]["files"] == [store]

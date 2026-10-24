@@ -83,7 +83,7 @@ A trimmed diff can still be approved; `diff_trimmed` says it was cut.
 
 ## The prompt
 
-In order: the role (you are reviewing one ticket's change, you didn't write it, you can read files but not change them); the rules; the items numbered `1.` to `N.` in `<done_when>`; on a retry only, the validation errors; the `<ticket>`, `<gates>` and `<diff>` blocks; the output contract.
+In order: the role (you are reviewing one ticket's change, you didn't write it, you can read files but not change them); the rules (among them: judge only the committed diff, and ignore the empty placeholder files the sandbox leaves at the root, such as `.env*` and `package.json`); the items numbered `1.` to `N.` in `<done_when>`; on a retry only, the validation errors; the `<ticket>`, `<gates>` and `<diff>` blocks; the output contract.
 
 A project can override it with `<workspace>/prompts/reviewer.md.j2`, rendered with the same sandbox and error messages as the implementer's. Its variables, all already escaped:
 

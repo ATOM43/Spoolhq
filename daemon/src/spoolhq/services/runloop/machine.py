@@ -248,7 +248,7 @@ def implementer_prompt(ctx: RunContext, kind: AttemptKind) -> str:
             progress_md=_read(repo / "PROGRESS.md"),
             decisions_md=_read(repo / "DECISIONS.md"),
         ),
-        commands=ctx.project.commands.model_dump(),
+        commands=ctx.project.commands.for_implementer(),
         previous=previous_attempt(ctx, kind),
         max_chars=ctx.project.context.max_chars,
     )
@@ -262,7 +262,7 @@ def implement(ctx: RunContext, attempt: Attempt) -> tuple[RunResult, str]:
     """Run the implementer with the writing policy; its result and full final text."""
     prompt = implementer_prompt(ctx, attempt.kind)
     policy = AgentPolicy.for_worktree(
-        ctx.worktree.path, ctx.project.commands.model_dump(), ctx.home
+        ctx.worktree.path, ctx.project.commands.for_implementer(), ctx.home
     )
     budget = ctx.project.agents.budget_per_ticket
     left = None

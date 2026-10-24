@@ -67,8 +67,9 @@ The run is blocked with `merge conflict with main in: <files>` if:
 
 Before the squash commit, every file in `git diff --cached --name-only <main_sha>` is checked. Names are matched case-insensitively.
 
-- **Build junk is left out** of the commit and listed in the run log, as a `log` event with the files and a phase line. The files stay on disk in the worktree; nothing in the main checkout is deleted. Junk is any path through a folder named `__pycache__/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `node_modules/` or `*.egg-info/`, and any file named `*.pyc` or `.DS_Store`.
+- **Build junk is left out** of the commit and listed in the run log, as a `log` event with the files and a phase line. The files stay on disk in the worktree; nothing in the main checkout is deleted. Junk is any path through a folder named `__pycache__/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `node_modules/`, `*.egg-info/`, `.pnpm-store/` or `.npm/`, or through `.yarn/cache/`, and any file named `*.pyc` or `.DS_Store`.
 - **Likely secrets block the ticket**, for a person to look at; nothing is retried. These are `.env` and `.env.*` (but not `.env.example`), `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `.netrc`, `.npmrc`, `.pypirc`, `credentials.json`, `*.keystore`, and anything under `.ssh/` or `.claude/`. The message is `refusing to commit likely secrets: <files>`.
+- **A symlink that points outside the repo blocks**: any added or changed symlink whose target is absolute or, resolved from the link's folder, leaves the repository. The message is `refusing to commit a symlink that points outside the repo: <path> -> <target>`. Symlinks within the repo are allowed. Modes and targets are read from the index, so this works where git checks symlinks out as plain files (Windows). Junk is dropped first, so a link inside `.pnpm-store/` is simply left out.
 - **Any added or changed file over 5 MB blocks** (MB = 1,048,576 bytes): `file too large to commit: <file> (12.3 MB)`.
 
 A block here puts the worktree back on its branch, so the work can be inspected as it was.

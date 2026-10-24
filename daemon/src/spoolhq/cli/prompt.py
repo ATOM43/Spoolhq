@@ -82,7 +82,7 @@ def show_command(
             progress_md=_read(repo / "PROGRESS.md"),
             decisions_md=_read(repo / "DECISIONS.md"),
         ),
-        commands=project_settings.commands.model_dump(),
+        commands=project_settings.commands.for_implementer(),
         max_chars=project_settings.context.max_chars,
     )
     try:

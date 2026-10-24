@@ -95,7 +95,7 @@ The reviewer ([review](review.md)) reads code but must not change it or run anyt
 
 ## The allowlist
 
-The agent may run the project's stack commands from `project.yaml` (`install`, `lint`, `test` and any others it defines) and read-only git: `git status`, `git diff`, `git log`, `git show`. Each becomes two permission rules: exact (`Bash(just test)`) and prefix (`Bash(just test *)`, which allows `just test -k foo`). The file tools `Read`, `Edit`, `Write`, `Glob` and `Grep` are allowed as a whole; layer 1 confines them to the worktree.
+The implementer may run the project's stack commands from `project.yaml` except `install` (`lint`, `test` and any others it defines) and read-only git. Installs run only in the gates, outside the sandbox, where the network is available (`Commands.for_implementer()`); its prompt doesn't list `install` either. The read-only git commands are `git status`, `git diff`, `git log`, `git show`. Each becomes two permission rules: exact (`Bash(just test)`) and prefix (`Bash(just test *)`, which allows `just test -k foo`). The file tools `Read`, `Edit`, `Write`, `Glob` and `Grep` are allowed as a whole; layer 1 confines them to the worktree.
 
 A stack command is refused with `PolicyError` if it contains any of `; & | < > $ ` ( ) * ? [ ] { } \`, a newline, or leading or trailing spaces, because it would widen the rules:
 
