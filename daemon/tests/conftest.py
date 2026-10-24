@@ -43,7 +43,7 @@ def run_git(repo: Path, *args: str) -> str:
     git = shutil.which("git")
     assert git is not None, "the tests need git on PATH"
     result = subprocess.run(  # noqa: S603 - fixed argument list, no shell
-        [git, "-C", str(repo), *args], capture_output=True, text=True, check=True
+        [git, "-C", str(repo), *args], capture_output=True, encoding="utf-8", check=True
     )
     return result.stdout
 
