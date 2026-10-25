@@ -22,7 +22,7 @@ For a git URL, SpoolHQ clones it once with its own git runner (hooks disabled), 
 template: https://github.com/me/tpl.git at commit 3f2a…
 ```
 
-Copier then renders exactly that commit. `--template-ref` with anything but a git URL is an error.
+SpoolHQ checks that commit out into a temp folder and removes its `.git`, so Copier renders exactly that commit as a plain folder and never runs git itself: Copier's own clone would use the user's global git config, including a `core.hooksPath` with checkout hooks. The answers file then records the git URL as `_src_path` and the commit as `_commit`, not the temp folder. `--template-ref` with anything but a git URL is an error.
 
 ## The contract: `spoolhq-template.yaml`
 

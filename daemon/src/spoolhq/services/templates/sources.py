@@ -1,8 +1,10 @@
 """Where a template comes from: a built-in name, a local folder or a git URL.
 
 Built-ins ship inside the package (``spoolhq/templates/<name>/``, package data). A git
-URL is cloned once with SpoolHQ's own git runner (hooks disabled) to resolve the ref to
-a commit and read the contract; Copier then renders exactly that commit.
+URL is cloned with SpoolHQ's own git runner (hooks and signing disabled) and checked
+out at the resolved commit; its ``.git`` folder is then removed, so Copier renders that
+plain folder and never runs git itself (its own clone would run the user's global
+hooks).
 """
 
 import re
@@ -88,13 +90,14 @@ def _clone(url: str, ref: str | None) -> Iterator[ResolvedTemplate]:
         except GitError as exc:
             what = f"ref {ref!r}" if ref is not None else "the repository"
             raise TemplateError(f"template {label!r}: cannot fetch {what}: {exc}") from exc
+        remove_path(clone / ".git")
         yield ResolvedTemplate(
             kind="git",
             label=label,
             source=url,
             root=clone,
-            copier_src=url,
-            vcs_ref=commit,
+            copier_src=str(clone),
+            vcs_ref=None,
             ref=commit,
         )
     finally:

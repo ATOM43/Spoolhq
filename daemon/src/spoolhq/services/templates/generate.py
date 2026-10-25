@@ -16,7 +16,7 @@ from ruamel.yaml.error import YAMLError
 
 from spoolhq.services.git import GitError, commit_staged, remove_path, run_git
 from spoolhq.services.projects import InitResult, ProjectError, init_project, project_dir
-from spoolhq.services.projects.yaml_io import loader
+from spoolhq.services.projects.yaml_io import dump, loader
 from spoolhq.services.templates.contract import CONTRACT_FILE, TemplateError, load_contract
 from spoolhq.services.templates.sources import ResolvedTemplate, open_template
 
@@ -46,7 +46,7 @@ def check_safe(root: Path, label: str) -> None:
 def render(template: ResolvedTemplate, dst: Path, project_name: str) -> None:
     """Copy the template into ``dst`` with its default answers and ``project_name``."""
     try:
-        copier.run_copy(
+        worker = copier.run_copy(
             template.copier_src,
             dst,
             data={"project_name": project_name},
@@ -62,6 +62,21 @@ def render(template: ResolvedTemplate, dst: Path, project_name: str) -> None:
         raise TemplateError(unsafe_message(template.label)) from exc
     except Exception as exc:  # Copier raises many kinds (YAML, Jinja, git, OS errors)
         raise TemplateError(f"template {template.label!r}: Copier failed: {exc}") from exc
+    if template.kind == "git":
+        _record_git_source(dst / worker.answers_relpath, template)
+
+
+def _record_git_source(answers: Path, template: ResolvedTemplate) -> None:
+    """Point the answers file at the git URL and commit, not the temp checkout Copier
+    rendered, so ``copier update`` can find the template again."""
+    if not answers.is_file():
+        return
+    data = loader().load(answers.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return
+    data["_src_path"] = template.source
+    data["_commit"] = template.ref
+    answers.write_text(dump(data), encoding="utf-8")
 
 
 def init_repo(repo: Path, branch: str, message: str | None) -> None:

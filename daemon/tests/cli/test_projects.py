@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -99,6 +102,35 @@ def test_init_with_a_git_template_prints_the_commit_first(
     assert result.output.splitlines()[0] == f"template: {url} at commit {commit}"
     yaml = (projects_dir / "demo" / "project.yaml").read_text(encoding="utf-8")
     assert f"ref: {commit}" in yaml
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("git_identity")
+def test_init_with_a_git_template_runs_no_global_git_hooks(tmp_path: Path) -> None:
+    # A subprocess, because Copier's git (plumbum) reads the environment once at import,
+    # so a monkeypatched GIT_CONFIG_GLOBAL would never reach it.
+    url, commit = make_git_template(tmp_path)
+    hooks = tmp_path / "global-hooks"
+    hooks.mkdir()
+    marker = tmp_path / "hook-ran"
+    hook = hooks / "post-checkout"
+    hook.write_text(f'#!/bin/sh\necho ran > "{marker.as_posix()}"\n', encoding="utf-8")
+    hook.chmod(0o755)
+    config = tmp_path / "gitconfig-hooks"
+    config.write_text(f"[core]\n\thooksPath = {hooks.as_posix()}\n", encoding="utf-8")
+    repo = tmp_path / "new"
+    result = subprocess.run(  # noqa: S603 - fixed argument list, no shell
+        [sys.executable, "-m", "spoolhq", "init", "demo", "--repo", str(repo), "--template", url],
+        env={**os.environ, "GIT_CONFIG_GLOBAL": str(config)},
+        capture_output=True,
+        encoding="utf-8",
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.splitlines()[0] == f"template: {url} at commit {commit}"
+    assert (repo / "README.md").is_file()
+    assert not marker.exists()
 
 
 def test_init_with_a_bad_template_creates_nothing(projects_dir: Path, tmp_path: Path) -> None:
