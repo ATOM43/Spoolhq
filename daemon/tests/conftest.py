@@ -294,3 +294,83 @@ def plan_project(workspace: Path) -> Path:
     """``demo`` with the dashboard spec as its ``CONTEXT.md`` and no tickets."""
     shutil.copy(PLANNER_FIXTURES / "CONTEXT.md", workspace / "CONTEXT.md")
     return workspace
+
+
+@pytest.fixture
+def git_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An author and committer from the environment, so commits work without any git
+    config (CI runners have none) and nothing is written to one."""
+    for kind in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{kind}_NAME", "SpoolHQ Tests")
+        monkeypatch.setenv(f"GIT_{kind}_EMAIL", "tests@example.invalid")
+
+
+FIXTURE_COPIER_YML = """\
+_exclude: [copier.yml, spoolhq-template.yaml, .git]
+project_name:
+  type: str
+  default: placeholder
+"""
+
+
+def fixture_contract(**commands: str | None) -> str:
+    """A ``spoolhq-template.yaml`` whose commands default to a passing ``fake_tool.py``;
+    pass ``test=None`` to leave one out."""
+    values = {"install": fake_tool_cmd("pass"), "lint": fake_tool_cmd("pass")}
+    values["test"] = fake_tool_cmd("pass")
+    values.update(commands)
+    lines = [f"  {name}: {json.dumps(cmd)}" for name, cmd in values.items() if cmd is not None]
+    return "name: fixture\ndescription: A fixture template for tests.\ncommands:\n" + (
+        "\n".join(lines) + "\n"
+    )
+
+
+def make_template(
+    folder: Path,
+    *,
+    contract: str | None = None,
+    copier_yml: str = FIXTURE_COPIER_YML,
+    files: dict[str, str] | None = None,
+) -> Path:
+    """A small Copier template in ``folder`` (created): a README naming the project and
+    the answers file. ``contract=None`` writes ``fixture_contract()``."""
+    folder.mkdir(parents=True)
+    (folder / "copier.yml").write_text(copier_yml, encoding="utf-8")
+    (folder / "spoolhq-template.yaml").write_text(
+        fixture_contract() if contract is None else contract, encoding="utf-8"
+    )
+    contents = {
+        "README.md.jinja": "# {{ project_name }}\n",
+        "{{_copier_conf.answers_file}}.jinja": "{{ _copier_answers|to_nice_yaml -}}\n",
+        **(files or {}),
+    }
+    for name, text in contents.items():
+        path = folder / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return folder
+
+
+def make_git_template(tmp_path: Path) -> tuple[str, str]:
+    """``make_template`` committed and pushed to a local bare repo; its path (a git URL
+    ending in ``.git``) and the commit."""
+    work = make_template(tmp_path / "template-work")
+    run_git(work, "init", "--quiet", "--initial-branch=main")
+    run_git(work, "add", "--all")
+    run_git(
+        work,
+        "-c",
+        "user.name=SpoolHQ Tests",
+        "-c",
+        "user.email=tests@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "--quiet",
+        "--no-verify",
+        "-m",
+        "template",
+    )
+    bare = tmp_path / "template.git"
+    run_git(tmp_path, "clone", "--quiet", "--bare", str(work), str(bare))
+    return bare.as_posix(), run_git(work, "rev-parse", "HEAD").strip()

@@ -10,7 +10,10 @@ Unknown keys are errors, so a typo never silently falls back to a default.
 name: sim-dashboard
 repo: ~/code/sim-dashboard
 default_branch: main
-template: fastapi-react
+template:                         # set by spool init --template
+  name: fastapi-react
+  source: fastapi-react           # built-in name, local folder or git URL
+  ref: 0.0.0                      # resolved commit (git), SpoolHQ version (built-in)
 commands:
   install: just install
   lint: just lint
@@ -53,7 +56,9 @@ run:
 | `name` | yes | | Slug: `^[a-z0-9][a-z0-9-]{0,62}$` (lowercase letters, digits, hyphens; 1–63 characters). Must match the project's folder name. |
 | `repo` | yes | | Absolute path or a path starting with `~`. Must exist and be a git work tree. |
 | `default_branch` | no | `main` | A branch name (not a revision such as `main~1` or `main@{0}`) that exists in `repo` (with at least one commit). |
-| `template` | no | | Name of the stack template the project came from. |
+| `template.name` | with `template` | | The template's `name` from its `spoolhq-template.yaml`. The whole `template` block is written by `spool init --template` ([templates](templates.md)). |
+| `template.source` | with `template` | | What `--template` was given: a built-in name, a local folder or a git URL. |
+| `template.ref` | no | | The resolved commit for a git template (or a local git work tree), SpoolHQ's version for a built-in; left out for a plain folder. |
 | `commands.install` | yes | | Non-empty command the gates run to install dependencies. It runs without a shell ([gates](gates.md#no-shell)): no `&&`, `\|\|`, `\|`, `;`, `>`, `<`, `` ` `` or `$(`; put anything longer in a justfile recipe. |
 | `commands.lint` | yes | | Non-empty lint command; same rules. |
 | `commands.test` | yes | | Non-empty test command; same rules. The planner ends every ticket's "Done when" with `` `<test command>` passes ``. |
@@ -75,7 +80,7 @@ run:
 | `tracker.kind` | no | `clickup` | Only `clickup` for now. |
 | `tracker.list_id` | when `tracker` is set | | Non-empty string; quote it (`"901"`) if it is all digits. |
 
-The commands written by `spool init` are placeholders (`just install`, `just lint`, `just test`); check them before the first run.
+The commands written by `spool init` are placeholders (`just install`, `just lint`, `just test`); check them before the first run. With `--template`, they come from the template's `spoolhq-template.yaml`, and the template's description is saved next to `project.yaml` as `TEMPLATE.md`, which the [planner](planner.md) reads.
 
 ## Errors
 

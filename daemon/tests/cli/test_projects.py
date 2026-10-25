@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from spoolhq.cli import app
+from tests.conftest import fixture_contract, make_git_template, make_template, run_git
 
 runner = CliRunner()
 
@@ -67,3 +69,52 @@ def test_validate_missing_project(projects_dir: Path) -> None:
     result = runner.invoke(app, ["project", "validate", "nope"])
     assert result.exit_code == 1
     assert f"no project 'nope' in {projects_dir}" in result.output
+
+
+@pytest.mark.usefixtures("git_identity")
+def test_init_with_a_local_template(projects_dir: Path, tmp_path: Path) -> None:
+    template = make_template(tmp_path / "tpl")
+    repo = tmp_path / "new"
+    result = runner.invoke(app, ["init", "demo", "--repo", str(repo), "--template", str(template)])
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[0] == f"template: {template.resolve()}"
+    assert lines[1] == f"Generated {repo.resolve()} (one commit on main)"
+    assert "Created project 'demo'" in result.output
+    assert "check the commands" not in result.output
+    assert run_git(repo, "log", "--format=%s").strip() == "chore: apply template fixture"
+
+
+@pytest.mark.usefixtures("git_identity")
+def test_init_with_a_git_template_prints_the_commit_first(
+    projects_dir: Path, tmp_path: Path
+) -> None:
+    url, commit = make_git_template(tmp_path)
+    repo = tmp_path / "new"
+    result = runner.invoke(
+        app,
+        ["init", "demo", "--repo", str(repo), "--template", url, "--template-ref", "main"],
+    )
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[0] == f"template: {url} at commit {commit}"
+    yaml = (projects_dir / "demo" / "project.yaml").read_text(encoding="utf-8")
+    assert f"ref: {commit}" in yaml
+
+
+def test_init_with_a_bad_template_creates_nothing(projects_dir: Path, tmp_path: Path) -> None:
+    template = make_template(tmp_path / "x", contract=fixture_contract(test=None))
+    repo = tmp_path / "new"
+    result = runner.invoke(app, ["init", "demo", "--repo", str(repo), "--template", str(template)])
+    assert result.exit_code == 1
+    assert (
+        "error: template 'x': spoolhq-template.yaml has no 'test' command; "
+        "every template must declare install, lint and test"
+    ) in result.output
+    assert not repo.exists()
+    assert not (projects_dir / "demo").exists()
+
+
+def test_init_template_ref_needs_a_template(projects_dir: Path, git_repo: Path) -> None:
+    result = runner.invoke(app, ["init", "demo", "--repo", str(git_repo), "--template-ref", "v1"])
+    assert result.exit_code == 1
+    assert "error: --template-ref needs --template" in result.output

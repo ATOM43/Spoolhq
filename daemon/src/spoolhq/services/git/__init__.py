@@ -70,6 +70,7 @@ from spoolhq.services.git.worktrees import (
     WorktreeManager,
     WorktreeSession,
     WorktreeState,
+    remove_path,
 )
 
 __all__ = [
@@ -123,6 +124,7 @@ __all__ = [
     "ensure_no_operation_in_progress",
     "is_work_tree",
     "recover_worktrees",
+    "remove_path",
     "run_git",
     "slugify",
 ]

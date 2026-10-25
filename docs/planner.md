@@ -9,7 +9,7 @@ The code is `services/planner/`: the plan schema in `model.py`, parsing and chec
 | Input | Where from | Trusted |
 | --- | --- | --- |
 | The spec | `<workspace>/CONTEXT.md`; missing is an error: `no CONTEXT.md in …: write the spec there first` | no |
-| A template description | `--template-description FILE` (the API's `template_description`); `None` until T16 applies templates | no |
+| A template description | `--template-description FILE` (the API's `template_description`); without one, the workspace's `TEMPLATE.md`, written by `spool init --template` ([templates](templates.md)); otherwise none | no |
 | The kept tickets | Every ticket the plan must not touch (see [re-planning](#re-planning)), with its body | no |
 | The planning rules | The prompt template | yes |
 | The test command | `commands.test` in `project.yaml` | yes |
@@ -135,7 +135,7 @@ A missing or unreadable `plan.json` records nothing, so every draft is kept. If 
 
 | Command | What it does |
 | --- | --- |
-| `spool plan generate <project> [--template-description FILE]` | Runs the planner and prints the number of drafts written with their hours, the kept and deleted tickets, the critical path and any plan problems. Exits 1 with the error if the plan fails. |
+| `spool plan generate <project> [--template-description FILE]` | Runs the planner (with the stored `TEMPLATE.md` when no file is given) and prints the number of drafts written with their hours, the kept and deleted tickets, the critical path and any plan problems. Exits 1 with the error if the plan fails. |
 | `spool plan show <project>` | The drafts with their estimates and dependencies, the total, and the plan problems (or `none`). |
 | `spool plan approve <project>` | Moves every draft to `ready`, or exits 1 naming every problem. |
 

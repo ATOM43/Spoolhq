@@ -16,7 +16,12 @@ from spoolhq.services.planner.model import InvalidPlan, PlannerError, PlanResult
 from spoolhq.services.planner.prompt import render_planner_prompt
 from spoolhq.services.planner.store import load_existing, write_plan
 from spoolhq.services.planner.validate import check_plan, parse_plan
-from spoolhq.services.projects import ProjectError, load_project, project_dir
+from spoolhq.services.projects import (
+    ProjectError,
+    load_project,
+    project_dir,
+)
+from spoolhq.services.projects import template_description as stored_description
 
 PLANNER_MAX_TURNS = 30
 SPEC_FILE = "CONTEXT.md"
@@ -49,12 +54,16 @@ def generate_plan(
 ) -> PlanResult:
     """Plan ``project`` from its ``CONTEXT.md`` and write the drafts.
 
-    ``home`` is the SpoolHQ home (denied to the agent). Raises PlannerError before the
+    ``home`` is the SpoolHQ home (denied to the agent). Without ``template_description``
+    the workspace's ``TEMPLATE.md`` is used, if there is one. Raises PlannerError before the
     agent starts (bad project, invalid ticket files, no spec) and whatever
     ``runner.run`` raises then; everything after the agent started is in the result.
     """
     try:
         settings = load_project(project, projects_dir=projects_dir)
+        if template_description is None:
+            # The description saved by `spool init --template` (TEMPLATE.md).
+            template_description = stored_description(project, projects_dir=projects_dir)
     except ProjectError as exc:
         raise PlannerError(str(exc)) from exc
     workspace = project_dir(project, projects_dir)

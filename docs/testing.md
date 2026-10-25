@@ -29,6 +29,8 @@ daemon/tests/
     gates/         # fake_tool.py (run it with fake_tool_cmd from tests/conftest.py)
     review/        # conftest.py: worktree, inputs (the T07 fixture ticket and seeded diff)
     planner/       # uses plan_project, dashboard_plan() and plan_transcript() from tests/conftest.py
+    templates/     # uses make_template(), make_git_template(), fixture_contract() and git_identity
+                   # from tests/conftest.py; test_fastapi_react.py generates and checks the real template
     runloop/       # conftest.py: transcripts (generated), FakeGates, ManualClock, Merging, make_loop;
                    # crash_child.py (an integration that dies at a journal state)
 ```
@@ -48,6 +50,7 @@ daemon/tests/
 - `client`: a FastAPI `TestClient` for the app, with a fixed test token (`token`).
 - `free_port`: an unused port on 127.0.0.1.
 - `plan_project`: `demo` with the dashboard spec as its `CONTEXT.md`; `dashboard_plan()` returns the recorded 18-ticket plan and `plan_transcript(path, plan)` writes a planner run ending with any plan.
+- `git_identity`: sets `GIT_AUTHOR_*` and `GIT_COMMITTER_*`, so commits work on a runner with no git config. `make_template(folder, contract=…, copier_yml=…, files=…)` writes a small Copier template whose commands run a passing `fake_tool.py` (`fixture_contract(test=None)` leaves one out); `make_git_template(tmp_path)` commits one into a local bare repo and returns its path and commit.
 - `run_project` / `run_client`: `demo` with the ready T07 fixture ticket and passing `fake_tool.py` gates, and an app whose run loop uses fake agents (for `tests/api/` and `tests/cli/`).
 
 ### Unit and integration tests

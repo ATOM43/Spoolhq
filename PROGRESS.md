@@ -207,3 +207,10 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - `slugify` moved to `core/ids.py`. Fixtures: the dashboard spec and a recorded 18-ticket plan run (`tests/fixtures/planner/`), the golden planner prompt.
 - Docs: new `docs/planner.md`; `ticket-format.md`, `agents.md`, `project-yaml.md`, `runs.md`, `architecture.md`, `context.md`, `scheduler.md`, `testing.md`, the docs index and the README; DECISIONS 206–220.
 - Real run (a three-paragraph spec for a small CLI tool): 1 call, 19,138 in (15,506 cache reads) and 3,414 out, 8,596 weighted; six tickets, valid.
+
+## T16 · Template library
+
+- `services/templates/` (new): the `spoolhq-template.yaml` contract (`contract.py`), built-in names, local folders and git URLs resolved to a commit (`sources.py`), Copier without trust plus `git init` and the first commit, with clean-up on failure (`generate.py`), and the contract check through T11's gates (`check.py`). Copier 9.19.1 (MIT) is the one new dependency.
+- `spool init --template SOURCE [--template-ref REF]` generates into a new or empty `--repo`, commits `chore: apply template <name>` and fills `project.yaml`'s `commands` and new `template` block (`name`, `source`, `ref`); the description goes to the workspace's `TEMPLATE.md`, which `spool plan generate` (and the API) use when no description is given. `spool templates list|check`.
+- The built-in `fastapi-react` template (`daemon/src/spoolhq/templates/fastapi-react/`): FastAPI, SQLAlchemy 2, Alembic, pytest (80% floor), ruff, mypy strict and import-linter layers in `backend/`; React, Vite, strict TypeScript, Vitest, ESLint, Prettier and Feature-Sliced Design enforced by eslint-plugin-boundaries in `frontend/`; an `items` example through every layer, a justfile, CI, `CLAUDE.md`, `PROGRESS.md`, `DECISIONS.md`, `.gitignore` and `.env.example`. It passes its own gates with no agent (about 10 s locally with warm caches).
+- Docs: new `docs/templates.md`; `project-yaml.md`, `planner.md`, `architecture.md`, `testing.md`, the docs index, the README and `templates/README.md`; DECISIONS 221–231.

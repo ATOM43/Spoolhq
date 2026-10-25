@@ -13,6 +13,7 @@ from spoolhq.services.projects import (
     init_project,
     load_project,
     save_project,
+    template_description,
 )
 from spoolhq.services.projects import workspace as workspace_module
 
@@ -82,7 +83,10 @@ def test_example_from_task_md_is_valid(projects_dir: Path, git_repo: Path) -> No
 name: demo
 repo: {json.dumps(str(git_repo))}
 default_branch: main
-template: fastapi-react
+template:
+  name: fastapi-react
+  source: fastapi-react
+  ref: 0.1.0
 commands:
   install: just install
   lint: just lint
@@ -110,6 +114,8 @@ tracker:
     assert project.agents.reviewer == "codex-cli"
     assert project.agents.budget_per_ticket is not None
     assert project.agents.budget_per_ticket.tokens == 2_000_000
+    assert project.template is not None
+    assert (project.template.name, project.template.ref) == ("fastapi-react", "0.1.0")
 
 
 def test_repo_with_tilde_is_expanded(
@@ -443,6 +449,52 @@ def test_init_creates_workspace(projects_dir: Path, git_repo: Path) -> None:
     assert project.repo_path == git_repo.resolve()
 
 
+def test_init_with_template_settings(projects_dir: Path, git_repo: Path) -> None:
+    commands = {"install": "make deps", "lint": "make lint", "test": "make check"}
+    result = init_project(
+        "demo",
+        git_repo,
+        projects_dir=projects_dir,
+        commands=commands,
+        template={"name": "t", "source": "/srv/t", "ref": None},
+        template_description="Made from t.",
+    )
+    assert result.project.commands.model_dump() == commands
+    assert result.project.template is not None
+    assert result.project.template.model_dump() == {"name": "t", "source": "/srv/t", "ref": None}
+    text = (projects_dir / "demo" / "project.yaml").read_text(encoding="utf-8")
+    assert "template:\n  name: t\n  source: /srv/t\n" in text
+    assert "ref:" not in text
+    assert "From the template's spoolhq-template.yaml." in text
+    assert template_description("demo", projects_dir=projects_dir) == "Made from t."
+    assert load_project("demo", projects_dir=projects_dir) == result.project
+
+
+def test_template_description_is_none_without_a_template(
+    projects_dir: Path, git_repo: Path
+) -> None:
+    init_project("demo", git_repo, projects_dir=projects_dir)
+    assert template_description("demo", projects_dir=projects_dir) is None
+
+
+def test_an_unreadable_template_description(projects_dir: Path, git_repo: Path) -> None:
+    init_project("demo", git_repo, projects_dir=projects_dir)
+    (projects_dir / "demo" / "TEMPLATE.md").write_bytes(b"\xff\xfe bad")
+    with pytest.raises(ProjectError, match="cannot read .*TEMPLATE.md"):
+        template_description("demo", projects_dir=projects_dir)
+
+
+def test_a_template_must_be_a_block(projects_dir: Path, git_repo: Path) -> None:
+    data = valid_data(git_repo)
+    data["template"] = "fastapi-react"
+    write_project(projects_dir, json.dumps(data))
+    with pytest.raises(ProjectValidationError) as info:
+        load_project("demo", projects_dir=projects_dir)
+    assert info.value.errors == [
+        "project.yaml: template: input should be a valid dictionary or instance of TemplateInfo"
+    ]
+
+
 def test_init_finds_repo_notes(projects_dir: Path, git_repo: Path) -> None:
     for note in ("PROGRESS.md", "DECISIONS.md", "CLAUDE.md"):
         (git_repo / note).write_text("notes\n", encoding="utf-8")
@@ -487,7 +539,7 @@ def test_init_refuses_existing_folder(projects_dir: Path, git_repo: Path) -> Non
     assert [p.name for p in projects_dir.iterdir()] == ["demo"]
 
 
-def _fail_after_yaml(folder: Path, project: Project) -> None:
+def _fail_after_yaml(folder: Path, project: Project, description: str | None) -> None:
     (folder / "project.yaml").write_text("partial", encoding="utf-8")
     raise OSError("disk full")
 

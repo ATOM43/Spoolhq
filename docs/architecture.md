@@ -16,8 +16,9 @@ spoolhq/
     schemas/        # Pydantic request/response models
   services/     # domain logic, one package per domain:
                 # projects, tickets, scheduler, runs, git, agents, context, gates,
-                # review, planner, runloop, tracker
+                # review, planner, templates, runloop, tracker
   cli/          # Typer commands (main.py) + API client (client.py)
+  templates/    # built-in project templates (package data, not Python modules)
 ```
 
 ### Layer rules
@@ -56,6 +57,7 @@ A project is one workspace folder plus the git repository it works on. Workspace
 ~/spoolhq-projects/<name>/
   project.yaml   # settings: repo, branch, stack commands, agents, limits, merge policy, remote, tracker
   CONTEXT.md     # the spec the planner reads
+  TEMPLATE.md    # the applied template's description (spool init --template only)
   tickets/       # one markdown file per ticket: <id>-<slug>.md
   runs/          # one folder per attempt: runs/<ticket>/<NNN>/ (transcript, gates, diff, review)
   .spoolhq/
@@ -123,6 +125,12 @@ The code is `services/review/`: `ReviewInputs`, `ItemVerdict` and `ReviewResult`
 The planner turns the workspace's `CONTEXT.md` into draft tickets. `generate_plan(project, runner, …)` runs a read-only agent (`Read`, `Glob`, `Grep`, the reviewer's policy) in the project's repository with the spec, an optional template description and the tickets that must be kept; its `<plan>` JSON block is validated in code (schema, ids, the ticket store, the scheduler's plan validation), retried once with the errors, and written as `draft` ticket files, all or nothing. `<workspace>/.spoolhq/plan.json` records each draft's SHA-256, so a re-plan keeps the drafts you edited and replaces only the unedited ones. `approve_plan` moves every draft to `ready` in one step; nothing runs before that. The rules are in [planner.md](planner.md).
 
 The code is `services/planner/`: the plan schema in `model.py`, parsing and checking in `validate.py`, the prompt in `prompt.py` (template `services/context/prompts/planner.md.j2`, overridable in `<workspace>/prompts/`), draft files, hashes and approval in `store.py` and `generate_plan` in `planner.py`. It may import `services.agents`, `services.context`, `services.projects`, `services.scheduler` and `services.tickets` (an import-linter contract forbids review, runs and tracker). `spool plan generate|show|approve` (in `cli/plan.py`) call it directly; for the API, `PlanJobs` (`services/runloop/planning.py`) runs it on a daemon worker thread and records a run of kind `plan` in the run log, and `api/routers/plan.py` exposes generate (202) and approve. `slugify` lives in `core/ids.py`, since both branch names and draft file names use it.
+
+## Templates
+
+`spool init <name> --repo <new folder> --template <source>` generates a repository from a template before creating the workspace, so the planner starts at the real work. A template is a Copier template with a `spoolhq-template.yaml` contract (name, a description for the planner, the `install`/`lint`/`test` commands); sources are built-in names (package data in `spoolhq/templates/<name>/`), local folders or git URLs. Templates get no trust: Copier runs without `unsafe` and with empty settings, and tasks, migrations and Jinja extensions are refused. The first commit goes through the integration commit helper; any failure removes what was generated. `spool templates check` generates a template into a temp folder and runs its gates. The rules are in [templates.md](templates.md).
+
+The code is `services/templates/`: the contract in `contract.py`, sources (and the git clone that resolves a ref) in `sources.py`, rendering, the trust check, `git init` and `init_from_template` in `generate.py`, and `check_template` in `check.py`. It may import `services.projects` (the workspace, `TEMPLATE.md`), `services.gates` (command validation, `run_gates`) and `services.git` (`run_git`, the commit helper); an import-linter contract forbids the rest. The planner reads `TEMPLATE.md` through `services.projects.template_description`, so it doesn't import this package. `spool init --template` and `spool templates list|check` (in `cli/main.py` and `cli/templates.py`) call it directly.
 
 ## Run loop
 

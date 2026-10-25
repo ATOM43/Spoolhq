@@ -25,6 +25,8 @@ from spoolhq.services.projects.errors import (
 from spoolhq.services.projects.model import FOLDER_NAME_CONTEXT, SLUG_RE, SLUG_RULE, Project
 
 CONTEXT_FILE = "CONTEXT.md"
+# The applied template's description, which the planner reads (docs/templates.md).
+TEMPLATE_FILE = "TEMPLATE.md"
 WORKSPACE_DIRS = ("tickets", "runs")
 REPO_NOTES = ("PROGRESS.md", "DECISIONS.md", "CLAUDE.md")
 PLACEHOLDER_COMMANDS = {"install": "just install", "lint": "just lint", "test": "just test"}
@@ -33,6 +35,7 @@ YAML_HEADER = "SpoolHQ project settings. Reference: docs/project-yaml.md in the 
 COMMANDS_COMMENT = (
     "Placeholders: check that these install, lint and test your repo before the first run."
 )
+TEMPLATE_COMMANDS_COMMENT = "From the template's spoolhq-template.yaml."
 
 CONTEXT_TEMPLATE = """\
 # {name}
@@ -136,18 +139,32 @@ def save_project(project: Project, *, projects_dir: Path) -> Path:
     return path
 
 
+def template_description(name: str, *, projects_dir: Path) -> str | None:
+    """The workspace's ``TEMPLATE.md`` (the applied template's description), if any."""
+    path = project_dir(name, projects_dir) / TEMPLATE_FILE
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ProjectError(f"cannot read {path}: {exc}") from exc
+
+
 def _initial_yaml(project: Project) -> str:
     doc = yaml_io.to_node(project.model_dump(mode="json", exclude_none=True))
     doc.yaml_set_start_comment(YAML_HEADER)
-    doc.yaml_set_comment_before_after_key("commands", before=COMMANDS_COMMENT)
+    comment = TEMPLATE_COMMANDS_COMMENT if project.template else COMMANDS_COMMENT
+    doc.yaml_set_comment_before_after_key("commands", before=comment)
     return yaml_io.dump(doc)
 
 
-def _populate(folder: Path, project: Project) -> None:
+def _populate(folder: Path, project: Project, description: str | None) -> None:
     (folder / FILE_NAME).write_text(_initial_yaml(project), encoding="utf-8", newline="\n")
     (folder / CONTEXT_FILE).write_text(
         CONTEXT_TEMPLATE.format(name=project.name), encoding="utf-8", newline="\n"
     )
+    if description is not None:
+        (folder / TEMPLATE_FILE).write_text(description, encoding="utf-8", newline="\n")
     for name in WORKSPACE_DIRS:
         (folder / name).mkdir()
 
@@ -159,9 +176,14 @@ def init_project(
     projects_dir: Path,
     branch: str = "main",
     remote: str | None = None,
+    commands: Mapping[str, str] | None = None,
+    template: Mapping[str, str | None] | None = None,
+    template_description: str | None = None,
 ) -> InitResult:
     """Create the workspace for a new project on an existing git repository.
 
+    ``commands`` default to the ``just`` placeholders; ``template`` (``name``,
+    ``source``, ``ref``) and its description are set by ``spool init --template``.
     The name, repo, branch and remote are checked first; nothing is created if any is
     invalid. The workspace is built in a temp folder next to the target and renamed
     into place, so a failure leaves nothing behind. The repository is never modified.
@@ -170,8 +192,10 @@ def init_project(
         "name": name,
         "repo": str(repo.expanduser().resolve()),
         "default_branch": branch,
-        "commands": dict(PLACEHOLDER_COMMANDS),
+        "commands": dict(commands if commands is not None else PLACEHOLDER_COMMANDS),
     }
+    if template is not None:
+        data["template"] = {key: value for key, value in template.items() if value is not None}
     if remote is not None:
         data["git"] = {"remote": remote}
     project = _validate(data, folder_name=None, prefix=None)
@@ -183,7 +207,7 @@ def init_project(
     projects_dir.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{project.name}.", suffix=".tmp", dir=projects_dir))
     try:
-        _populate(staging, project)
+        _populate(staging, project, template_description)
         if target.exists():
             raise ProjectError(f"project folder already exists: {target}")
         staging.rename(target)

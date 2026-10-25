@@ -371,6 +371,29 @@ def test_the_template_description_reaches_the_prompt(
     assert "Its setup counts as done" in prompt
 
 
+def test_the_stored_template_description_is_used_by_default(
+    plan_project: Path, projects_dir: Path, home: Path
+) -> None:
+    (plan_project / "TEMPLATE.md").write_text("Stored: FastAPI + React.", encoding="utf-8")
+    runner = FakeRunner([DASHBOARD_PLAN, DASHBOARD_PLAN])
+    plan(runner, projects_dir, home)
+    prompt = runner.calls[0][0]
+    assert "<template>" in prompt and "Stored: FastAPI + React." in prompt
+    assert "Its setup counts as done" in prompt
+
+    plan(runner, projects_dir, home, template_description="Given instead.")
+    assert "Given instead." in runner.calls[1][0]
+    assert "Stored: FastAPI + React." not in runner.calls[1][0]
+
+
+def test_no_template_means_no_template_rule(
+    plan_project: Path, projects_dir: Path, home: Path
+) -> None:
+    runner = FakeRunner(DASHBOARD_PLAN)
+    plan(runner, projects_dir, home)
+    assert "Its setup counts as done" not in runner.calls[0][0]
+
+
 def test_a_missing_spec_is_refused(workspace: Path, projects_dir: Path, home: Path) -> None:
     (workspace / "CONTEXT.md").unlink()
     with pytest.raises(PlannerError, match="no CONTEXT.md in .*: write the spec there first"):

@@ -150,11 +150,21 @@ class Tracker(_Strict):
     list_id: NonEmptyStr
 
 
+class TemplateInfo(_Strict):
+    """The stack template the repository was generated from (``spool init --template``)."""
+
+    name: NonEmptyStr
+    source: NonEmptyStr
+    """The built-in name, the local folder or the git URL given to ``--template``."""
+    ref: NonEmptyStr | None = None
+    """The resolved commit (git templates) or SpoolHQ's version (built-ins)."""
+
+
 class Project(_Strict):
     name: str
     repo: str
     default_branch: NonEmptyStr = Field(default="main", validate_default=True)
-    template: NonEmptyStr | None = None
+    template: TemplateInfo | None = None
     commands: Commands
     agents: Agents = Field(default_factory=Agents)
     limits: Limits = Field(default_factory=Limits)

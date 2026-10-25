@@ -21,10 +21,18 @@ uv run --directory daemon spool init my-app --repo ~/code/my-app   # creates ~/s
 uv run --directory daemon spool project validate my-app
 ```
 
+Or generate a new repository from a template that already passes its own gates, so the plan starts at the real work ([templates](docs/templates.md)):
+
+```sh
+uv run --directory daemon spool templates list
+uv run --directory daemon spool init my-app --repo ~/code/my-app --template fastapi-react
+uv run --directory daemon spool templates check fastapi-react   # generate in a temp folder, run install/lint/test
+```
+
 Write the spec in the workspace's `CONTEXT.md`, then let the planner draft the tickets, review them and approve ([planner](docs/planner.md)). Nothing runs until you approve:
 
 ```sh
-uv run --directory daemon spool plan generate my-app [--template-description stack.md]
+uv run --directory daemon spool plan generate my-app [--template-description stack.md]   # default: the template's description
 uv run --directory daemon spool plan show my-app            # drafts, estimates, dependencies, problems
 uv run --directory daemon spool tickets edit my-app T03     # an edited draft survives a re-plan
 uv run --directory daemon spool plan approve my-app         # every draft → ready, in one step

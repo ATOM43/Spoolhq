@@ -11,6 +11,7 @@ from spoolhq.services.projects.model import (
     Limits,
     MergePolicy,
     Project,
+    TemplateInfo,
     Tracker,
 )
 from spoolhq.services.projects.workspace import (
@@ -20,6 +21,7 @@ from spoolhq.services.projects.workspace import (
     load_project,
     project_dir,
     save_project,
+    template_description,
 )
 
 __all__ = [
@@ -35,10 +37,12 @@ __all__ = [
     "Project",
     "ProjectError",
     "ProjectValidationError",
+    "TemplateInfo",
     "Tracker",
     "init_project",
     "list_workspaces",
     "load_project",
     "project_dir",
     "save_project",
+    "template_description",
 ]

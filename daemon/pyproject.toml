@@ -6,6 +6,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
+    "copier==9.19.1",
     "fastapi==0.143.3",
     "httpx==0.28.1",
     "jinja2==3.1.6",
@@ -35,6 +36,8 @@ build-backend = "uv_build"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Built-in project templates are package data with their own lint setup.
+extend-exclude = ["src/spoolhq/templates"]
 
 [tool.ruff.lint]
 # Default rules plus import sorting, pyupgrade, bugbear and the security checks
@@ -49,6 +52,7 @@ select = ["E", "F", "W", "I", "UP", "B", "S"]
 strict = true
 python_version = "3.12"
 files = ["src"]
+exclude = ["^src/spoolhq/templates/"]
 
 [tool.importlinter]
 root_package = "spoolhq"
@@ -167,6 +171,21 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "services.templates imports only projects, gates and git"
+type = "forbidden"
+source_modules = ["spoolhq.services.templates"]
+forbidden_modules = [
+    "spoolhq.services.agents",
+    "spoolhq.services.context",
+    "spoolhq.services.planner",
+    "spoolhq.services.review",
+    "spoolhq.services.runs",
+    "spoolhq.services.scheduler",
+    "spoolhq.services.tickets",
+    "spoolhq.services.tracker",
+]
+
+[[tool.importlinter.contracts]]
 name = "services.runloop may import every service, but only api and cli import it"
 type = "forbidden"
 source_modules = [
@@ -180,6 +199,7 @@ source_modules = [
     "spoolhq.services.review",
     "spoolhq.services.runs",
     "spoolhq.services.scheduler",
+    "spoolhq.services.templates",
     "spoolhq.services.tickets",
     "spoolhq.services.tracker",
 ]

@@ -20,6 +20,7 @@ from spoolhq.cli.prompt import prompt_app
 from spoolhq.cli.review import review_command
 from spoolhq.cli.run import run_app
 from spoolhq.cli.runs import runs_app
+from spoolhq.cli.templates import describe_source, templates_app
 from spoolhq.cli.tickets import tickets_app
 from spoolhq.cli.worktrees import worktrees_app
 from spoolhq.core.auth import load_or_create_token, token_path
@@ -32,6 +33,7 @@ from spoolhq.services.projects import (
     init_project,
     load_project,
 )
+from spoolhq.services.templates import TemplateError, init_from_template
 
 app = typer.Typer(
     name="spool",
@@ -53,6 +55,7 @@ app.add_typer(gates_app)
 app.add_typer(runs_app)
 app.add_typer(run_app)
 app.add_typer(worktrees_app)
+app.add_typer(templates_app)
 app.command("agents")(agents_command)
 app.command("review")(review_command)
 
@@ -112,26 +115,59 @@ def version() -> None:
 @app.command()
 def init(
     name: Annotated[str, typer.Argument(help="Project name: lowercase letters, digits, hyphens.")],
-    repo: Annotated[Path, typer.Option(help="The existing git repository to work on.")],
+    repo: Annotated[
+        Path,
+        typer.Option(
+            help="The existing git repository to work on; with --template, a new or "
+            "empty folder to generate into."
+        ),
+    ],
     branch: Annotated[str, typer.Option(help="Branch that tickets merge into.")] = "main",
     remote: Annotated[
         str | None, typer.Option(help="GitHub URL of the repository (optional).")
     ] = None,
+    template: Annotated[
+        str | None,
+        typer.Option(help="Generate the repo from a template: built-in name, folder or git URL."),
+    ] = None,
+    template_ref: Annotated[
+        str | None, typer.Option(help="Branch, tag or commit of a git URL template.")
+    ] = None,
 ) -> None:
-    """Create a project workspace for an existing git repository."""
+    """Create a project workspace for an existing git repository, or generate the
+    repository from a template first."""
     settings = _settings()
+    if template_ref is not None and template is None:
+        _fail("error: --template-ref needs --template")
     try:
-        result = init_project(
-            name, repo, projects_dir=settings.projects_dir, branch=branch, remote=remote
-        )
+        if template is None:
+            result = init_project(
+                name, repo, projects_dir=settings.projects_dir, branch=branch, remote=remote
+            )
+        else:
+            result = init_from_template(
+                name,
+                repo,
+                template,
+                ref=template_ref,
+                projects_dir=settings.projects_dir,
+                branch=branch,
+                remote=remote,
+                on_resolved=lambda resolved: typer.echo(describe_source(resolved)),
+            )
     except ProjectValidationError as exc:
         _fail("\n".join(f"error: {line}" for line in exc.errors))
-    except ProjectError as exc:
-        _fail(f"error: {exc}")
+    except (ProjectError, TemplateError) as exc:
+        _fail("\n".join(f"error: {line}" for line in str(exc).splitlines()))
+    if template is not None:
+        typer.echo(f"Generated {result.project.repo_path} (one commit on {branch})")
     typer.echo(f"Created project '{result.project.name}' at {result.path}")
     if result.missing_notes:
         missing = ", ".join(result.missing_notes)
         typer.echo(f"note: {result.project.repo_path} has no {missing} (agents read them there)")
+    if template is not None:
+        typer.echo(f"Next: write your spec in {result.path / 'CONTEXT.md'}.")
+        return
     typer.echo(
         f"Next: write your spec in {result.path / 'CONTEXT.md'}, "
         "and check the commands in project.yaml."

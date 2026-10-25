@@ -11,7 +11,7 @@ from typing import Annotated
 import typer
 
 from spoolhq.cli.common import fail, settings
-from spoolhq.services.gates import GateResult, GateStatus, run_gates
+from spoolhq.services.gates import GateResult, GateRun, GateStatus, run_gates
 from spoolhq.services.projects import ProjectError, load_project
 
 gates_app = typer.Typer(
@@ -60,6 +60,13 @@ def run_command(
         project_settings.gates.timeouts.model_dump(),
         log_dir,
     )
+    print_run(run)
+    if not run.passed:
+        raise typer.Exit(code=1)
+
+
+def print_run(run: GateRun) -> None:
+    """One line per gate, then each failure's excerpt and failing tests."""
     for result in run.results:
         typer.echo(describe(result))
     for result in run.results:
@@ -70,5 +77,3 @@ def run_command(
             typer.echo("failing tests:")
             for name in result.failing_tests:
                 typer.echo(f"  {name}")
-    if not run.passed:
-        raise typer.Exit(code=1)
