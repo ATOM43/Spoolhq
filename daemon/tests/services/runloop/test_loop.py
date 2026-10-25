@@ -498,3 +498,21 @@ def test_integration_conflict_goes_back_once_then_blocks(
     assert (final.status, final.reason) == (RunStatus.BLOCKED, message)
     attempts = [(a.kind.value, a.status.value) for a in log.list_attempts(run.id)]
     assert attempts == [("initial", "approved"), ("conflict_retry", "approved")]
+
+
+def test_resume_skips_an_interrupted_plan_run(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    registry: RunRegistry,
+    project: Path,
+    repo: Path,
+    worktrees: Path,
+) -> None:
+    run_id, _ = crashed_run(project, repo, worktrees, registry)
+    with RunLog(project, daemon_instance="older") as old:
+        old.start_plan_run()  # newer than T01's run; its ticket id "plan" is no ticket
+    recover_interrupted(registry.get("demo").run_log)
+    loop, _ = make_loop([transcripts.implement()], [transcripts.review("approve")])
+
+    assert loop.resume("demo").id == run_id
+    loop.wait("demo")

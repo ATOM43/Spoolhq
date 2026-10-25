@@ -198,3 +198,12 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 
 - The token budget counts weighted tokens (cache reads at a tenth), with `cache_read_tokens` stored per attempt (schema 4) and the weighted total in `spool runs list|show`; the implementer prompt asks for fewer, larger turns; the prompt keeps the newest 3 `PROGRESS.md` entries and 20 `DECISIONS.md` lines (`context.progress_entries`, `context.decisions_lines`); the implementer's env sets `npm_config_verify_deps_before_run=false`; DECISIONS 202–205.
 - Real run (the T13 hello ticket): 1 attempt, 6 model calls, 60,551 in (49,447 cache reads) and 1,848 out, 17,896 weighted. Before (T13): 47,383 in and 1,627 out, cache reads and calls not recorded.
+
+## T15 · Planner agent
+
+- `services/planner/` (new): the `<plan>` schema and title cleaning (`model.py`), parsing and checks against the kept tickets and T06's graph validation (`validate.py`), the sandboxed prompt (`prompt.py`, template `services/context/prompts/planner.md.j2`), draft files, `plan.json` hashes, the re-plan split, all-or-nothing writes and `approve_plan` (`store.py`), and `generate_plan` with one retry and the token budget (`planner.py`).
+- Run log: `runs.kind` (`ticket` | `plan`, schema 5), `start_plan_run`, attempt kind `plan` in `runs/plan/`; resume skips plan runs. `services/runloop/planning.py`: `PlanJobs` runs the planner on a daemon thread; `Agents.planner`.
+- CLI: `spool plan generate|show|approve`. API: `POST /api/projects/{name}/plan` (202) and `/plan/approve`; `RunView.kind`.
+- `slugify` moved to `core/ids.py`. Fixtures: the dashboard spec and a recorded 18-ticket plan run (`tests/fixtures/planner/`), the golden planner prompt.
+- Docs: new `docs/planner.md`; `ticket-format.md`, `agents.md`, `project-yaml.md`, `runs.md`, `architecture.md`, `context.md`, `scheduler.md`, `testing.md`, the docs index and the README; DECISIONS 206–220.
+- Real run (a three-paragraph spec for a small CLI tool): 1 call, 19,138 in (15,506 cache reads) and 3,414 out, 8,596 weighted; six tickets, valid.

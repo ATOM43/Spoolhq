@@ -16,6 +16,7 @@ class StartRun(BaseModel):
 
 class RunView(BaseModel):
     id: int
+    kind: str
     ticket_id: str
     status: str
     reason: str | None
@@ -28,6 +29,7 @@ class RunView(BaseModel):
     def of(cls, run: Run) -> "RunView":
         return cls(
             id=run.id,
+            kind=run.kind.value,
             ticket_id=run.ticket_id,
             status=run.status.value,
             reason=run.reason,

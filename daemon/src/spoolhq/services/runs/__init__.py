@@ -33,6 +33,7 @@ from spoolhq.services.runs.journal import (
 )
 from spoolhq.services.runs.log import RunLog
 from spoolhq.services.runs.model import (
+    PLAN_RUN_ID,
     TERMINAL_RUN_STATUSES,
     Attempt,
     AttemptKind,
@@ -40,6 +41,7 @@ from spoolhq.services.runs.model import (
     Event,
     EventKind,
     Run,
+    RunKind,
     RunStatus,
     Usage,
 )
@@ -62,7 +64,9 @@ __all__ = [
     "IntegrationState",
     "EventBus",
     "EventKind",
+    "PLAN_RUN_ID",
     "Run",
+    "RunKind",
     "RunLog",
     "RunLogError",
     "RunRegistry",

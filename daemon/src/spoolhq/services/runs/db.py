@@ -99,7 +99,12 @@ _V4 = """
 ALTER TABLE attempts ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;
 """
 
-MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4)
+# The planner (T15): a run is a ticket's run or the generation of a plan.
+_V5 = """
+ALTER TABLE runs ADD COLUMN kind TEXT NOT NULL DEFAULT 'ticket';
+"""
+
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5)
 """Migration ``n`` (1-based) takes the database from version ``n - 1`` to ``n``."""
 
 SCHEMA_VERSION = len(MIGRATIONS)

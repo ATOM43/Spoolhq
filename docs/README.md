@@ -6,6 +6,7 @@ User and developer documentation will live here: architecture, the daemon API, t
 - [project-yaml.md](project-yaml.md): the `project.yaml` reference
 - [ticket-format.md](ticket-format.md): the ticket file format
 - [scheduler.md](scheduler.md): plan checks, status changes and scheduling
+- [planner.md](planner.md): from the spec to draft tickets, re-planning and approval
 - [runs.md](runs.md): the run log and event bus
 - [git.md](git.md): worktrees, branches and git recovery
 - [agents.md](agents.md): the agent runner, the Claude Code backend and its policy

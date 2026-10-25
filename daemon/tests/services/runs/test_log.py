@@ -11,11 +11,13 @@ import pytest
 
 from spoolhq.services.runs import (
     MAX_PAYLOAD_BYTES,
+    PLAN_RUN_ID,
     SCHEMA_VERSION,
     AttemptKind,
     AttemptStatus,
     EventBus,
     EventKind,
+    RunKind,
     RunLog,
     RunLogError,
     RunStatus,
@@ -40,14 +42,14 @@ def raw(workspace: Path) -> sqlite3.Connection:
 # Schema -------------------------------------------------------------------------------
 
 
-def test_fresh_database_has_version_4_and_all_tables(workspace: Path) -> None:
+def test_fresh_database_has_version_5_and_all_tables(workspace: Path) -> None:
     assert not (workspace / ".spoolhq").exists()
     with RunLog(workspace, daemon_instance="A"):
         pass
 
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 4
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 5
         tables = {
             name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
@@ -68,7 +70,7 @@ def test_opening_twice_is_idempotent(workspace: Path) -> None:
         assert [run.ticket_id for run in log.list_runs()] == ["T04"]
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
     finally:
         conn.close()
 
@@ -77,15 +79,15 @@ def test_newer_schema_is_refused(workspace: Path) -> None:
     with RunLog(workspace, daemon_instance="A"):
         pass
     conn = raw(workspace)
-    conn.execute("PRAGMA user_version = 5")
+    conn.execute("PRAGMA user_version = 6")
     conn.close()
 
     with pytest.raises(RunLogError) as info:
         RunLog(workspace, daemon_instance="A")
     assert str(info.value) == (
-        "state.db: schema version 5 is newer than this SpoolHQ supports (4); upgrade SpoolHQ."
+        "state.db: schema version 6 is newer than this SpoolHQ supports (5); upgrade SpoolHQ."
     )
-    with pytest.raises(RunLogError, match="schema version 5 is newer"):
+    with pytest.raises(RunLogError, match="schema version 6 is newer"):
         RunLog.open_read_only(workspace)
 
 
@@ -619,3 +621,38 @@ def test_version_1_database_is_migrated(workspace: Path) -> None:
         usage = log.run_usage(1)
     assert (run.status, run.progress_note, run.reset_at) == (RunStatus.DONE, None, None)
     assert usage.cache_read_tokens == 0
+
+
+def test_a_plan_run_has_kind_plan_and_its_attempts_in_runs_plan(
+    run_log: RunLog, workspace: Path
+) -> None:
+    run = run_log.start_plan_run()
+    attempt = run_log.start_attempt(run.id, AttemptKind.PLAN, backend="fake")
+    second = run_log.start_attempt(run.id, AttemptKind.PLAN)
+
+    assert (run.kind, run.ticket_id) == (RunKind.PLAN, PLAN_RUN_ID)
+    assert (attempt.dir, second.dir) == ("runs/plan/001", "runs/plan/002")
+    assert (workspace / "runs" / "plan" / "001").is_dir()
+    assert run_log.get_run(run.id).kind is RunKind.PLAN
+    assert run_log.start_run("T04").kind is RunKind.TICKET
+    started = run_log.events_since(0, run_id=run.id)[0]
+    assert started.payload == {"ticket_id": "plan", "kind": "plan"}
+
+
+def test_runs_of_an_older_database_are_ticket_runs(workspace: Path) -> None:
+    path = state_db_path(workspace)
+    path.parent.mkdir()
+    conn = sqlite3.connect(path)
+    for migration in db.MIGRATIONS[:4]:
+        for statement in db._statements(migration):
+            conn.execute(statement)
+    conn.execute(
+        "INSERT INTO runs (ticket_id, status, daemon_instance, started_at) "
+        "VALUES ('T04', 'done', 'A', '2026-10-18T09:00:00.000Z')"
+    )
+    conn.execute("PRAGMA user_version = 4")
+    conn.commit()
+    conn.close()
+
+    with RunLog(workspace, daemon_instance="A") as log:
+        assert log.get_run(1).kind is RunKind.TICKET

@@ -30,6 +30,7 @@ from spoolhq.services.runloop.model import (
     RunContext,
     RunLoopError,
 )
+from spoolhq.services.runloop.planning import PlanJobs
 from spoolhq.services.runloop.resume import RESUME_DELAY, ResumeTimer
 
 __all__ = [
@@ -48,6 +49,7 @@ __all__ = [
     "Merged",
     "Mode",
     "NotFoundError",
+    "PlanJobs",
     "ResumeTimer",
     "RunActiveError",
     "RunContext",

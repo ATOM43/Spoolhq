@@ -16,7 +16,7 @@ spoolhq/
     schemas/        # Pydantic request/response models
   services/     # domain logic, one package per domain:
                 # projects, tickets, scheduler, runs, git, agents, context, gates,
-                # review, runloop, tracker
+                # review, planner, runloop, tracker
   cli/          # Typer commands (main.py) + API client (client.py)
 ```
 
@@ -117,6 +117,12 @@ The code is `services/gates/`: the results (`GateResult`, `GateRun`, `DoneWhenCh
 After the gates pass, a second, independent agent checks the committed diff against the ticket's "Done when" items. `review(inputs, runner, …)` runs it with a read-only policy (`Read`, `Glob`, `Grep`; no Bash, Edit or Write) in the worktree, a fresh process each time, and never gets the implementer's transcript, summary or progress note (`ReviewInputs` has no field for them). The reviewer ends with a `<verdict>` JSON block that SpoolHQ validates itself, including consistency (`approve` only with every item met); items the gates checked take the gates' answer; invalid output is retried once and then becomes `needs_human`; run outcomes other than `completed` are passed through. The rules are in [review.md](review.md).
 
 The code is `services/review/`: `ReviewInputs`, `ItemVerdict` and `ReviewResult` in `model.py`, `parse_verdict` in `verdict.py`, `trim_diff` (150,000 characters) in `diff.py` and `review()` in `reviewer.py`; the prompt is `services/context/prompts/reviewer.md.j2`, overridable in `<workspace>/prompts/`. It imports only `services.agents` and `services.context`, which an import-linter contract checks. `spool review` (in `cli/review.py`) builds the inputs from the ticket store and `git diff <base>...HEAD` and runs the real reviewer.
+
+## Planner
+
+The planner turns the workspace's `CONTEXT.md` into draft tickets. `generate_plan(project, runner, …)` runs a read-only agent (`Read`, `Glob`, `Grep`, the reviewer's policy) in the project's repository with the spec, an optional template description and the tickets that must be kept; its `<plan>` JSON block is validated in code (schema, ids, the ticket store, the scheduler's plan validation), retried once with the errors, and written as `draft` ticket files, all or nothing. `<workspace>/.spoolhq/plan.json` records each draft's SHA-256, so a re-plan keeps the drafts you edited and replaces only the unedited ones. `approve_plan` moves every draft to `ready` in one step; nothing runs before that. The rules are in [planner.md](planner.md).
+
+The code is `services/planner/`: the plan schema in `model.py`, parsing and checking in `validate.py`, the prompt in `prompt.py` (template `services/context/prompts/planner.md.j2`, overridable in `<workspace>/prompts/`), draft files, hashes and approval in `store.py` and `generate_plan` in `planner.py`. It may import `services.agents`, `services.context`, `services.projects`, `services.scheduler` and `services.tickets` (an import-linter contract forbids review, runs and tracker). `spool plan generate|show|approve` (in `cli/plan.py`) call it directly; for the API, `PlanJobs` (`services/runloop/planning.py`) runs it on a daemon worker thread and records a run of kind `plan` in the run log, and `api/routers/plan.py` exposes generate (202) and approve. `slugify` lives in `core/ids.py`, since both branch names and draft file names use it.
 
 ## Run loop
 

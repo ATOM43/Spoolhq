@@ -9,6 +9,7 @@ service. See
 ``docs/git.md``.
 """
 
+from spoolhq.core.ids import slugify
 from spoolhq.services.git.integrate import (
     MergeIn,
     advance,
@@ -32,7 +33,7 @@ from spoolhq.services.git.integrate import (
     unstage,
 )
 from spoolhq.services.git.integrate import commit as commit_staged
-from spoolhq.services.git.naming import branch_name, slugify
+from spoolhq.services.git.naming import branch_name
 from spoolhq.services.git.recovery import (
     RecoveryAction,
     RecoveryEntry,

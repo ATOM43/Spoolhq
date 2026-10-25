@@ -60,7 +60,7 @@ spoolhq/
     schemas/       # Pydantic request/response models
   services/    # domain logic, one package per domain:
                # projects, tickets, scheduler, runs, git, agents, context, gates,
-               # review, runloop (the only one that imports the others), tracker
+               # review, planner, runloop (the only one that imports the others), tracker
   cli/         # Typer commands + API client
 ```
 

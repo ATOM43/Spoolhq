@@ -52,6 +52,8 @@ class Agents:
 
     implementer: AgentRunner
     reviewer: AgentRunner
+    planner: AgentRunner | None = None
+    """The planner's runner; ``None`` uses the implementer's."""
 
 
 class EndKind(StrEnum):

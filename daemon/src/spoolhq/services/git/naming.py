@@ -4,30 +4,12 @@ Ticket titles are untrusted text, so the slug keeps only ``a-z``, ``0-9`` and ``
 and every name is confirmed with ``git check-ref-format --branch``.
 """
 
-import re
-import unicodedata
 from pathlib import Path
 
-from spoolhq.core.ids import check_ticket_id
+from spoolhq.core.ids import check_ticket_id, slugify
 from spoolhq.services.git.runner import GitError, neutral_cwd, run_git
 
 BRANCH_PREFIX = "feat/"
-MAX_SLUG_LENGTH = 40
-EMPTY_SLUG = "ticket"
-_NOT_SLUG_RE = re.compile(r"[^a-z0-9]+")
-
-
-def slugify(title: str) -> str:
-    """``Fix "quoted" thing; rm -rf /`` -> ``fix-quoted-thing-rm-rf``.
-
-    NFKD-normalise and drop non-ASCII characters, lowercase, turn each run of other
-    characters into ``-``, strip ``-`` from both ends, cut to 40 characters and strip
-    a trailing ``-`` again. An empty result becomes ``ticket``.
-    """
-    ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
-    slug = _NOT_SLUG_RE.sub("-", ascii_title.lower()).strip("-")
-    slug = slug[:MAX_SLUG_LENGTH].rstrip("-")
-    return slug or EMPTY_SLUG
 
 
 def branch_name(ticket_id: str, title: str, *, cwd: Path | None = None) -> str:

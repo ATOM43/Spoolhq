@@ -91,7 +91,7 @@ claude -p --output-format stream-json --verbose --restricted
 
 ## Read-only policies
 
-The reviewer ([review](review.md)) reads code but must not change it or run anything. `AgentPolicy.read_only_for(worktree, home)` builds a policy with `read_only=True`, no stack commands and no git commands; the deny list is the same. For it the adapter passes `--tools Read,Glob,Grep` and `--allowedTools Read Glob Grep`, with no `Bash(…)` rules, no `Edit` and no `Write`, and `init` must list exactly those three tools: any other, or a missing one, is a policy violation (`policy not enforced: …`). `--restricted`, `dontAsk`, the sandbox settings and the scrubbed environment stay as for a writing policy, whose command line is unchanged.
+The reviewer ([review](review.md)) and the planner ([planner](planner.md)) read code but must not change it or run anything; the planner's working folder is the project's repository. `AgentPolicy.read_only_for(worktree, home)` builds a policy with `read_only=True`, no stack commands and no git commands; the deny list is the same. For it the adapter passes `--tools Read,Glob,Grep` and `--allowedTools Read Glob Grep`, with no `Bash(…)` rules, no `Edit` and no `Write`, and `init` must list exactly those three tools: any other, or a missing one, is a policy violation (`policy not enforced: …`). `--restricted`, `dontAsk`, the sandbox settings and the scrubbed environment stay as for a writing policy, whose command line is unchanged.
 
 ## The allowlist
 

@@ -79,5 +79,6 @@ On the dashboard plan with nothing done, 38.5 hours remain and the critical path
 | `spool plan next <project>` | The next ticket (`T02 · Backend scaffold`), or `nothing to run: <reason>`. |
 | `spool plan summary <project>` | Counts per status, remaining hours and the critical path. |
 | `spool tickets set-status <project> <id> <status>` | Applies a status change through the table; prints the error and exits 1 if it is not allowed. |
+| `spool plan generate\|show\|approve <project>` | Drafts tickets from the spec, lists them, and moves every draft to `ready`: see [planner.md](planner.md). |
 
 `plan next` and `plan summary` exit 1 with the problems if the plan or any ticket file is invalid. Like the other ticket commands, these read the files directly; the daemon does not need to be running.

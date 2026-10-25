@@ -18,7 +18,8 @@ daemon/tests/
   test_layout.py   # guards this layout
   fixtures/        # shared data: ticket files, the dashboard plan, agent transcripts,
                    # context/ (prompt inputs and golden prompts in expected/),
-                   # review/ (the T07 ticket, its seeded diff, reviewer transcripts)
+                   # review/ (the T07 ticket, its seeded diff, reviewer transcripts),
+                   # planner/ (the dashboard spec, its recorded plan run, the golden prompt)
   core/  api/  cli/
   services/
     projects/  tickets/  scheduler/  runs/
@@ -27,6 +28,7 @@ daemon/tests/
     context/       # conftest.py: fixture_inputs, assert_snapshot (SPOOLHQ_UPDATE_SNAPSHOTS=1)
     gates/         # fake_tool.py (run it with fake_tool_cmd from tests/conftest.py)
     review/        # conftest.py: worktree, inputs (the T07 fixture ticket and seeded diff)
+    planner/       # uses plan_project, dashboard_plan() and plan_transcript() from tests/conftest.py
     runloop/       # conftest.py: transcripts (generated), FakeGates, ManualClock, Merging, make_loop;
                    # crash_child.py (an integration that dies at a journal state)
 ```
@@ -45,6 +47,7 @@ daemon/tests/
 - `git_repo`: a fresh repository with one commit on `main`, independent of the user's git config.
 - `client`: a FastAPI `TestClient` for the app, with a fixed test token (`token`).
 - `free_port`: an unused port on 127.0.0.1.
+- `plan_project`: `demo` with the dashboard spec as its `CONTEXT.md`; `dashboard_plan()` returns the recorded 18-ticket plan and `plan_transcript(path, plan)` writes a planner run ending with any plan.
 - `run_project` / `run_client`: `demo` with the ready T07 fixture ticket and passing `fake_tool.py` gates, and an app whose run loop uses fake agents (for `tests/api/` and `tests/cli/`).
 
 ### Unit and integration tests
@@ -82,4 +85,4 @@ To test the Claude Code adapter itself, pass `fake_claude_cmd(scenario, record, 
 
 `FakeRunner([a, b])` replays `a` on the first run and `b` on the second (and raises on a third), so retries can be tested; `fake.calls` holds each run's prompt and policy. The reviewer's ticket, seeded diff and transcripts are in `tests/fixtures/review/` (`REVIEW_FIXTURES`).
 
-Three tests use the real `claude` CLI and a real model, all marked `real_agent`: `tests/services/agents/test_real_run.py` (one implementer run), `tests/services/review/test_real_run.py` (a review of the seeded diff) and `tests/services/runloop/test_real_run.py` (a whole run of a tiny ticket, both roles). They are skipped unless `SPOOLHQ_REAL_AGENT=1` and `claude auth status` is logged in; `SPOOLHQ_RECORD=1` also saves their anonymised streams to `tests/fixtures/agents/claude/recorded/real_run.jsonl` and `tests/fixtures/review/recorded/real_review.jsonl`. See [agents.md](agents.md#the-fake-runner).
+Four tests use the real `claude` CLI and a real model, all marked `real_agent`: `tests/services/agents/test_real_run.py` (one implementer run), `tests/services/review/test_real_run.py` (a review of the seeded diff), `tests/services/runloop/test_real_run.py` (a whole run of a tiny ticket, both roles) and `tests/services/planner/test_real_run.py` (a plan for a small CLI tool). They are skipped unless `SPOOLHQ_REAL_AGENT=1` and `claude auth status` is logged in; `SPOOLHQ_RECORD=1` also saves their anonymised streams to `tests/fixtures/agents/claude/recorded/real_run.jsonl` and `tests/fixtures/review/recorded/real_review.jsonl`. See [agents.md](agents.md#the-fake-runner).

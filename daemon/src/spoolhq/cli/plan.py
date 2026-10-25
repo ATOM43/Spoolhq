@@ -1,16 +1,23 @@
-"""`spool plan`: check a project's plan, show the next ticket and the progress figures.
+"""`spool plan`: generate a plan from the spec, show and approve it, check it, show the
+next ticket and the progress figures.
 
-These are local file operations, so they call the scheduler service directly; the daemon
-is not needed.
+These call the planner and scheduler services directly; the daemon is not needed.
+`generate` runs the planner agent here, like `spool review`.
 """
 
+import threading
+from pathlib import Path
 from typing import Annotated, NoReturn
 
 import typer
 
-from spoolhq.cli.common import fail, hours, settings
+from spoolhq.cli.common import fail, hours, settings, table
+from spoolhq.core.config import home_dir
+from spoolhq.services.agents import AgentRunner, BackendUnavailableError, available_runners
+from spoolhq.services.planner import PlannerError, PlanResult, approve_plan, generate_plan
 from spoolhq.services.scheduler import (
     PlanError,
+    critical_path,
     explain_idle,
     next_ready,
     summary,
@@ -20,7 +27,7 @@ from spoolhq.services.tickets import InvalidTicket, TicketError, TicketListing, 
 
 plan_app = typer.Typer(
     name="plan",
-    help="Check a project's plan and see what runs next.",
+    help="Generate, review and approve a project's plan; see what runs next.",
     no_args_is_help=True,
 )
 
@@ -109,3 +116,114 @@ def summary_command(project: ProjectArg) -> None:
         typer.echo(f"critical path: {chain} ({hours(path.hours)})")
     else:
         typer.echo("critical path: none")
+
+
+# generate, show, approve ------------------------------------------------------------------
+
+
+def make_runner() -> AgentRunner:
+    """The planner's backend; tests replace it with a fake."""
+    return available_runners()[0]
+
+
+def _problem_lines(listing: TicketListing) -> list[str]:
+    problems = [problem.message for problem in validate_plan(listing.tickets)]
+    problems += [error for ticket in listing.invalid for error in ticket.errors]
+    return [f"  {problem}" for problem in problems] or ["  none"]
+
+
+def _path_line(listing: TicketListing) -> str:
+    if validate_plan(listing.tickets) or listing.invalid:
+        return "critical path: unknown (the plan has problems)"
+    path = critical_path(listing.tickets)
+    if not path.ticket_ids:
+        return "critical path: none"
+    return f"critical path: {ARROW.join(path.ticket_ids)} ({hours(path.hours)})"
+
+
+def describe_plan(result: PlanResult, listing: TicketListing) -> list[str]:
+    """Count, hours, kept and deleted tickets, the critical path and the problems."""
+    written = set(result.written)
+    total = sum(t.meta.estimate_h for t in listing.tickets if t.id in written)
+    count = len(written)
+    lines = [f"wrote {count} draft ticket{'' if count == 1 else 's'} ({hours(total)})"]
+    if result.kept:
+        lines.append(f"kept: {', '.join(result.kept)}")
+    if result.deleted:
+        lines.append(f"deleted: {', '.join(result.deleted)}")
+    lines += [_path_line(listing), "problems:", *_problem_lines(listing)]
+    return lines
+
+
+@plan_app.command("generate")
+def generate_command(
+    project: ProjectArg,
+    template_description: Annotated[
+        Path | None,
+        typer.Option(
+            exists=True, dir_okay=False, help="File describing the stack template applied."
+        ),
+    ] = None,
+) -> None:
+    """Run the planner on the project's CONTEXT.md and write draft tickets."""
+    projects_dir = settings().projects_dir
+    description = None
+    if template_description is not None:
+        try:
+            description = template_description.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            fail(f"error: cannot read {template_description}: {exc}")
+    typer.echo("planning… (this can take a few minutes)", err=True)
+    try:
+        result = generate_plan(
+            project,
+            make_runner(),
+            projects_dir=projects_dir,
+            home=home_dir(),
+            template_description=description,
+            cancel=threading.Event(),
+        )
+    except (PlannerError, BackendUnavailableError) as exc:
+        fail(f"error: {exc}")
+    if result.error is not None:
+        fail(f"error: {result.error}")
+    for line in describe_plan(result, _listing(project)):
+        typer.echo(line)
+    typer.echo(f"review the drafts (spool plan show {project}), then: spool plan approve {project}")
+
+
+@plan_app.command("show")
+def show_command(project: ProjectArg) -> None:
+    """List the draft tickets with their dependencies and estimates, and the problems."""
+    listing = _listing(project)
+    drafts = [ticket for ticket in listing.tickets if ticket.meta.status == "draft"]
+    if drafts:
+        rows = [("ID", "ESTIMATE", "DEPENDS ON", "TITLE")]
+        rows += [
+            (
+                t.id,
+                hours(t.meta.estimate_h),
+                ", ".join(t.meta.depends_on) or "-",
+                t.meta.title,
+            )
+            for t in drafts
+        ]
+        for line in table(rows):
+            typer.echo(line)
+        total = sum(t.meta.estimate_h for t in drafts)
+        typer.echo(f"\n{len(drafts)} drafts, {hours(total)}")
+    else:
+        typer.echo("no draft tickets")
+    typer.echo("problems:")
+    for line in _problem_lines(listing):
+        typer.echo(line)
+
+
+@plan_app.command("approve")
+def approve_command(project: ProjectArg) -> None:
+    """Check the whole plan and move every draft to ready, in one step."""
+    try:
+        approved = approve_plan(project, projects_dir=settings().projects_dir)
+    except PlannerError as exc:
+        fail(f"error: {exc}")
+    typer.echo(f"approved {len(approved)} tickets: {', '.join(approved)}")

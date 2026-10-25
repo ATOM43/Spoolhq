@@ -156,6 +156,17 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "services.planner imports only agents, context, projects, scheduler and tickets"
+type = "forbidden"
+source_modules = ["spoolhq.services.planner"]
+# gates and git are not listed: projects uses them to validate project.yaml.
+forbidden_modules = [
+    "spoolhq.services.review",
+    "spoolhq.services.runs",
+    "spoolhq.services.tracker",
+]
+
+[[tool.importlinter.contracts]]
 name = "services.runloop may import every service, but only api and cli import it"
 type = "forbidden"
 source_modules = [
@@ -165,6 +176,7 @@ source_modules = [
     "spoolhq.services.gates",
     "spoolhq.services.git",
     "spoolhq.services.projects",
+    "spoolhq.services.planner",
     "spoolhq.services.review",
     "spoolhq.services.runs",
     "spoolhq.services.scheduler",

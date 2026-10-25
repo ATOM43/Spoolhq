@@ -2,6 +2,8 @@
 
 A project's plan is a folder of markdown files, one per ticket, in its workspace: `~/spoolhq-projects/<name>/tickets/` (see [Projects](architecture.md#projects)). Each file has YAML frontmatter that SpoolHQ reads and updates, and a free-form body that it reads but never rewrites.
 
+The [planner](planner.md) writes them as `draft` tickets from the spec (`spool plan generate`), with a `## Purpose`, `## Scope` and `## Done when` body; you can also write them by hand. Drafts never run: `spool plan approve` moves them all to `ready`. A draft you edit is kept as it is when you re-plan.
+
 ## Example
 
 File `tickets/T04-project-workspace.md`:
@@ -40,7 +42,7 @@ Unknown keys are errors, so a typo never silently falls back to a default. Value
 | `title` | yes | | Non-empty string. |
 | `phase` | yes | | Whole number, 0 or more. |
 | `depends_on` | no | `[]` | List of ticket ids. No duplicates, and a ticket cannot depend on itself. |
-| `status` | yes | | One of `draft`, `ready`, `running`, `awaiting_approval`, `blocked`, `done`. |
+| `status` | yes | | One of `draft`, `ready`, `running`, `awaiting_approval`, `blocked`, `done`. The planner writes `draft`. |
 | `estimate_h` | yes | | Hours: a number above 0 and at most 40. |
 | `review_required` | no | `false` | `true` or `false`. |
 | `tracker_ref` | no | `null` | The ticket's id in an external tracker, or `null`. |

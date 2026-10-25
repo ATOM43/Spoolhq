@@ -6,7 +6,7 @@ The code is `services/runs/`: the database in `db.py`, `RunLog` in `log.py`, the
 
 ## Runs and attempts
 
-A **run** is one execution of the loop for one ticket, from being picked until it ends.
+A **run** is one execution of the loop for one ticket, from being picked until it ends. Its `kind` is `ticket`; a run of kind `plan` is the [planner](planner.md) generating a project's plan (`start_plan_run()`): its ticket id is `plan`, its one attempt has kind `plan` and its folder is `runs/plan/<NNN>/`. The run loop's resume skips plan runs.
 
 | Status | Meaning |
 | --- | --- |
@@ -24,7 +24,7 @@ A terminal status sets `ended_at`, and a run that has ended can't change again: 
 
 An **attempt** is one implementer pass inside a run, together with its gates and review.
 
-- Kinds: `initial`, `gate_retry`, `review_retry`, `conflict_retry`, `pr_changes`.
+- Kinds: `initial`, `gate_retry`, `review_retry`, `conflict_retry`, `pr_changes`, and `plan` for a plan run.
 - Statuses: `running`, then one of `gates_failed`, `changes_requested`, `approved`, `needs_human`, `conflict`, `error`, `cancelled`, `interrupted`. `finish_attempt` ends a `running` attempt and sets `ended_at`; an attempt finishes once.
 - Numbers count **per ticket, across all its runs**: T04's first run has attempts 1 and 2, its second run starts at 3. A different ticket starts again at 1.
 - Usage: `record_usage(attempt_id, input_tokens, output_tokens, cost_micro_usd=None)` adds to the attempt's totals. Cost is an integer number of micro-USD (1 USD = 1 000 000); a `None` cost leaves the stored cost unchanged, and a stored `NULL` plus a value becomes that value. Negative numbers raise `ValueError`. `run_usage(run_id)` sums a run's attempts; its cost is `None` if no attempt reported one.
@@ -35,12 +35,12 @@ An **attempt** is one implementer pass inside a run, together with its gates and
 
 - Every connection sets `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON` and `busy_timeout=5000`. A committed transaction survives a crash of the process; a power loss can drop the last few transactions.
 - One connection per `RunLog`, opened with `check_same_thread=False` and guarded by a lock, so a `RunLog` can be shared between threads. `isolation_level=None`: each method is one explicit `BEGIN IMMEDIATE` … `COMMIT`.
-- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 3.
-- A database newer than the code is refused: `state.db: schema version 4 is newer than this SpoolHQ supports (3); upgrade SpoolHQ.`
+- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 5.
+- A database newer than the code is refused: `state.db: schema version 6 is newer than this SpoolHQ supports (5); upgrade SpoolHQ.`
 - A file that isn't a SQLite database is refused: `state.db: not a SpoolHQ database (file is not a database)`.
 - All SQL takes its values as parameters; ticket text and agent output never become SQL.
 
-### Schema (version 3)
+### Schema (version 5)
 
 ```sql
 CREATE TABLE runs (
@@ -52,7 +52,8 @@ CREATE TABLE runs (
     started_at TEXT NOT NULL,
     ended_at TEXT,
     progress_note TEXT,              -- version 2: the implementer's <progress> note
-    reset_at TEXT                    -- version 2: when a paused run's usage limit resets
+    reset_at TEXT,                   -- version 2: when a paused run's usage limit resets
+    kind TEXT NOT NULL DEFAULT 'ticket'  -- version 5: 'ticket' or 'plan'
 );
 
 CREATE TABLE attempts (
@@ -70,6 +71,7 @@ CREATE TABLE attempts (
     cost_micro_usd INTEGER,
     started_at TEXT NOT NULL,
     ended_at TEXT,
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0,  -- version 4: the part of input_tokens read from the cache
     UNIQUE (ticket_id, number)
 );
 
@@ -83,7 +85,7 @@ CREATE TABLE events (
 );
 ```
 
-Version 3 adds the integration journal, `integrations` ([integration.md](integration.md#the-journal-schema-version-3)).
+Version 3 adds the integration journal, `integrations` ([integration.md](integration.md#the-journal-schema-version-3)); version 4 the cache-read tokens; version 5 the run's kind.
 
 Triggers `BEFORE UPDATE` and `BEFORE DELETE` on `events` raise `events are append-only`, so not even a hand-written statement can change history. Indexes: `runs(ticket_id)`, `runs(status)`, `attempts(run_id)`, `events(run_id, id)`.
 

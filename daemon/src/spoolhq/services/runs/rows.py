@@ -8,12 +8,13 @@ from typing import Any
 
 from spoolhq.services.runs import db
 from spoolhq.services.runs.db import Clock
-from spoolhq.services.runs.model import Event, EventKind, Run, RunStatus
+from spoolhq.services.runs.model import Event, EventKind, Run, RunKind, RunStatus
 
 MAX_PAYLOAD_BYTES = 64 * 1024
 
 RUN_COLUMNS = (
-    "id, ticket_id, status, reason, daemon_instance, started_at, ended_at, progress_note, reset_at"
+    "id, ticket_id, status, reason, daemon_instance, started_at, ended_at, progress_note, "
+    "reset_at, kind"
 )
 ATTEMPT_COLUMNS = (
     "id, run_id, ticket_id, number, kind, status, dir, backend, model, input_tokens, "
@@ -67,6 +68,7 @@ def to_run(row: tuple[Any, ...]) -> Run:
         ended_at=row[6],
         progress_note=row[7],
         reset_at=row[8],
+        kind=RunKind(row[9]),
     )
 
 

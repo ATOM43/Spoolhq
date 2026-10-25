@@ -8,22 +8,22 @@ from uuid import uuid4
 from fastapi import FastAPI
 
 import spoolhq
-from spoolhq.api.routers import health, runs, version
+from spoolhq.api.routers import health, plan, runs, version
 from spoolhq.api.security import LocalOnlyMiddleware
 from spoolhq.api.worktrees import check_git, recover_all_integrations, recover_all_worktrees
 from spoolhq.core.auth import load_or_create_token
 from spoolhq.core.config import Settings, ensure_home, home_dir
 from spoolhq.services.agents import available_runners
-from spoolhq.services.runloop import Agents, Integrator, RunLoop
+from spoolhq.services.runloop import Agents, Integrator, PlanJobs, RunLoop
 from spoolhq.services.runs import RunRegistry
 
 logger = logging.getLogger("spoolhq.daemon")
 
 
 def default_agents() -> Agents:
-    """The installed Claude Code for both roles (``agents.*`` picks only it for now)."""
+    """The installed Claude Code for every role (``agents.*`` picks only it for now)."""
     runner = available_runners()[0]
-    return Agents(implementer=runner, reviewer=runner)
+    return Agents(implementer=runner, reviewer=runner, planner=runner)
 
 
 def create_app(
@@ -41,8 +41,9 @@ def create_app(
     one is given; then it checks git, finishes or undoes interrupted integrations
     (``app.state.integration_recovery``), removes the worktrees those runs left behind
     (``app.state.worktree_recovery``), and starts the run loop (``app.state.runloop``)
-    with ``agents`` (default: the installed Claude Code for both roles) and
+    with ``agents`` (default: the installed Claude Code for every role) and
     ``integrator`` (default: ``LocalIntegrator``; ``run.integration: hold`` per project).
+    Plan generation runs beside it (``app.state.plans``, with ``agents.planner``).
     On shutdown the loop stops its agents and leaves their runs for the next startup's
     recovery. The caller must hold the daemon single-instance lock while it runs.
     """
@@ -67,17 +68,25 @@ def create_app(
             app.state.worktree_recovery = recover_all_worktrees(
                 settings.projects_dir, settings.worktrees_dir, registry
             )
+            roles = agents or default_agents()
             app.state.runloop = RunLoop(
                 registry,
                 projects_dir=settings.projects_dir,
                 worktrees_dir=settings.worktrees_dir,
                 home=home_dir(),
-                agents=agents or default_agents(),
+                agents=roles,
                 integrator=integrator,
+            )
+            app.state.plans = PlanJobs(
+                registry,
+                projects_dir=settings.projects_dir,
+                home=home_dir(),
+                runner=roles.planner or roles.implementer,
             )
             try:
                 yield
             finally:
+                app.state.plans.close()
                 app.state.runloop.close()
         finally:
             registry.close()
@@ -86,5 +95,6 @@ def create_app(
     app.include_router(health.router)
     app.include_router(version.router)
     app.include_router(runs.router)
+    app.include_router(plan.router)
     app.add_middleware(LocalOnlyMiddleware, port=settings.port, token=token)
     return app

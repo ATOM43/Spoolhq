@@ -29,12 +29,23 @@ TERMINAL_RUN_STATUSES = frozenset(
 )
 
 
+class RunKind(StrEnum):
+    TICKET = "ticket"
+    PLAN = "plan"
+    """The planner turning the spec into draft tickets; its ``ticket_id`` is ``plan``."""
+
+
+PLAN_RUN_ID = "plan"
+"""The ``ticket_id`` of every plan run, and the folder of its attempts (``runs/plan/``)."""
+
+
 class AttemptKind(StrEnum):
     INITIAL = "initial"
     GATE_RETRY = "gate_retry"
     REVIEW_RETRY = "review_retry"
     CONFLICT_RETRY = "conflict_retry"
     PR_CHANGES = "pr_changes"
+    PLAN = "plan"
 
 
 class AttemptStatus(StrEnum):
@@ -81,6 +92,7 @@ class Run:
     """The implementer's ``<progress>`` note from its last completed attempt, for T14."""
     reset_at: str | None = None
     """When a run paused by a usage limit may resume; ``None`` otherwise."""
+    kind: RunKind = RunKind.TICKET
 
 
 @dataclass(frozen=True)

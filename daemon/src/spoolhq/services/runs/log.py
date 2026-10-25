@@ -21,12 +21,14 @@ from spoolhq.services.runs import db
 from spoolhq.services.runs.bus import EventBus
 from spoolhq.services.runs.db import Clock
 from spoolhq.services.runs.model import (
+    PLAN_RUN_ID,
     Attempt,
     AttemptKind,
     AttemptStatus,
     Event,
     EventKind,
     Run,
+    RunKind,
     RunStatus,
     Usage,
 )
@@ -54,8 +56,9 @@ def _check_count(name: str, value: int) -> None:
 
 
 def attempt_dir_name(ticket_id: str, number: int) -> str:
-    """``runs/<ticket>/<NNN>``, always with forward slashes."""
-    return f"{RUNS_DIR}/{check_ticket_id(ticket_id)}/{number:03d}"
+    """``runs/<ticket>/<NNN>`` (``runs/plan/<NNN>`` for a plan run), with forward slashes."""
+    folder = ticket_id if ticket_id == PLAN_RUN_ID else check_ticket_id(ticket_id)
+    return f"{RUNS_DIR}/{folder}/{number:03d}"
 
 
 class RunLog:
@@ -200,16 +203,25 @@ class RunLog:
 
     def start_run(self, ticket_id: str) -> Run:
         """Start a run for ``ticket_id`` in status ``running``; event ``run.started``."""
-        check_ticket_id(ticket_id)
+        return self._start(check_ticket_id(ticket_id), RunKind.TICKET)
+
+    def start_plan_run(self) -> Run:
+        """Start a run of kind ``plan`` (ticket id ``plan``); event ``run.started``."""
+        return self._start(PLAN_RUN_ID, RunKind.PLAN)
+
+    def _start(self, ticket_id: str, kind: RunKind) -> Run:
         with self.transaction() as tx:
             cursor = tx.conn.execute(
-                "INSERT INTO runs (ticket_id, status, daemon_instance, started_at) "
-                "VALUES (?, ?, ?, ?)",
-                (ticket_id, RunStatus.RUNNING.value, self.daemon_instance, tx.now()),
+                "INSERT INTO runs (ticket_id, status, daemon_instance, started_at, kind) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (ticket_id, RunStatus.RUNNING.value, self.daemon_instance, tx.now(), kind.value),
             )
             assert cursor.lastrowid is not None  # noqa: S101 - an INSERT always sets it
             run = self._run(tx.conn, cursor.lastrowid)
-            tx.append_event(run.id, EventKind.RUN_STARTED, {"ticket_id": ticket_id})
+            payload = {"ticket_id": ticket_id}
+            if kind is RunKind.PLAN:
+                payload["kind"] = kind.value
+            tx.append_event(run.id, EventKind.RUN_STARTED, payload)
             return run
 
     def set_run_status(
@@ -285,7 +297,7 @@ class RunLog:
         with self.transaction() as tx:
             run = self._run(tx.conn, run_id)
             self._check_open(run)
-            ticket_id = check_ticket_id(run.ticket_id)
+            ticket_id = run.ticket_id
             number: int = tx.conn.execute(
                 "SELECT COALESCE(MAX(number), 0) + 1 FROM attempts WHERE ticket_id = ?",
                 (ticket_id,),

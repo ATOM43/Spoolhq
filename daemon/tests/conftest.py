@@ -1,3 +1,4 @@
+import json
 import os
 import shlex
 import shutil
@@ -7,6 +8,7 @@ import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -223,3 +225,72 @@ def run_client(run_project: Path, token: str) -> Iterator[TestClient]:
     )
     with TestClient(app, base_url=f"http://127.0.0.1:{settings.port}") as test_client:
         yield test_client
+
+
+PLANNER_FIXTURES = FIXTURES_DIR / "planner"
+"""The dashboard spec (``CONTEXT.md``) and the recorded planner run that plans it."""
+DASHBOARD_PLAN = PLANNER_FIXTURES / "dashboard_plan.jsonl"
+
+
+def dashboard_plan() -> dict[str, Any]:
+    """The JSON of the ``<plan>`` block in the recorded dashboard run (18 tickets)."""
+    for line in DASHBOARD_PLAN.read_text(encoding="utf-8").splitlines():
+        message = json.loads(line)
+        if message["type"] == "result":
+            text = message["result"]
+            parsed: dict[str, Any] = json.loads(
+                text[text.index("<plan>") + 6 : text.index("</plan>")]
+            )
+            return parsed
+    raise AssertionError("no result in the dashboard transcript")
+
+
+def plan_transcript(path: Path, plan: dict[str, Any] | str, tokens: int = 1000) -> Path:
+    """A read-only planner run whose final message is ``plan`` (JSON in a ``<plan>`` block,
+    or the text as given)."""
+    text = plan if isinstance(plan, str) else f"Planned.\n<plan>{json.dumps(plan)}</plan>"
+    usage = {
+        "input_tokens": tokens,
+        "output_tokens": tokens // 4,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+    }
+    messages = [
+        {
+            "type": "system",
+            "subtype": "init",
+            "tools": ["Glob", "Grep", "Read"],
+            "mcp_servers": [],
+            "model": "claude-test-model",
+            "permissionMode": "dontAsk",
+            "claude_code_version": "2.1.302",
+        },
+        {
+            "type": "assistant",
+            "message": {
+                "id": f"msg-{path.stem}",
+                "role": "assistant",
+                "content": [{"type": "text", "text": text}],
+                "usage": usage,
+            },
+        },
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "num_turns": 1,
+            "usage": usage,
+            "permission_denials": [],
+            "result": text,
+        },
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(m) + "\n" for m in messages), encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def plan_project(workspace: Path) -> Path:
+    """``demo`` with the dashboard spec as its ``CONTEXT.md`` and no tickets."""
+    shutil.copy(PLANNER_FIXTURES / "CONTEXT.md", workspace / "CONTEXT.md")
+    return workspace

@@ -21,7 +21,16 @@ uv run --directory daemon spool init my-app --repo ~/code/my-app   # creates ~/s
 uv run --directory daemon spool project validate my-app
 ```
 
-Tickets are markdown files in the workspace's `tickets/` folder, written by hand for now ([format](docs/ticket-format.md), [plan rules](docs/scheduler.md)):
+Write the spec in the workspace's `CONTEXT.md`, then let the planner draft the tickets, review them and approve ([planner](docs/planner.md)). Nothing runs until you approve:
+
+```sh
+uv run --directory daemon spool plan generate my-app [--template-description stack.md]
+uv run --directory daemon spool plan show my-app            # drafts, estimates, dependencies, problems
+uv run --directory daemon spool tickets edit my-app T03     # an edited draft survives a re-plan
+uv run --directory daemon spool plan approve my-app         # every draft → ready, in one step
+```
+
+Tickets are markdown files in the workspace's `tickets/` folder; you can also write them by hand ([format](docs/ticket-format.md), [plan rules](docs/scheduler.md)):
 
 ```sh
 uv run --directory daemon spool tickets list my-app [--status ready] [--phase 1]

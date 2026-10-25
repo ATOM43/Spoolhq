@@ -281,8 +281,8 @@ def test_render_template_helper(tmp_path: Path) -> None:
         "Review T04.\n",
         "prompts/reviewer.md.j2",
     )
-    with pytest.raises(PromptTemplateError, match="no prompt template named 'planner.md.j2'"):
-        render_template("planner.md.j2", {})
+    with pytest.raises(PromptTemplateError, match="no prompt template named 'tracker.md.j2'"):
+        render_template("tracker.md.j2", {})
     with pytest.raises(PromptTemplateError, match="no prompt template named '../x.md.j2'"):
         render_template("../x.md.j2", {}, override_dir=folder)
 

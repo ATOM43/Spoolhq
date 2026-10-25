@@ -49,7 +49,7 @@ prompts/implementer.md.j2: syntax error at line 4: Expected an expression, got '
 prompts/implementer.md.j2: not allowed in a SpoolHQ template: access to attribute '__class__' of 'str' object is unsafe.
 ```
 
-`render_template(name, variables, override_dir=…)` does the loading for any template, so the reviewer (T12) and planner (T15) can add theirs; only `implementer.md.j2` ships now.
+`render_template(name, variables, override_dir=…)` does the loading for any template: `implementer.md.j2`, `reviewer.md.j2` ([review](review.md)) and `planner.md.j2` ([planner](planner.md)) ship with SpoolHQ.
 
 ## The budget
 

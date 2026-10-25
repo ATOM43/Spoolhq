@@ -56,11 +56,11 @@ run:
 | `template` | no | | Name of the stack template the project came from. |
 | `commands.install` | yes | | Non-empty command the gates run to install dependencies. It runs without a shell ([gates](gates.md#no-shell)): no `&&`, `\|\|`, `\|`, `;`, `>`, `<`, `` ` `` or `$(`; put anything longer in a justfile recipe. |
 | `commands.lint` | yes | | Non-empty lint command; same rules. |
-| `commands.test` | yes | | Non-empty test command; same rules. |
+| `commands.test` | yes | | Non-empty test command; same rules. The planner ends every ticket's "Done when" with `` `<test command>` passes ``. |
 | `agents.default` | no | `claude-code-cli` | One of `claude-code-cli`, `codex-cli`, `gemini-cli`, `claude-agent-sdk`. |
-| `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override; same values as `agents.default`. |
+| `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override; same values as `agents.default`. `agents.planner` is the backend of the [planner](planner.md). Only `claude-code-cli` exists for now. |
 | `agents.budget_per_ticket.usd` | no | | Positive number: spending cap per ticket for API backends. |
-| `agents.budget_per_ticket.tokens` | no | | Positive whole number: cap on weighted tokens per ticket for subscription backends. Weighted tokens = input + output + cache writes + cache reads × 0.1, since cache reads cost a tenth of fresh input. T29, for example, used about 2.2M raw tokens (2.1M of them cache reads) but about 300k weighted. `spool runs show` lists the raw numbers and the weighted total. |
+| `agents.budget_per_ticket.tokens` | no | | Positive whole number: cap on weighted tokens per ticket for subscription backends; one plan generation (both attempts) counts as one ticket. Weighted tokens = input + output + cache writes + cache reads × 0.1, since cache reads cost a tenth of fresh input. T29, for example, used about 2.2M raw tokens (2.1M of them cache reads) but about 300k weighted. `spool runs show` lists the raw numbers and the weighted total. |
 | `limits.gate_retries` | no | `3` | Whole number from 0 to 10. |
 | `limits.review_retries` | no | `2` | Whole number from 0 to 10. |
 | `merge_policy.max_direct_diff_lines` | no | `400` | Whole number above 0. Larger diffs wait for approval in a pull request. |
