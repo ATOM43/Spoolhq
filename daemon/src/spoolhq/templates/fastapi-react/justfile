@@ -4,6 +4,10 @@
 
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 
+# UTF-8 output for every Python tool, so lint-imports' progress symbols don't crash on a
+# Windows code page such as cp1252 when output is piped.
+export PYTHONUTF8 := "1"
+
 default:
     @just --list
 

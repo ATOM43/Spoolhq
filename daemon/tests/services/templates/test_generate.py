@@ -12,6 +12,7 @@ from spoolhq.services.projects import (
     load_project,
     template_description,
 )
+from spoolhq.services.projects.yaml_io import parse as load_yaml
 from spoolhq.services.templates import TemplateError, init_from_template, unsafe_message
 from tests.conftest import fixture_contract, make_git_template, make_template, run_git
 
@@ -62,8 +63,10 @@ def test_a_git_url_template_records_the_commit(tmp_path: Path, projects_dir: Pat
     project = load_project("demo", projects_dir=projects_dir)
     assert project.template is not None
     assert (project.template.source, project.template.ref) == (url, commit)
-    answers = (tmp_path / "new" / ".copier-answers.yml").read_text(encoding="utf-8")
-    assert f"_commit: {commit[:7]}" in answers or commit in answers
+    answers = load_yaml((tmp_path / "new" / ".copier-answers.yml").read_text(encoding="utf-8"))
+    # `git describe --always`: a short hash, quoted by YAML when it is all digits.
+    assert commit.startswith(str(answers["_commit"]))
+    assert answers["_src_path"] == url
 
 
 def test_an_empty_existing_folder_is_used(tmp_path: Path, projects_dir: Path) -> None:
