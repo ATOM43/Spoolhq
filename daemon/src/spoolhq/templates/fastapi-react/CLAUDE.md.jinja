@@ -1,0 +1,31 @@
+# Working in {{ project_name }}
+
+Conventions for coding agents (and humans). The structure is described in [README.md](README.md#structure).
+
+- **Before finishing, run `just lint` and `just test`** and fix every failure. Never skip or disable a check to make it pass.
+- Commands: `just install`, `just dev`, `just lint`, `just test`. They run without a shell wrapper, so don't chain commands with `&&` or pipes; add a justfile recipe instead.
+- **Never commit secrets** (`.env` is ignored; document new settings in `.env.example`).
+- Keep each change inside its ticket; note anything else you find instead of doing it.
+- Record notable choices in `DECISIONS.md`. Add a `PROGRESS.md` entry for each finished ticket, **except when running under SpoolHQ**: then don't edit `PROGRESS.md` by hand; SpoolHQ adds the entry from your `<progress>` block.
+- Source files stay under 500 lines (`scripts/check_line_limit.py`, run by `just lint`); tests are exempt.
+
+## Backend (`backend/`, Python, uv)
+
+- `app/core/`: settings and the database session. Imports nothing from `api` or `services`.
+- `app/api/`: thin. Routers validate input, call a service, return a schema. One router file per resource in `api/routers/`, its Pydantic models in `api/schemas/`.
+- `app/services/<domain>/`: the logic, one package per domain, with its SQLAlchemy models. **Never imports FastAPI or Starlette.**
+- Schema changes go through a new Alembic migration in `migrations/versions/`; never edit an applied one.
+- import-linter enforces these rules (`[tool.importlinter]` in `backend/pyproject.toml`); ruff (including the `S` security rules) and mypy strict run on everything.
+
+## Frontend (`frontend/`, Feature-Sliced Design)
+
+- Layers: `app` → `pages` → `widgets` → `features` → `entities` → `shared`. A layer imports only from layers below it; slices on the same layer never import each other.
+- Each slice exposes its public API from `index.ts`; import across slices with `@/` (`@/entities/item`), relative paths only inside a slice.
+- eslint-plugin-boundaries enforces this (`frontend/eslint.config.js`); TypeScript is strict.
+
+## Tests
+
+- Every new function, route or component gets tests in the same change; every bug fix adds a test that fails without the fix.
+- Backend: pytest in `backend/tests/`, against a temporary SQLite database (see `tests/conftest.py`); `just test` fails below 80% line coverage.
+- Frontend: Vitest and Testing Library, `*.test.ts(x)` next to the code; mock `fetch`, never call a real server.
+- Tests never use the network.

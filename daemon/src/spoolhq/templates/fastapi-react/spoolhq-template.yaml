@@ -1,0 +1,22 @@
+name: fastapi-react
+description: >
+  A FastAPI backend and a React frontend in one repository, already set up and passing
+  its gates. backend/ is Python with uv: FastAPI, SQLAlchemy 2 on SQLite, Alembic
+  migrations, pytest with an 80% coverage floor, ruff and mypy strict. Code is layered
+  as app/core (config, database session), a thin app/api (routers, schemas) and
+  app/services/<domain> (one package per domain, no FastAPI imports), enforced by
+  import-linter. frontend/ is React, Vite and strict TypeScript with Vitest and Testing
+  Library, ESLint and Prettier, laid out as Feature-Sliced Design (app, pages, widgets,
+  features, entities, shared; each slice exports through index.ts, layers import only
+  downward, sibling slices never import each other), enforced by
+  eslint-plugin-boundaries. An example "items" domain runs through every layer:
+  model, migration, service, router, entity, feature, widget, page and tests; GET
+  /api/health exists. The justfile has install, dev, lint (including a 500-line limit
+  on source files) and test; CI runs them on GitHub Actions. CLAUDE.md, PROGRESS.md
+  and DECISIONS.md exist. Build new work as new domains and slices following the items
+  example; remove or replace the items example when the spec has no use for it.
+commands:
+  install: just install
+  lint: just lint
+  test: just test
+  dev: just dev

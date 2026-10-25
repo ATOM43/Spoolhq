@@ -11,6 +11,14 @@ from tests.conftest import fake_tool_cmd, fixture_contract, make_git_template, m
 runner = CliRunner()
 
 
+def test_list_shows_fastapi_react_with_its_description() -> None:
+    result = runner.invoke(app, ["templates", "list"])
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[0] == "fastapi-react"
+    assert lines[1].startswith("  A FastAPI backend and a React frontend")
+
+
 @pytest.mark.integration
 def test_check_passes(tmp_path: Path) -> None:
     template = make_template(tmp_path / "tpl")

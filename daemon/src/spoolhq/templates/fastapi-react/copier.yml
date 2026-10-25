@@ -1,0 +1,25 @@
+# Copier settings for the fastapi-react template. SpoolHQ runs Copier without trust,
+# so this template has no _tasks, _migrations or _jinja_extensions.
+_min_copier_version: "9.19.1"
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+# Replaces Copier's default exclusions, so those are repeated here.
+_exclude:
+  - copier.yml
+  - spoolhq-template.yaml
+  - "~*"
+  - "*.py[co]"
+  - __pycache__
+  - .git
+  - .DS_Store
+  - .venv
+  - node_modules
+
+project_name:
+  type: str
+  help: The project's name (lowercase letters, digits and hyphens)
+  default: my-app
+  validator: >-
+    {% if not (project_name | regex_search('^[a-z0-9][a-z0-9-]{0,62}$')) %}
+    must be 1-63 lowercase letters, digits or hyphens, starting with a letter or digit
+    {% endif %}

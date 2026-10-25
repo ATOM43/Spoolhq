@@ -4,12 +4,32 @@ from pathlib import Path
 
 import pytest
 
+import spoolhq
 from spoolhq.services.templates import (
     TemplateError,
+    builtin_descriptions,
+    builtin_names,
     is_git_url,
     open_template,
 )
 from tests.conftest import make_git_template, make_template, run_git
+
+
+def test_fastapi_react_is_built_in() -> None:
+    assert "fastapi-react" in builtin_names()
+    descriptions = dict(builtin_descriptions())
+    assert "FastAPI backend and a React frontend" in descriptions["fastapi-react"]
+
+
+def test_a_built_in_records_the_package_version() -> None:
+    with open_template("fastapi-react") as template:
+        assert (template.kind, template.label, template.source) == (
+            "builtin",
+            "fastapi-react",
+            "fastapi-react",
+        )
+        assert template.ref == spoolhq.__version__
+        assert (template.root / "spoolhq-template.yaml").is_file()
 
 
 def test_an_unknown_name() -> None:

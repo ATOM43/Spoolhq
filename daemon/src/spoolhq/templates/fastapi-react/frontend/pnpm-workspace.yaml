@@ -1,0 +1,4 @@
+# unrs-resolver (via eslint-import-resolver-typescript) ships prebuilt binaries as
+# optional packages; its postinstall is only a fallback, so it is not run.
+allowBuilds:
+  unrs-resolver: false

@@ -1,0 +1,42 @@
+# Task runner. Run `just --list` to see recipes.
+# Recipes use only plain commands with --directory/--dir flags (no cd, && or other
+# shell syntax), so they run the same under sh and PowerShell.
+
+set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
+
+default:
+    @just --list
+
+# Install all dependencies exactly as locked.
+install:
+    uv sync --directory backend --locked
+    pnpm --dir frontend install --frozen-lockfile
+
+# Lint, format-check and type-check both packages, and check file sizes.
+lint:
+    uv run --directory backend ruff check
+    uv run --directory backend ruff format --check
+    uv run --directory backend mypy
+    uv run --directory backend lint-imports
+    uv run --directory backend python ../scripts/check_line_limit.py
+    pnpm --dir frontend exec eslint .
+    pnpm --dir frontend exec prettier --check .
+    pnpm --dir frontend exec tsc --noEmit
+
+# Run both test suites (the backend fails below 80% line coverage).
+test:
+    uv run --directory backend pytest --cov=app --cov-report=term-missing --cov-fail-under=80
+    pnpm --dir frontend exec vitest run
+
+# Start the API (with migrations applied) and the Vite dev server; Ctrl-C stops both.
+[parallel]
+dev: backend frontend
+
+# Apply migrations and start the API on http://127.0.0.1:8000 with reload.
+backend:
+    uv run --directory backend alembic upgrade head
+    uv run --directory backend uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+# Start the Vite dev server on http://localhost:5173 (it proxies /api to the backend).
+frontend:
+    pnpm --dir frontend exec vite

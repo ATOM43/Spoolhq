@@ -1,0 +1,51 @@
+# {{ project_name }}
+
+A FastAPI backend and a React frontend, generated from SpoolHQ's `fastapi-react` template.
+
+## Requirements
+
+[uv](https://docs.astral.sh/uv/), Node 24 with [pnpm](https://pnpm.io/) 12 and [just](https://just.systems/).
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `just install` | Install the backend and frontend dependencies exactly as locked. |
+| `just dev` | Apply migrations, start the API on <http://127.0.0.1:8000> and the Vite dev server on <http://localhost:5173> (it proxies `/api`). |
+| `just lint` | ruff, mypy (strict), import-linter, the 500-line check, ESLint (with the layer rules), Prettier and `tsc`. |
+| `just test` | pytest with an 80% coverage floor, and Vitest. |
+
+Settings come from environment variables with the `APP_` prefix, or a `.env` file (copy `.env.example`). The database defaults to SQLite in `backend/app.db`.
+
+## Structure
+
+```text
+backend/                  Python (uv)
+  app/
+    main.py               create_app(): the FastAPI app and its routers
+    core/                 config (pydantic-settings) and the database engine and session
+    api/                  thin HTTP layer: routers/ (one file per resource), schemas/, deps.py
+    services/<domain>/    domain logic, one package per domain: models and functions, no FastAPI
+  migrations/             Alembic (env.py, versions/)
+  tests/                  pytest, one file per module under test
+frontend/                 React + Vite + TypeScript (pnpm)
+  src/
+    app/                  entry, root component, global styles
+    pages/                one slice per screen (home/)
+    widgets/              blocks of a page (items-panel/)
+    features/             user actions (create-item/)
+    entities/             domain types, API calls and views (item/)
+    shared/               no domain knowledge: api/ (fetch helper), lib/ (test setup)
+scripts/check_line_limit.py
+justfile
+```
+
+### Backend layers
+
+`app.api` → `app.services` → `app.core`: routers validate input and call a service; services hold the logic and never import FastAPI or Starlette; `core` imports neither. `lint-imports` checks this (contracts in `backend/pyproject.toml`). The `items` domain shows every layer: `services/items/models.py` (SQLAlchemy model), `services/items/service.py`, `migrations/versions/0001_create_items.py`, `api/schemas/items.py`, `api/routers/items.py` and `tests/test_items.py`.
+
+To add a domain: a package under `app/services/`, its tables in a new Alembic migration (`uv run --directory backend alembic revision --autogenerate -m "..."`, then check it), a router under `app/api/routers/` included in `app/main.py`, and tests.
+
+### Frontend layers (Feature-Sliced Design)
+
+`app` → `pages` → `widgets` → `features` → `entities` → `shared`. Each slice exports its public API from `index.ts`; nothing imports a slice's internals; a layer imports only from layers below it; slices on the same layer never import each other. Imports across slices use the `@/` alias. `eslint-plugin-boundaries` checks this (`frontend/eslint.config.js`). Tests sit next to the code (`*.test.tsx`).
