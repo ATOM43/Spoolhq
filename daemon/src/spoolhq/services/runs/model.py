@@ -93,6 +93,11 @@ class Run:
     reset_at: str | None = None
     """When a run paused by a usage limit may resume; ``None`` otherwise."""
     kind: RunKind = RunKind.TICKET
+    pr_number: int | None = None
+    """The pull request the run's work was delivered as (GitHub delivery, T17)."""
+    pr_url: str | None = None
+    pr_branch: str | None = None
+    """The pull request's branch on GitHub, ``spoolhq/<ticket_id>-<slug>``."""
 
 
 @dataclass(frozen=True)

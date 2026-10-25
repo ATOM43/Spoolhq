@@ -9,6 +9,7 @@ from typing import Annotated
 import typer
 
 from spoolhq.cli.common import fail, hours, settings, table
+from spoolhq.cli.runs import _run_log, _workspace
 from spoolhq.services.scheduler import SchedulerError, apply_transition
 from spoolhq.services.tickets import (
     TICKET_STATUSES,
@@ -80,6 +81,15 @@ def list_command(
         raise typer.Exit(code=1)
 
 
+def _pull_request(project: str, ticket_id: str) -> str | None:
+    """``#12 <url> (awaiting_approval)`` from the ticket's latest run, read-only."""
+    with _run_log(_workspace(project)) as run_log:
+        runs = run_log.list_runs(ticket_id=ticket_id, limit=1) if run_log is not None else []
+    if not runs or runs[0].pr_number is None:
+        return None
+    return f"#{runs[0].pr_number} {runs[0].pr_url} ({runs[0].status})"
+
+
 @tickets_app.command("show")
 def show_command(project: ProjectArg, ticket_id: TicketIdArg) -> None:
     """Show a ticket's fields, its Done-when checklist and its body."""
@@ -102,6 +112,8 @@ def show_command(project: ProjectArg, ticket_id: TicketIdArg) -> None:
         "review_required": "true" if meta.review_required else "false",
         "tracker_ref": meta.tracker_ref if meta.tracker_ref is not None else "null",
     }
+    if pr := _pull_request(project, ticket.id):
+        fields["pull_request"] = pr
     width = max(len(key) for key in fields) + 1
     for key, value in fields.items():
         typer.echo(f"{key + ':':<{width}} {value}")

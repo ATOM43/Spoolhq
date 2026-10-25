@@ -65,6 +65,7 @@ After an early stop the next prompt's `<previous_attempt>` says so (`Your last a
 | `cancelled` | `spool run cancel` | `ready` | removed, with its branch | — |
 | `interrupted` | the daemon stopped while the run was active ([runs](runs.md#recovery)) | `running` | kept | `spool run resume`, or `spool run discard` |
 | `awaiting_approval` | approved, and held (`run.integration: hold`), waiting for a clean main checkout, or its integration was interrupted | `awaiting_approval` | kept | `spool run integrate` |
+| `awaiting_approval` with a pull request | delivered as a GitHub pull request ([github.md](github.md#pr-mode)) | `awaiting_approval` | removed | the poller: merged → `done`, changes requested → a `pr_changes` attempt, closed → `blocked` |
 | `done` | approved and merged | `done` | removed | — |
 
 **Usage limits pause, never block.** When the implementer or the reviewer returns `usage_limited`, the current attempt becomes `interrupted`, the run `paused` with `reset_at` stored on the run row, and the daemon schedules a resume at `reset_at` plus 60 s. The timer reads the loop's clock once a second on its own thread and is cancelled when the daemon shuts down. Without a known `reset_at`, the run waits for `spool run resume`.
@@ -145,7 +146,7 @@ spool run discard <project> <ticket>
 spool run status <project>              # or: no active run in 'demo'
 ```
 
-With no active run, `spool run status` adds the last merged ticket once a ticket has been integrated: `last merged: T04 · 1a2b3c4 · ticket/T04` (the squash commit's first 7 hex digits and its tag).
+With no active run, `spool run status` shows the latest run's pull request if it has one (`T04 · awaiting_approval · PR #12 · <url>`), and adds the last merged ticket once a ticket has been integrated: `last merged: T04 · 1a2b3c4 · ticket/T04` (the squash commit's first 7 hex digits and its tag).
 
 `next`, `all`, `resume` and `integrate` poll `runs/current` once a second until no worker is on the run, and exit 1 if it ended `blocked` or `cancelled`. Ctrl-C detaches and prints `run continues in the daemon; spool run status to check`; it does not cancel.
 

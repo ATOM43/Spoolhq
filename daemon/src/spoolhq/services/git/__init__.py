@@ -32,7 +32,7 @@ from spoolhq.services.git.integrate import (
     unstage,
 )
 from spoolhq.services.git.integrate import commit as commit_staged
-from spoolhq.services.git.naming import branch_name
+from spoolhq.services.git.naming import BRANCH_PREFIX, branch_name
 from spoolhq.services.git.recovery import (
     RecoveryAction,
     RecoveryEntry,
@@ -106,6 +106,7 @@ __all__ = [
     "too_large",
     "unresolved_files",
     "unstage",
+    "BRANCH_PREFIX",
     "PushResult",
     "delete_branch",
     "fetch",

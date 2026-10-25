@@ -8,13 +8,13 @@ from uuid import uuid4
 from fastapi import FastAPI
 
 import spoolhq
-from spoolhq.api.routers import health, plan, runs, version
+from spoolhq.api.routers import github, health, plan, runs, version
 from spoolhq.api.security import LocalOnlyMiddleware
 from spoolhq.api.worktrees import check_git, recover_all_integrations, recover_all_worktrees
 from spoolhq.core.auth import load_or_create_token
 from spoolhq.core.config import Settings, ensure_home, home_dir
 from spoolhq.services.agents import available_runners
-from spoolhq.services.runloop import Agents, Integrator, PlanJobs, RunLoop
+from spoolhq.services.runloop import Agents, GitHubPoller, Integrator, PlanJobs, RunLoop
 from spoolhq.services.runs import RunRegistry
 
 logger = logging.getLogger("spoolhq.daemon")
@@ -44,7 +44,8 @@ def create_app(
     with ``agents`` (default: the installed Claude Code for every role) and
     ``integrator`` (default: ``Delivery``, local or to ``git.remote``; ``run.integration:
     hold`` per project).
-    Plan generation runs beside it (``app.state.plans``, with ``agents.planner``).
+    Plan generation runs beside it (``app.state.plans``, with ``agents.planner``), and
+    so does the poller of open GitHub pull requests (``app.state.github``, every 60 s).
     On shutdown the loop stops its agents and leaves their runs for the next startup's
     recovery. The caller must hold the daemon single-instance lock while it runs.
     """
@@ -78,6 +79,8 @@ def create_app(
                 agents=roles,
                 integrator=integrator,
             )
+            app.state.github = GitHubPoller(app.state.runloop, registry)
+            app.state.github.start()
             app.state.plans = PlanJobs(
                 registry,
                 projects_dir=settings.projects_dir,
@@ -88,6 +91,7 @@ def create_app(
                 yield
             finally:
                 app.state.plans.close()
+                app.state.github.close()
                 app.state.runloop.close()
         finally:
             registry.close()
@@ -97,5 +101,6 @@ def create_app(
     app.include_router(version.router)
     app.include_router(runs.router)
     app.include_router(plan.router)
+    app.include_router(github.router)
     app.add_middleware(LocalOnlyMiddleware, port=settings.port, token=token)
     return app

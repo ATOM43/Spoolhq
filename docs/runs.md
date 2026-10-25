@@ -35,12 +35,12 @@ An **attempt** is one implementer pass inside a run, together with its gates and
 
 - Every connection sets `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON` and `busy_timeout=5000`. A committed transaction survives a crash of the process; a power loss can drop the last few transactions.
 - One connection per `RunLog`, opened with `check_same_thread=False` and guarded by a lock, so a `RunLog` can be shared between threads. `isolation_level=None`: each method is one explicit `BEGIN IMMEDIATE` … `COMMIT`.
-- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 5.
-- A database newer than the code is refused: `state.db: schema version 6 is newer than this SpoolHQ supports (5); upgrade SpoolHQ.`
+- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 6.
+- A database newer than the code is refused: `state.db: schema version 7 is newer than this SpoolHQ supports (6); upgrade SpoolHQ.`
 - A file that isn't a SQLite database is refused: `state.db: not a SpoolHQ database (file is not a database)`.
 - All SQL takes its values as parameters; ticket text and agent output never become SQL.
 
-### Schema (version 5)
+### Schema (version 6)
 
 ```sql
 CREATE TABLE runs (
@@ -53,7 +53,10 @@ CREATE TABLE runs (
     ended_at TEXT,
     progress_note TEXT,              -- version 2: the implementer's <progress> note
     reset_at TEXT,                   -- version 2: when a paused run's usage limit resets
-    kind TEXT NOT NULL DEFAULT 'ticket'  -- version 5: 'ticket' or 'plan'
+    kind TEXT NOT NULL DEFAULT 'ticket',  -- version 5: 'ticket' or 'plan'
+    pr_number INTEGER,               -- version 6: the pull request it was delivered as
+    pr_url TEXT,                     -- version 6
+    pr_branch TEXT                   -- version 6: spoolhq/<id>-<slug> on GitHub
 );
 
 CREATE TABLE attempts (
@@ -85,7 +88,7 @@ CREATE TABLE events (
 );
 ```
 
-Version 3 adds the integration journal, `integrations` ([integration.md](integration.md#the-journal-schema-version-3)); version 4 the cache-read tokens; version 5 the run's kind.
+Version 3 adds the integration journal, `integrations` ([integration.md](integration.md#the-journal-schema-version-3)); version 4 the cache-read tokens; version 5 the run's kind; version 6 the run's pull request ([GitHub delivery](github.md#pr-mode); `set_pull_request` and `open_pull_requests` in `services/runs/pulls.py`).
 
 Triggers `BEFORE UPDATE` and `BEFORE DELETE` on `events` raise `events are append-only`, so not even a hand-written statement can change history. Indexes: `runs(ticket_id)`, `runs(status)`, `attempts(run_id)`, `events(run_id, id)`.
 

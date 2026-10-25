@@ -144,6 +144,10 @@ def status_command(project: ProjectArg) -> None:
     run = current["run"]
     if not current["active"] or run is None:
         typer.echo(f"no active run in '{project}'")
+        if run is not None and run.get("pr_number") is not None:
+            typer.echo(
+                f"{run['ticket_id']} · {run['status']} · PR #{run['pr_number']} · {run['pr_url']}"
+            )
         merged = current.get("last_merged")
         if merged is not None:
             sha = merged["commit"][:SHORT_SHA]
@@ -154,5 +158,7 @@ def status_command(project: ProjectArg) -> None:
         f"run {run['id']} · {run['ticket_id']} · {run['status']} · "
         f"{current['attempts']} attempts · {tokens:,} tokens"
     )
+    if run.get("pr_number") is not None:
+        typer.echo(f"PR #{run['pr_number']} · {run['pr_url']}")
     if current["phases"]:
         typer.echo(current["phases"][-1]["text"])

@@ -14,7 +14,7 @@ MAX_PAYLOAD_BYTES = 64 * 1024
 
 RUN_COLUMNS = (
     "id, ticket_id, status, reason, daemon_instance, started_at, ended_at, progress_note, "
-    "reset_at, kind"
+    "reset_at, kind, pr_number, pr_url, pr_branch"
 )
 ATTEMPT_COLUMNS = (
     "id, run_id, ticket_id, number, kind, status, dir, backend, model, input_tokens, "
@@ -69,6 +69,9 @@ def to_run(row: tuple[Any, ...]) -> Run:
         progress_note=row[7],
         reset_at=row[8],
         kind=RunKind(row[9]),
+        pr_number=row[10],
+        pr_url=row[11],
+        pr_branch=row[12],
     )
 
 

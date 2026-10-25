@@ -68,6 +68,9 @@ class PreviousAttempt:
     conflict_files: tuple[str, ...] = ()
     user_note: str | None = None
     """What the user wrote for this retry ("Note from the user")."""
+    pr_review: str | None = None
+    """The review that requested changes on the pull request (its body and inline
+    comments), from GitHub: untrusted, shown in its own fenced block."""
     system_note: str | None = None
     """SpoolHQ's own explanation: a timeout, a turn limit, a conflict ("Note from SpoolHQ")."""
 

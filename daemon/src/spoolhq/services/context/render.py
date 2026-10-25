@@ -230,6 +230,11 @@ def _previous_vars(previous: PreviousAttempt | None) -> dict[str, Any] | None:
         ],
         "conflict_files": [_clean(path, tag) for path in previous.conflict_files],
         "user_note": _clean(previous.user_note, tag) if previous.user_note else None,
+        "pr_review": (
+            _clean(cap_excerpt(normalize_newlines(previous.pr_review)), tag)
+            if previous.pr_review
+            else None
+        ),
         "system_note": _clean(previous.system_note, tag) if previous.system_note else None,
     }
 

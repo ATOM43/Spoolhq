@@ -137,3 +137,14 @@ def last_integration(run_log: RunLog) -> Integration | None:
             (IntegrationState.DONE.value,),
         ).fetchone()
     return _to_integration(row) if row is not None else None
+
+
+def pull_request_integration(run_log: RunLog, run_id: int) -> Integration | None:
+    """The run's integration delivered as a pull request that is still open."""
+    with run_log.transaction() as tx:
+        row = tx.conn.execute(
+            f"SELECT {COLUMNS} FROM integrations WHERE run_id = ? AND state = ? "  # noqa: S608 - constant columns
+            "ORDER BY id DESC LIMIT 1",
+            (run_id, IntegrationState.PR_OPEN.value),
+        ).fetchone()
+    return _to_integration(row) if row is not None else None

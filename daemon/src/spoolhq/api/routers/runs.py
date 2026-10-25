@@ -22,7 +22,7 @@ def _loop(request: Request) -> RunLoop:
 
 
 @contextmanager
-def _errors() -> Iterator[None]:
+def errors() -> Iterator[None]:
     """Unknown project, run or ticket → 404; any other refusal → 409, with the message."""
     try:
         yield
@@ -34,42 +34,42 @@ def _errors() -> Iterator[None]:
 
 @router.post("/runs", status_code=status.HTTP_201_CREATED)
 def start_run(name: str, body: StartRun, request: Request) -> RunView:
-    with _errors():
+    with errors():
         return RunView.of(_loop(request).start(name, body.mode, body.ticket))
 
 
 @router.post("/runs/{run_id}/pause")
 def pause_run(name: str, run_id: int, request: Request) -> RunView:
-    with _errors():
+    with errors():
         return RunView.of(_loop(request).pause(name, run_id))
 
 
 @router.post("/runs/{run_id}/resume")
 def resume_run(name: str, run_id: int, request: Request) -> RunView:
-    with _errors():
+    with errors():
         return RunView.of(_loop(request).resume(name, run_id))
 
 
 @router.post("/runs/{run_id}/cancel")
 def cancel_run(name: str, run_id: int, request: Request) -> RunView:
-    with _errors():
+    with errors():
         return RunView.of(_loop(request).cancel(name, run_id))
 
 
 @router.post("/tickets/{ticket_id}/integrate")
 def integrate_ticket(name: str, ticket_id: str, request: Request) -> RunView:
-    with _errors():
+    with errors():
         return RunView.of(_loop(request).integrate_ticket(name, ticket_id))
 
 
 @router.post("/tickets/{ticket_id}/discard")
 def discard_ticket(name: str, ticket_id: str, request: Request) -> Discarded:
-    with _errors():
+    with errors():
         _loop(request).discard(name, ticket_id)
     return Discarded(ticket_id=ticket_id)
 
 
 @router.get("/runs/current")
 def current_run(name: str, request: Request) -> CurrentRun:
-    with _errors():
+    with errors():
         return CurrentRun.of(_loop(request).current(name))

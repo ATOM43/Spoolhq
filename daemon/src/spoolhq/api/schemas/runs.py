@@ -24,6 +24,9 @@ class RunView(BaseModel):
     ended_at: str | None
     reset_at: str | None
     progress_note: str | None
+    pr_number: int | None = None
+    """The pull request the run was delivered as (GitHub delivery)."""
+    pr_url: str | None = None
 
     @classmethod
     def of(cls, run: Run) -> "RunView":
@@ -37,6 +40,8 @@ class RunView(BaseModel):
             ended_at=run.ended_at,
             reset_at=run.reset_at,
             progress_note=run.progress_note,
+            pr_number=run.pr_number,
+            pr_url=run.pr_url,
         )
 
 

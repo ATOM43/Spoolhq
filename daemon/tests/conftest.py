@@ -10,8 +10,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import keyring
 import pytest
 from fastapi.testclient import TestClient
+from keyring.backend import KeyringBackend
 
 from spoolhq.api import create_app
 from spoolhq.core.config import load_settings
@@ -31,6 +33,36 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "spoolhq-home"
     monkeypatch.setenv("SPOOLHQ_HOME", str(path))
     return path
+
+
+class MemoryKeyring(KeyringBackend):
+    """The OS keychain for tests: a dict, so no test reads or writes the real one."""
+
+    priority = 1.0  # type: ignore[assignment]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.passwords: dict[tuple[str, str], str] = {}
+
+    def get_password(self, service: str, username: str) -> str | None:
+        return self.passwords.get((service, username))
+
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.passwords[(service, username)] = password
+
+    def delete_password(self, service: str, username: str) -> None:
+        self.passwords.pop((service, username), None)
+
+
+@pytest.fixture(autouse=True)
+def keychain(monkeypatch: pytest.MonkeyPatch) -> Iterator[MemoryKeyring]:
+    """An in-memory keychain for every test; subprocesses get keyring's null backend."""
+    monkeypatch.setenv("PYTHON_KEYRING_BACKEND", "keyring.backends.null.Keyring")
+    previous = keyring.get_keyring()
+    memory = MemoryKeyring()
+    keyring.set_keyring(memory)
+    yield memory
+    keyring.set_keyring(previous)
 
 
 @pytest.fixture(autouse=True)

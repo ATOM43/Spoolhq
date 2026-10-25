@@ -104,7 +104,14 @@ _V5 = """
 ALTER TABLE runs ADD COLUMN kind TEXT NOT NULL DEFAULT 'ticket';
 """
 
-MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5)
+# GitHub delivery (T17): the pull request a run's work was delivered as.
+_V6 = """
+ALTER TABLE runs ADD COLUMN pr_number INTEGER;
+ALTER TABLE runs ADD COLUMN pr_url TEXT;
+ALTER TABLE runs ADD COLUMN pr_branch TEXT;
+"""
+
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6)
 """Migration ``n`` (1-based) takes the database from version ``n - 1`` to ``n``."""
 
 SCHEMA_VERSION = len(MIGRATIONS)

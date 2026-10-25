@@ -29,6 +29,7 @@ from spoolhq.services.runs.journal import (
     get_integration,
     last_integration,
     open_integrations,
+    pull_request_integration,
     set_integration_state,
     start_integration,
 )
@@ -46,6 +47,7 @@ from spoolhq.services.runs.model import (
     RunStatus,
     Usage,
 )
+from spoolhq.services.runs.pulls import open_pull_requests, set_pull_request
 from spoolhq.services.runs.recovery import INTERRUPTED_REASON, recover_interrupted
 from spoolhq.services.runs.registry import RunRegistry, WorkspaceRuns
 from spoolhq.services.runs.rows import MAX_PAYLOAD_BYTES
@@ -82,7 +84,10 @@ __all__ = [
     "get_integration",
     "last_integration",
     "open_integrations",
+    "open_pull_requests",
+    "pull_request_integration",
     "recover_interrupted",
+    "set_pull_request",
     "set_integration_state",
     "start_integration",
     "state_db_path",

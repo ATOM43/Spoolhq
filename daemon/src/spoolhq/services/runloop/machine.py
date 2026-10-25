@@ -40,6 +40,7 @@ from spoolhq.services.runs import (
     Attempt,
     AttemptKind,
     AttemptStatus,
+    EventKind,
     append_transcript,
     attempt_dir,
     attempt_files,
@@ -209,6 +210,11 @@ def previous_attempt(ctx: RunContext, kind: AttemptKind) -> PreviousAttempt | No
             'Check your work against every "Done when" item.'
         )
     tests = [name for result in gates.get("results", []) for name in result["failing_tests"]]
+    pr_review = None
+    if kind is AttemptKind.PR_CHANGES:  # stored by polling.py when it starts this attempt
+        events = ctx.run_log.events_since(0, run_id=ctx.run.id, limit=100_000)
+        logged = [e.payload for e in events if e.kind is EventKind.LOG and "pr_review" in e.payload]
+        pr_review = str(logged[-1]["pr_review"]) if logged else None
     return PreviousAttempt(
         kind=kind.value,
         number=last.number,
@@ -221,6 +227,7 @@ def previous_attempt(ctx: RunContext, kind: AttemptKind) -> PreviousAttempt | No
         ),
         conflict_files=conflicts,
         system_note=note,
+        pr_review=pr_review,
     )
 
 

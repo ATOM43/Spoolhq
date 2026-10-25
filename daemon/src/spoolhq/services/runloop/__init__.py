@@ -32,6 +32,7 @@ from spoolhq.services.runloop.model import (
     RunLoopError,
 )
 from spoolhq.services.runloop.planning import PlanJobs
+from spoolhq.services.runloop.polling import GitHubPoller
 from spoolhq.services.runloop.resume import RESUME_DELAY, ResumeTimer
 
 __all__ = [
@@ -43,6 +44,7 @@ __all__ = [
     "EndKind",
     "Ending",
     "Flags",
+    "GitHubPoller",
     "HoldForIntegration",
     "IntegrationResult",
     "IntegrationStatus",

@@ -15,6 +15,7 @@ from spoolhq.cli.client import ApiClient, ApiError, DaemonNotRunning
 from spoolhq.cli.common import fail as _fail
 from spoolhq.cli.common import settings as _settings
 from spoolhq.cli.gates import gates_app
+from spoolhq.cli.github import github_app, secrets_app
 from spoolhq.cli.plan import plan_app
 from spoolhq.cli.prompt import prompt_app
 from spoolhq.cli.review import review_command
@@ -27,6 +28,7 @@ from spoolhq.core.auth import load_or_create_token, token_path
 from spoolhq.core.config import Settings, ensure_home
 from spoolhq.core.daemon_lock import DaemonAlreadyRunning, acquire_daemon_lock
 from spoolhq.core.logs import configure_logging
+from spoolhq.services.github import github_token
 from spoolhq.services.projects import (
     ProjectError,
     ProjectValidationError,
@@ -56,6 +58,8 @@ app.add_typer(runs_app)
 app.add_typer(run_app)
 app.add_typer(worktrees_app)
 app.add_typer(templates_app)
+app.add_typer(github_app)
+app.add_typer(secrets_app)
 app.command("agents")(agents_command)
 app.command("review")(review_command)
 
@@ -79,7 +83,8 @@ def serve() -> None:
 
 def _serve(settings: Settings, home: Path) -> None:
     token = load_or_create_token(home)
-    log_file = configure_logging(home / "logs", settings.log_level, redact=[token])
+    secrets = [token, *filter(None, [github_token()])]
+    log_file = configure_logging(home / "logs", settings.log_level, redact=secrets)
 
     base_url = f"http://{settings.host}:{settings.port}"
     typer.echo(f"SpoolHQ daemon on {base_url}")

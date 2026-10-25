@@ -2,7 +2,7 @@
 
 A project with `git.remote` in `project.yaml` delivers approved tickets to GitHub. Without it, nothing changes: tickets merge into the local default branch as in [integration](integration.md).
 
-The code is in three parts. The git mechanics are `services/git/remote.py` (fetch, compare, push, push a tag, delete a remote branch, parse `owner/repo`). The orchestration is `services/runloop/delivery.py` (`delivery_mode`, `Delivery`), on top of T14's `LocalIntegrator` in `services/runloop/integration.py`, which also holds crash recovery.
+The code is in three parts. The git mechanics are `services/git/remote.py` (fetch, compare, push, push a tag, delete a remote branch, parse `owner/repo`). The GitHub REST API is `services/github/` (the client with the token, headers, timeouts, rate limits and redaction; pull requests and their reviews; the token lookup), which imports no other service. The orchestration is `services/runloop/`: `delivery.py` (`delivery_mode`, `Delivery`, on top of T14's `LocalIntegrator` in `integration.py`, which also holds crash recovery), `pr_body.py` (the pull request's text) and `polling.py` (`GitHubPoller`).
 
 ## Which mode
 
@@ -17,6 +17,25 @@ A ticket with `review_required: true` goes through a pull request; every other t
 Fetches and pushes are plain `git fetch` and `git push` through SpoolHQ's git runner, so they use your own setup exactly as a manual `git push` would: your credential helper for an HTTPS remote, your SSH agent for an SSH one. SpoolHQ never writes credentials into git config, URLs or command lines. Hooks stay disabled and git never prompts (`GIT_TERMINAL_PROMPT=0`); a remote that needs a password you haven't stored fails with git's error.
 
 `git.remote` must be a `github.com` URL (`https://github.com/<owner>/<repo>` or `git@github.com:<owner>/<repo>.git`); SpoolHQ reads `owner/repo` from it. It doesn't need a matching `git remote` in your repository: SpoolHQ fetches by URL and stores what it fetched as `refs/spoolhq/remote/<branch>`, so your remotes and remote-tracking branches (`origin/main`) don't change.
+
+## The GitHub token
+
+The GitHub API (opening pull requests and polling them) needs a token; git itself doesn't. SpoolHQ looks for it in this order:
+
+1. `SPOOLHQ_GITHUB_TOKEN` in the daemon's environment.
+2. The OS keychain, through [keyring](https://pypi.org/project/keyring/): service `spoolhq`, key `github` (macOS Keychain, Windows Credential Locker, the Secret Service on Linux).
+
+```sh
+spool secrets set github     # asks for the token without echoing it; never from the command line
+```
+
+The token goes only into the `Authorization` header of API requests. It is never logged (the daemon log redacts it, as it does the daemon's own token), never written to the workspace, the run files or git config, never put in a URL or on a command line, and every API error message has it replaced with `[redacted]`. Direct mode works without a token; PR mode without one blocks the ticket before anything is pushed:
+
+```text
+PR mode needs a GitHub token; run spool secrets set github or set SPOOLHQ_GITHUB_TOKEN
+```
+
+A fine-grained token needs read and write access to the repository's **Pull requests** (and read access to its metadata). API calls use `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2022-11-28` and 30-second timeouts.
 
 ## Fetch first
 
@@ -45,6 +64,33 @@ SpoolHQ never pushes your own unpushed commits: the squash commit's parent is al
 3. Only now is local `main` fast-forwarded (`merge --ff-only` or `update-ref`, as T14). If it moved or the checkout got dirty in the meantime, it is left alone: the commit is already on GitHub, and the next integration's fetch catches `main` up. **Journal: `advanced`.**
 4. Tag `ticket/<id>` and push the tag. A failed tag push is logged, not blocking: the work is delivered, and the tag stays in the local repository. **Journal: `tagged`**, then `done` as in T14.
 
+## PR mode
+
+1. Fetch first, merge, gates and the squash commit exactly as in direct mode.
+2. Push the commit to the branch `spoolhq/<id>-<slug>` (the run branch's name from [git](git.md#paths-and-branch-names), with `spoolhq/` for `feat/`): a plain push. If that branch already exists on GitHub with other commits, the ticket is blocked: delete the branch there and integrate again. **Journal: `pushed`.**
+3. Open a pull request against the default branch:
+   - **Title:** `<id>: <title>`, one line, as the squash commit's subject.
+   - **Body:** the title; the ticket's `## Purpose` (else its `## Scope`); the "Done when" list with the reviewer's verdict and reason for each item; a table of the gates (command, pass/fail, duration); and the run id. All ticket and agent text is escaped: markdown specials are backslash-escaped and `&`, `<`, `>` and `@` become HTML entities, so markup and HTML show as text and nobody is mentioned. The body is cut at 60,000 characters.
+   - If GitHub refuses it, the pushed branch is deleted again and the ticket is blocked with `cannot open a pull request: <the API error>`.
+4. The PR's number, URL and branch are stored on the run (run log schema 6), the journal row becomes `pr_open`, the worktree and its local branch are removed (the branch on GitHub holds the work), and the ticket and run wait in `awaiting_approval`: `T04 · PR #12 opened: https://github.com/acme/demo/pull/12`. `spool run all` stops there, as with any ticket that waits.
+
+`spool run status` and `spool tickets show` show the pull request, and the API's run views carry `pr_number` and `pr_url`. `spool run integrate` refuses such a ticket (`T04 waits on PR #12: …`): it is merged on GitHub.
+
+## Polling pull requests
+
+While the daemon runs, it checks the open pull requests of every project every 60 seconds; `spool github sync <project>` does it at once and prints a line per pull request. A pull request is open for SpoolHQ while its ticket's latest run waits in `awaiting_approval` with a PR number. Only SpoolHQ's own pull requests are read.
+
+| GitHub says | What happens |
+| --- | --- |
+| Merged | Fetch; fast-forward local `main` if it is behind (a dirty main checkout **waits** for the next poll, untouched); tag `ticket/<id>` on the PR's merge commit and push the tag; delete the PR branch; ticket and run `done`; the journal row `done` with the merge commit (so `spool run status` shows it as last merged). The `PROGRESS.md` entry is already in the squash commit. |
+| A `CHANGES_REQUESTED` review newer than the last attempt | A new attempt, of kind `pr_changes`, in a worktree recreated from the PR branch's head. Its prompt includes the review's body and its inline comments (file and line), as untrusted text in their own fenced block inside the escaped `<previous_attempt>` block ([context](context.md)). Then the gates and the reviewer as usual; once approved, the new commits are pushed on top of the same branch, a fast-forward, never forced, and the ticket waits again. The pull request stays open. If the branch moved on GitHub in the meantime, the ticket is blocked rather than forced. |
+| Closed without merging | Ticket and run `blocked`: `PR #12 was closed without merging`. |
+| Still open, nothing new | Nothing. |
+
+A review is answered once: the attempt records the review's id. A new attempt waits while another run is active in the project or the main checkout isn't clean, and is tried again at the next poll.
+
+**API errors and rate limits never block a ticket.** A failed call is logged and the next poll tries again. A rate limit (`429`, or `403` with `X-RateLimit-Remaining: 0`) stops all calls until the time GitHub gave (`Retry-After`, else `X-RateLimit-Reset`, else 60 seconds). Untrusted text from the API (review bodies, comments) never reaches a shell, a template or git; branch names come from SpoolHQ's run log, not from the API.
+
 ## What blocks and what waits
 
 | Situation | Result |
@@ -55,6 +101,13 @@ SpoolHQ never pushes your own unpushed commits: the squash commit's parent is al
 | The push is refused because main moved, 3 times | Blocked: `main kept moving during integration`. |
 | The push fails for any other reason | Blocked, with git's error. |
 | The tag push fails | Logged; the ticket is done. |
+| PR mode without a GitHub token | Blocked, before anything is pushed. |
+| The PR branch already exists with other commits | Blocked. |
+| Opening the pull request fails | Blocked; the pushed branch is deleted again. |
+| The PR waits for review | Waits in `awaiting_approval`. |
+| The PR is merged but the main checkout is dirty | Waits; the next poll finishes it. |
+| The PR is closed without merging | Blocked. |
+| A GitHub API error or rate limit while polling | Nothing changes; the next poll tries again. |
 
 ## Crash recovery
 
@@ -67,3 +120,11 @@ The journal ([integration](integration.md#crash-recovery)) has a state `pushed` 
 | The fetch fails | Nothing is done. The row is reported and stays open for the next startup. |
 
 Running recovery twice changes nothing.
+
+A pull request's row is `pr_open` once it is opened, so recovery leaves it alone; the poller finishes it. A crash between the push to the PR branch and opening the pull request leaves the branch on GitHub: the ticket waits as interrupted, and integrating again is blocked until the branch is deleted there.
+
+## Tests
+
+`tests/services/git/test_remote.py` and `tests/services/runloop/test_delivery.py` use a local bare repository as the remote: `url.<bare>.insteadOf https://github.com/acme/demo` in the test repository's config makes git use it, so no network is involved. `tests/services/runloop/test_pull_requests.py` adds `FakeGitHub`, an `httpx.MockTransport` that serves the pull request API and merges through the bare repository. Tests never read the real keychain: an autouse fixture installs an in-memory one (and `PYTHON_KEYRING_BACKEND` points subprocesses at keyring's null backend).
+
+`tests/services/runloop/test_github_real.py` (`integration`, opt-in) pushes one ticket directly and opens one pull request (then closes it) against a real throwaway repository: set `SPOOLHQ_GITHUB_TEST_REPO=https://github.com/<you>/<repo>` and `SPOOLHQ_GITHUB_TEST_TOKEN`, with git able to push there through your own credential helper or SSH agent.

@@ -367,8 +367,10 @@ class RunLoop:
         run_log: RunLog,
         found: Run,
         integrator: Integrator | None,
+        kind: AttemptKind | None = None,
     ) -> Run:
-        """Pick ``found`` up again in its kept worktree, from where its attempts left off."""
+        """Pick ``found`` up again in its kept worktree, from where its attempts left off
+        (or with a ``kind`` attempt)."""
         project = settings.name
         with self._mutex:
             lock = take_run_lock(workspace, project)
@@ -402,7 +404,8 @@ class RunLoop:
             active = Active(ticket.id, found.id, Flags(), lock=lock)
             self._active[project] = active
             ctx.phase("resumed", f"{ticket.id} · resumed (run {found.id})")
-            self._spawn(active, ctx, next_kind(run_log.list_attempts(found.id)), False)
+            kind = kind or next_kind(run_log.list_attempts(found.id))
+            self._spawn(active, ctx, kind, False)
             return ctx.run
 
     def integrate_ticket(self, project: str, ticket_id: str) -> Run:
@@ -417,6 +420,8 @@ class RunLoop:
             latest, status = runs[0] if runs else None, ticket.meta.status
             if status != "awaiting_approval" or latest is None or latest.status != status:
                 raise RunLoopError(f"{ticket_id} is {status}, not awaiting approval")
+            if latest.pr_number is not None:
+                raise RunLoopError(f"{ticket_id} waits on PR #{latest.pr_number}: {latest.pr_url}")
             # Always the real integrator: this is how a held ticket gets merged.
             return self._continue(settings, workspace, run_log, latest, self.integrator)
 
