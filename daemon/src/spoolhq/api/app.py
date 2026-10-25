@@ -42,7 +42,8 @@ def create_app(
     (``app.state.integration_recovery``), removes the worktrees those runs left behind
     (``app.state.worktree_recovery``), and starts the run loop (``app.state.runloop``)
     with ``agents`` (default: the installed Claude Code for every role) and
-    ``integrator`` (default: ``LocalIntegrator``; ``run.integration: hold`` per project).
+    ``integrator`` (default: ``Delivery``, local or to ``git.remote``; ``run.integration:
+    hold`` per project).
     Plan generation runs beside it (``app.state.plans``, with ``agents.planner``).
     On shutdown the loop stops its agents and leaves their runs for the next startup's
     recovery. The caller must hold the daemon single-instance lock while it runs.

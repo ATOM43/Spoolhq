@@ -8,6 +8,7 @@ over a ``RunContext`` in ``machine.py``. This is the one service that imports th
 others; no service imports it. See ``docs/run-loop.md``.
 """
 
+from spoolhq.services.runloop.delivery import Delivery, delivery_mode
 from spoolhq.services.runloop.integration import LocalIntegrator, recover_integrations
 from spoolhq.services.runloop.integrator import (
     HoldForIntegration,
@@ -38,6 +39,7 @@ __all__ = [
     "RUN_LOCK",
     "Agents",
     "Current",
+    "Delivery",
     "EndKind",
     "Ending",
     "Flags",
@@ -55,6 +57,7 @@ __all__ = [
     "RunContext",
     "RunLoop",
     "RunLoopError",
+    "delivery_mode",
     "drive",
     "next_kind",
     "recover_integrations",

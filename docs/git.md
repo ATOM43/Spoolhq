@@ -1,8 +1,8 @@
 # Git
 
-Every run of a ticket works in a disposable git worktree of the project's repository, on its own branch. The main working copy is never touched: SpoolHQ only reads it, adds and removes worktrees, creates and deletes its own branches, and keeps one config entry per branch. There is no fetch or push yet (T17 adds remotes). Integration ([integration.md](integration.md), `integrate.py`) merges main into a run's worktree and builds the squash commit there; in the main checkout it only fast-forwards the default branch (`merge --ff-only` or `update-ref`) and adds the tag. The run loop ([run-loop.md](run-loop.md)) drives these APIs.
+Every run of a ticket works in a disposable git worktree of the project's repository, on its own branch. The main working copy is never touched: SpoolHQ only reads it, adds and removes worktrees, creates and deletes its own branches, and keeps one config entry per branch. Fetches and pushes to `git.remote` are in `remote.py` ([GitHub delivery](github.md)). Integration ([integration.md](integration.md), `integrate.py`) merges main into a run's worktree and builds the squash commit there; in the main checkout it only fast-forwards the default branch (`merge --ff-only` or `update-ref`) and adds the tag. The run loop ([run-loop.md](run-loop.md)) drives these APIs.
 
-The code is `services/git/`: the git runner in `runner.py`, branch names in `naming.py`, main-repository checks in `repo.py`, `WorktreeManager` in `worktrees.py`, crash recovery in `recovery.py` and the integration mechanics in `integrate.py`. It imports no other service package (an import-linter contract checks this); what it needs from the run log is passed in as a callable.
+The code is `services/git/`: the git runner in `runner.py`, branch names in `naming.py`, main-repository checks in `repo.py`, `WorktreeManager` in `worktrees.py`, crash recovery in `recovery.py`, the integration mechanics in `integrate.py` and fetch and push in `remote.py`. It imports no other service package (an import-linter contract checks this); what it needs from the run log is passed in as a callable.
 
 ## One worktree per run
 

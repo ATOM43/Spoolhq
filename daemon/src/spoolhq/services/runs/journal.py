@@ -22,17 +22,22 @@ class IntegrationState(StrEnum):
     """main is being merged into the worktree, gated and squashed; main is untouched."""
     COMMITTED = "committed"
     """The squash commit exists (``commit_sha``); main is untouched."""
+    PUSHED = "pushed"
+    """GitHub delivery: the remote has ``commit_sha`` (its default branch or a PR branch)."""
     ADVANCED = "advanced"
     """The default branch points at ``commit_sha``."""
     TAGGED = "tagged"
     DONE = "done"
     ABANDONED = "abandoned"
     """Stopped before main moved (conflict, gates, a block, a wait); nothing to recover."""
+    PR_OPEN = "pr_open"
+    """Delivered as a pull request; polling sets ``done`` (merged) or ``abandoned``."""
 
 
 OPEN_STATES = (
     IntegrationState.MERGING,
     IntegrationState.COMMITTED,
+    IntegrationState.PUSHED,
     IntegrationState.ADVANCED,
     IntegrationState.TAGGED,
 )
@@ -107,11 +112,17 @@ def set_integration_state(
         return _get(tx.conn, integration_id)
 
 
+def get_integration(run_log: RunLog, integration_id: int) -> Integration:
+    with run_log.transaction() as tx:
+        return _get(tx.conn, integration_id)
+
+
 def open_integrations(run_log: RunLog) -> list[Integration]:
     """Integrations that neither finished nor were abandoned, oldest first."""
+    marks = ", ".join("?" * len(OPEN_STATES))
     with run_log.transaction() as tx:
         rows = tx.conn.execute(
-            f"SELECT {COLUMNS} FROM integrations WHERE state IN (?, ?, ?, ?) ORDER BY id",  # noqa: S608 - constant columns
+            f"SELECT {COLUMNS} FROM integrations WHERE state IN ({marks}) ORDER BY id",  # noqa: S608 - constant columns and placeholders
             tuple(state.value for state in OPEN_STATES),
         ).fetchall()
     return [_to_integration(row) for row in rows]

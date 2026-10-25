@@ -1,6 +1,6 @@
 # Integration
 
-When the reviewer approves a ticket, SpoolHQ turns the run's branch into **one commit on the local default branch**, tagged `ticket/<id>`, with the ticket's entry appended to `PROGRESS.md`. Nothing is fetched or pushed; remotes and pull requests come with T17.
+When the reviewer approves a ticket, SpoolHQ turns the run's branch into **one commit on the local default branch**, tagged `ticket/<id>`, with the ticket's entry appended to `PROGRESS.md`. With `git.remote` set, the commit is pushed to GitHub before `main` moves, or opened as a pull request: see [GitHub delivery](github.md).
 
 The code is in two parts. The git mechanics are `services/git/integrate.py`: plain values in, no other service. The orchestration is `services/runloop/integration.py`: `LocalIntegrator`, the journal, the gates rerun, the conflict hand-off and recovery. The journal table and its API live in `services/runs/journal.py`.
 
@@ -86,7 +86,7 @@ SpoolHQ touches nothing there. Once the checkout is clean, `spool run integrate 
 
 ## Crash recovery
 
-At daemon startup, after the run log marks the stopped daemon's runs `interrupted` and before worktree recovery ([git](git.md#crash-recovery)), every open journal row (`merging`, `committed`, `advanced` or `tagged`) is checked:
+At daemon startup, after the run log marks the stopped daemon's runs `interrupted` and before worktree recovery ([git](git.md#crash-recovery)), every open journal row (`merging`, `committed`, `pushed`, `advanced` or `tagged`) is checked (a project with `git.remote` asks the remote first: [GitHub delivery](github.md#crash-recovery)):
 
 | Found | Recovery |
 | --- | --- |
@@ -97,7 +97,7 @@ At daemon startup, after the run log marks the stopped daemon's runs `interrupte
 
 Every step is safe to repeat, and a recovered row is closed, so running recovery twice changes nothing. A row whose integration stopped before `main` moved (a conflict, failing gates, a block or a wait) is closed as `abandoned` when it stops, so recovery never sees it.
 
-### The journal (schema version 3)
+### The journal (schema version 3; T17 adds two states)
 
 ```sql
 CREATE TABLE integrations (
@@ -107,13 +107,13 @@ CREATE TABLE integrations (
     default_branch TEXT NOT NULL,
     main_sha TEXT NOT NULL,          -- main when the integration started
     commit_sha TEXT,                 -- the squash commit, from `committed` on
-    state TEXT NOT NULL,             -- merging | committed | advanced | tagged | done | abandoned
+    state TEXT NOT NULL,             -- merging | committed | pushed | advanced | tagged | done | abandoned | pr_open
     started_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 ```
 
-`start_integration`, `set_integration_state` and `open_integrations` are in `services/runs/journal.py`.
+`pushed` (T17) means the remote has the commit; `pr_open` closes a row delivered as a pull request until it is merged (`done`) or closed (`abandoned`). `start_integration`, `set_integration_state`, `get_integration` and `open_integrations` are in `services/runs/journal.py`.
 
 ## `spool run integrate`
 

@@ -4,9 +4,8 @@ Every git call goes through ``run_git`` (``runner.py``) as an argument list. A r
 works in its own worktree at ``<root>/<project>/<ticket_id>`` on the branch
 ``feat/<ticket_id>-<slug>`` (``WorktreeManager``); ``recover_worktrees`` cleans up what
 a stopped daemon left behind; ``integrate.py`` holds the integration mechanics (merge
-main into a worktree, squash, fast-forward main, tag). This package imports no other
-service. See
-``docs/git.md``.
+main into a worktree, squash, fast-forward main, tag); ``remote.py`` fetches and pushes
+(T17). This package imports no other service. See ``docs/git.md``.
 """
 
 from spoolhq.core.ids import slugify
@@ -39,6 +38,16 @@ from spoolhq.services.git.recovery import (
     RecoveryEntry,
     RecoveryReport,
     recover_worktrees,
+)
+from spoolhq.services.git.remote import (
+    PushResult,
+    delete_branch,
+    fetch,
+    github_repo,
+    push,
+    push_tag,
+    remote_ref,
+    unpushed,
 )
 from spoolhq.services.git.repo import (
     DirtyRepoError,
@@ -97,6 +106,14 @@ __all__ = [
     "too_large",
     "unresolved_files",
     "unstage",
+    "PushResult",
+    "delete_branch",
+    "fetch",
+    "github_repo",
+    "push",
+    "push_tag",
+    "remote_ref",
+    "unpushed",
     "MIN_GIT_VERSION",
     "BranchConflictError",
     "DirtyRepoError",

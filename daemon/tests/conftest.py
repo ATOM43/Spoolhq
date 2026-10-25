@@ -374,3 +374,35 @@ def make_git_template(tmp_path: Path) -> tuple[str, str]:
     bare = tmp_path / "template.git"
     run_git(tmp_path, "clone", "--quiet", "--bare", str(work), str(bare))
     return bare.as_posix(), run_git(work, "rev-parse", "HEAD").strip()
+
+
+GITHUB_URL = "https://github.com/acme/demo"
+
+
+def make_github_remote(repo: Path, bare: Path, url: str = GITHUB_URL) -> Path:
+    """A bare clone of ``repo`` at ``bare``, standing in for ``url``: git in ``repo``
+    rewrites ``url`` to it (``url.<bare>.insteadOf``), so no network is used."""
+    run_git(repo, "clone", "--quiet", "--bare", str(repo), str(bare))
+    run_git(repo, "config", f"url.{bare.as_posix()}.insteadOf", url)
+    return bare
+
+
+def push_elsewhere(bare: Path, work: Path, name: str, message: str) -> str:
+    """Commit ``name`` in a separate clone of ``bare`` and push it to its main, as a
+    teammate would; the new commit's sha."""
+    if not work.exists():
+        run_git(bare.parent, "clone", "--quiet", str(bare), str(work))
+        run_git(work, "config", "user.name", "Teammate")
+        run_git(work, "config", "user.email", "mate@example.invalid")
+        run_git(work, "config", "commit.gpgsign", "false")
+    run_git(work, "pull", "--quiet", "--ff-only")
+    sha = commit_file(work, name, f"{message}\n", message)
+    run_git(work, "push", "--quiet", "origin", "HEAD:main")
+    return sha
+
+
+def write_hook(bare: Path, name: str, script: str) -> None:
+    """An executable hook in a bare repository (git runs it with sh, on Windows too)."""
+    hook = bare / "hooks" / name
+    hook.write_text(f"#!/bin/sh\n{script}\n", encoding="utf-8", newline="\n")
+    hook.chmod(0o755)

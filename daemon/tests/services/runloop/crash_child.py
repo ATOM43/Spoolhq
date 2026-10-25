@@ -11,7 +11,7 @@ from pathlib import Path
 
 from spoolhq.core.config import home_dir
 from spoolhq.services.agents import FakeRunner
-from spoolhq.services.runloop import Agents, LocalIntegrator, RunLoop
+from spoolhq.services.runloop import Agents, Delivery, RunLoop
 from spoolhq.services.runs import RunRegistry
 from tests.services.runloop.conftest import FakeGates
 
@@ -29,7 +29,7 @@ def main(state: str, projects_dir: Path, worktrees_dir: Path) -> None:
         worktrees_dir=worktrees_dir,
         home=home_dir(),
         agents=Agents(unused, unused),
-        integrator=LocalIntegrator(checkpoint=checkpoint),
+        integrator=Delivery(checkpoint=checkpoint),
         gates=FakeGates(),
     )
     loop.integrate_ticket("demo", "T01")

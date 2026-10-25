@@ -29,12 +29,14 @@ from spoolhq.services.git import (
     create_tag,
     default_branch_sha,
     ensure_main_ready,
+    fetch,
     is_ancestor,
     is_junk,
     is_secret,
     merge_in,
     operation_in_progress,
     outside_symlinks,
+    push_tag,
     restore_branch,
     stage,
     start_squash,
@@ -52,6 +54,7 @@ from spoolhq.services.runs import (
     IntegrationState,
     RunLog,
     RunStatus,
+    get_integration,
     last_integration,
     open_integrations,
     set_integration_state,
@@ -88,7 +91,7 @@ def _hint(project: str, ticket_id: str) -> str:
     return f"run spool run integrate {project} {ticket_id}"
 
 
-def _waiting(project: Project, ticket_id: str, exc: RepoNotReadyError) -> str:
+def waiting_message(project: Project, ticket_id: str, exc: RepoNotReadyError) -> str:
     if isinstance(exc, DirtyRepoError):
         return (
             f"main checkout has uncommitted changes in {project.repo_path}; "
@@ -139,6 +142,17 @@ def finish(
     set_integration_state(run_log, journal.id, IntegrationState.DONE)
 
 
+def publish_tag(project: Project, ticket_id: str) -> None:
+    """Push ``ticket/<id>`` to ``git.remote``, if set. A failure is only logged: the
+    commit is already on the remote, and the tag stays in the local repository."""
+    if project.git.remote is None:
+        return
+    try:
+        push_tag(project.repo_path, project.git.remote, tag_name(ticket_id))
+    except GitError as exc:
+        logger.warning("cannot push the tag", extra={"ticket_id": ticket_id, "error": str(exc)})
+
+
 class LocalIntegrator:
     """The default integrator: merge, gate, squash, fast-forward, tag (see module doc)."""
 
@@ -178,10 +192,12 @@ class LocalIntegrator:
         try:
             ensure_main_ready(repo, branch)
         except RepoNotReadyError as exc:
-            return _result(IntegrationStatus.HELD, _waiting(project, tid, exc))
+            return _result(IntegrationStatus.HELD, waiting_message(project, tid, exc))
         if tag_exists(repo, tag_name(tid)):
             message = f"tag {tag_name(tid)} already exists; delete it or rename the ticket"
             return _result(IntegrationStatus.FAILED, message)
+        if early := self._prepare(ctx):
+            return early
         main_sha = default_branch_sha(repo, branch)
         journal = start_integration(ctx.run_log, ctx.run.id, tid, branch, main_sha)
         if self.checkpoint is not None:
@@ -189,8 +205,11 @@ class LocalIntegrator:
         try:
             return self._steps(ctx, journal, main_sha)
         except Exception:
-            # main not advanced yet: undo the half-built squash so a retry starts clean.
-            if branch_sha(repo, branch) == main_sha:
+            # Neither main nor a remote has the commit yet: undo the half-built squash so a
+            # retry starts clean.
+            state = get_integration(ctx.run_log, journal.id).state
+            undoable = state in (IntegrationState.MERGING, IntegrationState.COMMITTED)
+            if undoable and branch_sha(repo, branch) == main_sha:
                 try:
                     self._abandon(ctx, journal, restore=True)
                 except GitError:
@@ -201,7 +220,7 @@ class LocalIntegrator:
         self, ctx: RunContext, journal: Integration, main_sha: str
     ) -> IntegrationResult | None:
         project, tid = ctx.project, ctx.ticket_id
-        repo, branch = project.repo_path, project.default_branch
+        branch = project.default_branch
         path = ctx.worktree.path
 
         merged = merge_in(path, branch)
@@ -258,22 +277,41 @@ class LocalIntegrator:
         note, title = ctx.run.progress_note, ctx.ticket.meta.title
         sha = commit_staged(path, commit_message(tid, title, note, ctx.run.id))
         journal = self._state(ctx, journal, IntegrationState.COMMITTED, sha)
+        return self._deliver(ctx, journal, sha, main_sha)
 
+    def _prepare(self, ctx: RunContext) -> IntegrationResult | None:
+        """Before the merge, with the main checkout ready; a result stops the integration.
+        Nothing to do locally; GitHub delivery fetches first here."""
+        return None
+
+    def _deliver(
+        self, ctx: RunContext, journal: Integration, sha: str, main_sha: str
+    ) -> IntegrationResult | None:
+        """Land the squash commit ``sha``: fast-forward main, tag, finish. None when main
+        moved since ``main_sha`` (the integration starts over)."""
+        project, tid = ctx.project, ctx.ticket_id
+        repo, branch = project.repo_path, project.default_branch
         try:
             moved = not advance(repo, branch, sha, main_sha)
         except RepoNotReadyError as exc:
             self._abandon(ctx, journal, restore=True)
-            return _result(IntegrationStatus.HELD, _waiting(project, tid, exc))
+            return _result(IntegrationStatus.HELD, waiting_message(project, tid, exc))
         if moved:
             self._abandon(ctx, journal, restore=True)
             return None
         journal = self._state(ctx, journal, IntegrationState.ADVANCED)
-        create_tag(repo, tag_name(tid), sha)
+        return self._finish(ctx, journal, sha)
+
+    def _finish(self, ctx: RunContext, journal: Integration, sha: str) -> IntegrationResult:
+        """Tag (and push the tag to ``git.remote``), then ``finish``."""
+        tid = ctx.ticket_id
+        create_tag(ctx.project.repo_path, tag_name(tid), sha)
+        publish_tag(ctx.project, tid)
         journal = self._state(ctx, journal, IntegrationState.TAGGED)
         finish(
             ctx.run_log,
             ctx.worktrees,
-            project.name,
+            ctx.project.name,
             ctx.projects_dir,
             journal,
             ctx.worktree.branch,
@@ -329,8 +367,29 @@ def recover_integrations(
             actions.append(f"{tid}: skipped, a {operation} is in progress in {repo}")
             continue
         run_branch = _branch_of(manager, journal)
-        main = branch_sha(repo, branch)
         sha = journal.commit_sha
+        remote = project.git.remote
+        if remote is not None and sha is not None:
+            try:
+                pushed = is_ancestor(repo, sha, fetch(repo, remote, branch))
+            except GitError as exc:
+                logger.error(
+                    "cannot fetch; integration recovery skipped",
+                    extra={"project": project.name, "ticket_id": tid, "error": str(exc)},
+                )
+                actions.append(f"{tid}: skipped, cannot fetch {remote}: {exc}")
+                continue
+            if pushed:
+                try:
+                    advance(repo, branch, sha, journal.main_sha)
+                except RepoNotReadyError:
+                    pass  # main catches up at the next integration's fetch
+                create_tag(repo, tag_name(tid), sha)
+                publish_tag(project, tid)
+                finish(run_log, manager, project.name, projects_dir, journal, run_branch)
+                actions.append(f"{tid}: finished, pushed as {sha[:7]}")
+                continue
+        main = branch_sha(repo, branch)
         if sha is not None and main is not None and is_ancestor(repo, sha, main):
             finish(run_log, manager, project.name, projects_dir, journal, run_branch)
             actions.append(f"{tid}: finished, merged as {sha[:7]}")

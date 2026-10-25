@@ -2,7 +2,7 @@
 
 The run loop takes one ready ticket through its worktree, the implementer, the gates and the reviewer, with retries, and either hands an approved attempt to integration or blocks the ticket. It lives in the daemon: a run executes in a worker thread there, so it survives the terminal that started it and can be paused, resumed or cancelled from another one.
 
-The code is `services/runloop/`: the values (`RunContext`, `Ending`, `Flags`, the errors) in `model.py`, the state machine as plain functions over a `RunContext` in `machine.py`, `RunLoop` (start, pause, resume, cancel, discard, current) in `loop.py`, the integration seam in `integrator.py`, the per-project lock in `lock.py` and the usage-limit timer in `resume.py`. It is the one service allowed to import the others (scheduler, tickets, projects, runs, git, agents, context, gates, review); no service imports it, only `api/` and `cli/` do, which an import-linter contract checks.
+The code is `services/runloop/`: the values (`RunContext`, `Ending`, `Flags`, the errors) in `model.py`, the state machine as plain functions over a `RunContext` in `machine.py`, `RunLoop` (start, pause, resume, cancel, discard, current) in `loop.py`, the integration seam in `integrator.py`, GitHub delivery in `delivery.py`, the per-project lock in `lock.py` and the usage-limit timer in `resume.py`. It is the one service allowed to import the others (scheduler, tickets, projects, runs, git, agents, context, gates, review); no service imports it, only `api/` and `cli/` do, which an import-linter contract checks.
 
 ## The state machine
 
@@ -110,7 +110,7 @@ class Integrator(Protocol):
 - `failed` blocks the run with the message.
 - `held` puts the ticket and the run in `awaiting_approval` and keeps the worktree.
 
-The default is `LocalIntegrator` ([integration.md](integration.md)). With `run.integration: hold` in `project.yaml`, the project gets `HoldForIntegration`, which holds every approved run:
+The default is `Delivery`: `LocalIntegrator` ([integration.md](integration.md)) for a project without `git.remote`, GitHub delivery ([github.md](github.md)) for one with it. With `run.integration: hold` in `project.yaml`, the project gets `HoldForIntegration`, which holds every approved run:
 
 ```text
 T04 approved; merge it with `spool run integrate demo T04` — worktree kept at /home/u/.spoolhq/worktrees/demo/T04
@@ -120,7 +120,7 @@ Tests use a fake one that returns `merged`.
 
 ## Dependencies are injected
 
-`RunLoop(registry, projects_dir=…, worktrees_dir=…, home=…, agents=Agents(implementer, reviewer), integrator=…, clock=…, gates=…)`: tests pass `FakeRunner`s with transcript sequences, a fake clock and fake gates. The daemon builds it in its lifespan with the installed Claude Code for both roles and `LocalIntegrator`. Event bus listeners stay cheap: the loop never does real work inside a bus callback, and the resume timer only starts a worker.
+`RunLoop(registry, projects_dir=…, worktrees_dir=…, home=…, agents=Agents(implementer, reviewer), integrator=…, clock=…, gates=…)`: tests pass `FakeRunner`s with transcript sequences, a fake clock and fake gates. The daemon builds it in its lifespan with the installed Claude Code for both roles and `Delivery`. Event bus listeners stay cheap: the loop never does real work inside a bus callback, and the resume timer only starts a worker.
 
 ## API and CLI
 

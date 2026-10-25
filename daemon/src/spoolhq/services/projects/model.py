@@ -18,20 +18,19 @@ from pydantic import (
 )
 
 from spoolhq.services.gates import DEFAULT_TIMEOUTS, check_gate_command
-from spoolhq.services.git import GitError, has_local_branch, is_branch_name, is_work_tree
+from spoolhq.services.git import (
+    GitError,
+    github_repo,
+    has_local_branch,
+    is_branch_name,
+    is_work_tree,
+)
 
 AgentBackend = Literal["claude-code-cli", "codex-cli", "gemini-cli", "claude-agent-sdk"]
 AGENT_BACKENDS: tuple[str, ...] = get_args(AgentBackend)
 
 SLUG_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
 SLUG_RULE = "must be 1-63 lowercase letters, digits or hyphens, starting with a letter or digit"
-# GitHub's rules: an owner is 1-39 letters, digits or hyphens, not starting with a
-# hyphen; a repository is 1-100 letters, digits, '.', '_' or '-', not starting with
-# '-' or '.'.
-_GITHUB_OWNER = r"(?P<owner>[A-Za-z0-9][A-Za-z0-9-]{0,38})"
-_GITHUB_REPO = r"(?P<repo>[A-Za-z0-9_][A-Za-z0-9._-]{0,99}?)"
-GITHUB_HTTPS_RE = re.compile(rf"https://github\.com/{_GITHUB_OWNER}/{_GITHUB_REPO}(?:\.git)?")
-GITHUB_SSH_RE = re.compile(rf"git@github\.com:{_GITHUB_OWNER}/{_GITHUB_REPO}\.git")
 
 DEFAULT_PROTECTED_PATHS = ["**/migrations/**", ".github/**", "**/auth/**"]
 
@@ -46,9 +45,11 @@ def check_slug(value: str) -> str:
 
 
 def check_github_url(value: str) -> str:
-    if any(pattern.fullmatch(value) for pattern in (GITHUB_HTTPS_RE, GITHUB_SSH_RE)):
-        return value
-    raise ValueError("not a GitHub URL")
+    try:
+        github_repo(value)
+    except ValueError:
+        raise ValueError("not a GitHub URL") from None
+    return value
 
 
 def _check_not_blank(value: str) -> str:

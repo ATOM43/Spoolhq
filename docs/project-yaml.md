@@ -71,7 +71,7 @@ run:
 | `merge_policy.max_direct_diff_lines` | no | `400` | Whole number above 0. Larger diffs wait for approval in a pull request. |
 | `merge_policy.protected_paths` | no | `["**/migrations/**", ".github/**", "**/auth/**"]` | List of globs. A ticket touching one of these waits for approval. |
 | `merge_policy.always_pr` | no | `false` | `true` sends every ticket through a pull request. |
-| `git.remote` | no | | A GitHub URL: `https://github.com/<owner>/<repo>` (optionally ending in `.git`) or `git@github.com:<owner>/<repo>.git`. The owner is 1–39 letters, digits or hyphens; the repository is 1–100 letters, digits, `.`, `_` or `-`; neither may start with `-` or `.`. |
+| `git.remote` | no | | A GitHub URL: `https://github.com/<owner>/<repo>` (optionally ending in `.git`) or `git@github.com:<owner>/<repo>.git`. The owner is 1–39 letters, digits or hyphens; the repository is 1–100 letters, digits, `.`, `_` or `-`; neither may start with `-` or `.`. With it, approved tickets are delivered to GitHub ([GitHub delivery](github.md)); without it, they merge locally. |
 | `context.max_chars` | no | `120000` | Whole number from 20,000 to 2,000,000: the most characters the implementer's prompt may have ([context](context.md)). |
 | `context.progress_entries` | no | `3` | Whole number from 1 to 1,000: how many of the newest `PROGRESS.md` entries the implementer's prompt includes. |
 | `context.decisions_lines` | no | `20` | Whole number from 1 to 10,000: how many of the newest non-blank `DECISIONS.md` lines the implementer's prompt includes. |
