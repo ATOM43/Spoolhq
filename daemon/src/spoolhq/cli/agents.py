@@ -16,6 +16,7 @@ from spoolhq.services.projects import Agents, ProjectError, Role, load_project
 ROLES: tuple[Role, ...] = ("planner", "implementer", "reviewer")
 
 NONE = "-"
+LOGIN_COMMANDS = {"codex-cli": "codex login"}
 
 
 def describe(info: BackendInfo) -> list[str]:
@@ -29,11 +30,14 @@ def describe(info: BackendInfo) -> list[str]:
     if info.logged_in:
         lines.append(f"  login      yes ({info.auth_method or NONE}, {info.billing})")
     else:
-        lines.append("  login      no (run: claude auth login)")
+        lines.append(f"  login      no (run: {LOGIN_COMMANDS.get(info.name, 'claude auth login')})")
     if info.policy_enforceable:
         lines.append("  policy     yes (enforceable)")
     else:
         lines.append(f"  policy     no: {info.reason}")
+    for role, parts in info.policy_parts.items():
+        enforced = ", ".join(f"{part} {'yes' if ok else 'no'}" for part, ok in parts.items())
+        lines.append(f"  {role:<12} {enforced}")
     return lines
 
 

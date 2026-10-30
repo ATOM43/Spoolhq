@@ -104,6 +104,8 @@ class AgentPolicy:
     """Domains the agent's commands may reach; none in v1."""
     read_only: bool = False
     """Only the read tools (Read, Glob, Grep): no Bash, Edit or Write. For the reviewer."""
+    role: str = "implementer"
+    """The role the policy is for, named when a backend refuses it."""
 
     @classmethod
     def for_worktree(cls, worktree: Path, commands: Mapping[str, str], home: Path) -> "AgentPolicy":
@@ -130,14 +132,15 @@ class AgentPolicy:
         )
 
     @classmethod
-    def read_only_for(cls, worktree: Path, home: Path) -> "AgentPolicy":
-        """The policy for an agent that may only read files in ``worktree``.
+    def read_only_for(cls, worktree: Path, home: Path, role: str = "reviewer") -> "AgentPolicy":
+        """The policy for an agent (the reviewer or the planner) that may only read files
+        in ``worktree``.
 
         It runs no commands, so it has no Bash rules; the sandbox settings and the
         deny list are the same as for a writing agent.
         """
         policy = cls.for_worktree(worktree, {}, home)
-        return dataclasses.replace(policy, read_only_git=(), read_only=True)
+        return dataclasses.replace(policy, read_only_git=(), read_only=True, role=role)
 
     @property
     def commands(self) -> tuple[str, ...]:
@@ -271,6 +274,9 @@ class BackendInfo:
     policy_enforceable: bool
     reason: str | None
     """Why the backend can't run now, if it can't."""
+    policy_parts: Mapping[str, Mapping[str, bool]] = field(default_factory=dict)
+    """Role -> policy part -> whether the backend enforces it here; empty when it
+    enforces the whole policy or nothing (Claude Code)."""
 
     @property
     def usable(self) -> bool:

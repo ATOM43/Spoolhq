@@ -241,3 +241,11 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - The daemon builds each role's runner per project (`Agents.for_project`; `PlanJobs` for the planner); `spool plan generate` and `spool review` use the project's roles. `spool agents --project <name>` shows each role's backend, model and endpoint.
 - `tests/services/agents/test_contract.py`: one suite over adapter cases (Claude Code through the fake binary, and `FakeRunner`, which gained `name` and `stall_s`): file created, denial logged, usage-limit pause, timeout, cancel, weighted usage.
 - Docs: `agents.md` (roles and backends, local models with Ollama, contract suite), `project-yaml.md`, `planner.md`; DECISIONS 257–260. The opt-in real run passes with every role set explicitly.
+
+## T30 · Codex CLI backend
+
+- Step 0: with a custom `base_url`, SpoolHQ supplies the endpoint's credential (`services/agents/endpoint.py`): a dummy for localhost, else `SPOOLHQ_ENDPOINT_TOKEN_<BACKEND>` or the keychain (`spool secrets set endpoint:<backend>`); a remote endpoint without one is refused. Claude Code gets it as `ANTHROPIC_AUTH_TOKEN`, which outranks the claude.ai login, and never `ANTHROPIC_API_KEY`.
+- `services/agents/codex_cli.py`, `codex_config.py`, `codex_stream.py` (new): `codex exec --json` under a per-run permission profile (`:workspace` for the implementer, worktree-only reads for the reviewer and planner, credential paths denied, no network), `approval_policy="never"`, `--ignore-user-config`, web search, apps, plugins, hooks and multi-agent off; registered as `codex-cli`. A policy part Codex can't enforce here is refused per role before starting. `process.py` (new) holds the process session both CLI adapters share.
+- `AgentPolicy.role`; `BackendInfo.policy_parts`; `spool agents` shows Codex's parts per role and `codex login`.
+- Tests: Codex in the contract suite, a run-loop ticket end to end on Codex, argv/profile/environment/refusal/stream tests, the opt-in real run (`SPOOLHQ_REAL_BACKENDS=codex`, not run: Codex isn't installed here).
+- Docs: `agents.md` (custom endpoints, the Codex CLI section), `project-yaml.md`, `architecture.md`; DECISIONS 261–272.

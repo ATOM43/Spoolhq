@@ -3,8 +3,9 @@
 A runner runs one coding-agent session in a worktree under an ``AgentPolicy`` and
 returns a ``RunResult``. ``ClaudeCliRunner`` drives the user's own ``claude`` CLI;
 the policy is enforced by Claude Code (restricted mode, an allowlist, the OS sandbox
-and a scrubbed environment) and verified from its stream. ``FakeRunner`` replays
-recorded transcripts for tests. This package imports no other service. See
+and a scrubbed environment) and verified from its stream. ``CodexCliRunner`` drives
+``codex exec`` under a per-run permission profile and refuses what Codex can't enforce.
+``FakeRunner`` replays recorded transcripts for tests. This package imports no other service. See
 ``docs/agents.md``.
 """
 
@@ -16,6 +17,8 @@ from spoolhq.services.agents.backends import (
 )
 from spoolhq.services.agents.claude_cli import MIN_VERSION, ClaudeCliRunner
 from spoolhq.services.agents.claude_stream import ClaudeStreamParser, PolicyViolation
+from spoolhq.services.agents.codex_cli import CodexCliRunner
+from spoolhq.services.agents.codex_stream import CodexStreamParser
 from spoolhq.services.agents.fake import FakeRunner
 from spoolhq.services.agents.model import (
     AgentEvent,
@@ -46,6 +49,8 @@ __all__ = [
     "Budget",
     "ClaudeCliRunner",
     "ClaudeStreamParser",
+    "CodexCliRunner",
+    "CodexStreamParser",
     "FakeRunner",
     "FileEdit",
     "Message",

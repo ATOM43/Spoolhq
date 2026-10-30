@@ -27,6 +27,7 @@ from spoolhq.services.agents import (
     PolicyError,
     Started,
     claude_cli,
+    process,
 )
 from spoolhq.services.agents.claude_cli import INSTALL_HINT, LOGIN_HINT
 from spoolhq.services.agents.claude_config import build_argv
@@ -520,8 +521,8 @@ def test_timeout(tmp_path: Path, policy: AgentPolicy) -> None:
 def test_stop_escalates_to_sigterm_and_sigkill(
     tmp_path: Path, policy: AgentPolicy, monkeypatch: pytest.MonkeyPatch, ignored: tuple[str, ...]
 ) -> None:
-    monkeypatch.setattr(claude_cli, "INTERRUPT_WAIT_S", 0.5)
-    monkeypatch.setattr(claude_cli, "TERMINATE_WAIT_S", 0.5)
+    monkeypatch.setattr(process, "INTERRUPT_WAIT_S", 0.5)
+    monkeypatch.setattr(process, "TERMINATE_WAIT_S", 0.5)
     budget = Budget(max_turns=30, max_usd=None, max_tokens=None, timeout_s=1)
     started = time.monotonic()
     result = run(runner(tmp_path, "--sleep", "60", *ignored), policy, budget)

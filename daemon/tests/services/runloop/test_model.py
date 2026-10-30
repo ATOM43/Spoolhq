@@ -1,15 +1,23 @@
 """Agents.for_project: each role starts the backend ``project.yaml`` names for it."""
 
+import itertools
 import json
 from pathlib import Path
 
 import pytest
 
-from spoolhq.services.agents import ClaudeCliRunner, FakeRunner
+from spoolhq.services.agents import ClaudeCliRunner, CodexCliRunner, FakeRunner, backends
 from spoolhq.services.projects import load_project, save_project
 from spoolhq.services.runloop import Agents, PlanJobs, RunLoop
 from spoolhq.services.runs import AttemptKind, RunRegistry, RunStatus
-from tests.conftest import DASHBOARD_PLAN, FakeBackend, fake_claude_cmd, sandbox_which
+from tests.conftest import (
+    CODEX_FIXTURES,
+    DASHBOARD_PLAN,
+    FakeBackend,
+    fake_claude_cmd,
+    fake_codex_cmd,
+    sandbox_which,
+)
 from tests.services.runloop.conftest import PASSING, FakeGates, ManualClock, Merging, Transcripts
 
 
@@ -87,3 +95,80 @@ def test_each_role_starts_its_own_backend(
     assert plan_attempt.backend == "fake-planner"
     assert planner.calls  # type: ignore[attr-defined]
     assert len(implementer.calls) == 1  # type: ignore[attr-defined]
+
+
+def codex_review(path: Path) -> Path:
+    """A Codex reviewer run approving the three Done-when items."""
+    items = [{"index": i, "met": True, "reason": f"item {i} ok"} for i in (1, 2, 3)]
+    verdict = json.dumps({"items": items, "verdict": "approve", "summary": "approve."})
+    lines = [
+        {"type": "thread.started", "thread_id": "review"},
+        {"type": "turn.started"},
+        {
+            "type": "item.completed",
+            "item": {
+                "id": "r1",
+                "type": "agent_message",
+                "text": f"Reviewed.\n<verdict>{verdict}</verdict>",
+            },
+        },
+        {"type": "turn.completed", "usage": {"input_tokens": 500, "output_tokens": 100}},
+    ]
+    path.write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
+    return path
+
+
+@pytest.mark.integration
+def test_a_ticket_runs_end_to_end_on_codex(
+    monkeypatch: pytest.MonkeyPatch,
+    registry: RunRegistry,
+    projects_dir: Path,
+    worktrees: Path,
+    home: Path,
+    clock: ManualClock,
+    tmp_path: Path,
+) -> None:
+    def codex(scenario: Path, record: str, *options: str) -> CodexCliRunner:
+        return CodexCliRunner(
+            codex_cmd=fake_codex_cmd(scenario, tmp_path / record, *options),
+            platform="linux",
+            which=sandbox_which,
+            home=tmp_path / "user-home",
+            system_config=tmp_path / "no-system-config.toml",
+        )
+
+    implementer = codex(
+        CODEX_FIXTURES / "success_writes_file.jsonl", "impl.json", "--write", "hello.txt"
+    )
+    reviewer = codex(codex_review(tmp_path / "review.jsonl"), "review.json")
+    # Agents.for_project builds the implementer, the reviewer, then the planner.
+    roles = itertools.cycle([implementer, reviewer, implementer])
+    monkeypatch.setitem(backends.BACKENDS, "codex-cli", lambda base_url, model: next(roles))
+    set_roles(projects_dir, default="codex-cli")
+
+    loop = RunLoop(
+        registry,
+        projects_dir=projects_dir,
+        worktrees_dir=worktrees,
+        home=home,
+        integrator=(merging := Merging()),
+        clock=clock,
+        gates=FakeGates([PASSING]),
+        poll_s=3600,
+    )
+    try:
+        run = loop.start("demo", "T01")
+        loop.wait("demo")
+    finally:
+        loop.close()
+
+    log = registry.get("demo").run_log
+    assert log.get_run(run.id).status is RunStatus.DONE
+    [attempt] = log.list_attempts(run.id)
+    assert (attempt.kind, attempt.backend) == (AttemptKind.INITIAL, "codex-cli")
+    assert merging.calls == ["T01"]
+    impl = json.loads((tmp_path / "impl.json").read_text(encoding="utf-8"))
+    review = json.loads((tmp_path / "review.json").read_text(encoding="utf-8"))
+    assert 'extends=":workspace"' in " ".join(impl["argv"])
+    assert 'extends=":workspace"' not in " ".join(review["argv"])  # read-only reviewer
+    assert "T01" in impl["stdin"]

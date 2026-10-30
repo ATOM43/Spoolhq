@@ -210,6 +210,16 @@ def fake_claude_cmd(scenario: Path, record: Path, *options: str) -> list[str]:
     ]
 
 
+CODEX_FIXTURES = FIXTURES_DIR / "agents" / "codex"
+"""Codex ``exec --json`` transcripts, hand-built from the documented event format."""
+CODEX_VERSION = "0.166.0"
+
+
+def fake_codex_cmd(scenario: Path, record: Path, *options: str) -> list[str]:
+    """``codex_cmd`` that runs ``fake_claude.py`` as Codex CLI 0.166.0."""
+    return fake_claude_cmd(scenario, record, "--version-string", CODEX_VERSION, *options)
+
+
 def sandbox_which(name: str) -> str | None:
     """A ``which`` that finds the Linux sandbox packages (bwrap, socat) and nothing else."""
     return f"/usr/bin/{name}" if name in {"bwrap", "socat"} else None

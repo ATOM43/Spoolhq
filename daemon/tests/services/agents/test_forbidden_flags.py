@@ -1,4 +1,5 @@
-"""No code in services/agents/ may contain the permission-skipping flag or mode.
+"""No code in services/agents/ may contain a permission-skipping or sandbox-bypass flag
+or mode (Claude Code's or Codex CLI's).
 
 Only comments and docstrings may mention them; every string, name and attribute in
 the code itself is checked.
@@ -12,7 +13,17 @@ import pytest
 import spoolhq.services.agents
 
 AGENTS_DIR = Path(spoolhq.services.agents.__file__).parent
-FORBIDDEN = ("dangerously-skip-permissions", "bypassPermissions")
+FORBIDDEN = (
+    "dangerously-skip-permissions",
+    "bypassPermissions",
+    # Codex CLI's sandbox and approval bypasses.
+    "dangerously-bypass",
+    "yolo",
+    "danger-full-access",
+    "full-auto",
+    "approve-for-me",
+    "skip-git-repo-check",
+)
 
 
 def docstrings(tree: ast.Module) -> set[int]:

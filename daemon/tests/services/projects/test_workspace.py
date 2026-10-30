@@ -19,7 +19,7 @@ from spoolhq.services.projects import (
 from spoolhq.services.projects import workspace as workspace_module
 from tests.conftest import AGENT_FIXTURES, FakeBackend
 
-ONLY_CLAUDE = "expected one of: claude-code-cli"
+KNOWN_BACKENDS = "expected one of: claude-code-cli, codex-cli"
 
 
 def valid_data(repo: Path) -> dict[str, Any]:
@@ -172,8 +172,8 @@ def test_missing_required_field_is_named(projects_dir: Path, git_repo: Path, fie
         ("git.remote", "https://github.com/owner/" + "r" * 101, "not a GitHub URL"),
         ("git.remote", "git@github.com:-owner/repo.git", "not a GitHub URL"),
         ("git.remote", "git@github.com:owner/.repo.git", "not a GitHub URL"),
-        ("agents.default", "copilot", "unknown backend 'copilot'; " + ONLY_CLAUDE),
-        ("agents.reviewer", "codex-cli", "unknown backend 'codex-cli'; " + ONLY_CLAUDE),
+        ("agents.default", "copilot", "unknown backend 'copilot'; " + KNOWN_BACKENDS),
+        ("agents.reviewer", "gemini-cli", "unknown backend 'gemini-cli'; " + KNOWN_BACKENDS),
         (
             "agents.backends.claude-code-cli.base_url",
             "http://example.com",
@@ -270,10 +270,10 @@ def test_registered_backends_are_accepted(
 
 def test_unknown_backend_in_backends_names_the_field(projects_dir: Path, git_repo: Path) -> None:
     data = valid_data(git_repo)
-    data["agents"] = {"backends": {"codex-cli": {"model": "x"}}}
+    data["agents"] = {"backends": {"gemini-cli": {"model": "x"}}}
     [error] = errors_for(projects_dir, data)
     assert error.startswith("project.yaml: agents.backends")
-    assert "unknown backend 'codex-cli'" in error
+    assert "unknown backend 'gemini-cli'" in error
 
 
 @pytest.mark.parametrize(

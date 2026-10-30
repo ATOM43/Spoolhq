@@ -70,7 +70,7 @@ def generate_plan(
     spec = read_spec(workspace)
     existing = load_existing(project, projects_dir=projects_dir)
     test_command = settings.commands.test
-    policy = AgentPolicy.read_only_for(settings.repo_path, home)
+    policy = AgentPolicy.read_only_for(settings.repo_path, home, role="planner")
     limit = settings.agents.budget_per_ticket
     results: list[RunResult] = []
     errors: list[str] = []

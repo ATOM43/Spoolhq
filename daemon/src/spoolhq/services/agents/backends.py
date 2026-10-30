@@ -8,6 +8,8 @@ from collections.abc import Callable
 
 from spoolhq.services.agents.claude_cli import ClaudeCliRunner
 from spoolhq.services.agents.claude_stream import BACKEND_NAME
+from spoolhq.services.agents.codex_cli import CodexCliRunner
+from spoolhq.services.agents.codex_config import BACKEND_NAME as CODEX_NAME
 from spoolhq.services.agents.runner import AgentRunner
 
 BackendFactory = Callable[[str | None, str | None], AgentRunner]
@@ -16,6 +18,7 @@ BackendFactory = Callable[[str | None, str | None], AgentRunner]
 BACKENDS: dict[str, BackendFactory] = {
     # Tests add fakes here (the ``fake_backend`` fixture).
     BACKEND_NAME: lambda base_url, model: ClaudeCliRunner(base_url=base_url, model=model),
+    CODEX_NAME: lambda base_url, model: CodexCliRunner(base_url=base_url, model=model),
 }
 
 
@@ -33,5 +36,5 @@ def make_runner(name: str, *, base_url: str | None = None, model: str | None = N
 
 
 def available_runners() -> list[AgentRunner]:
-    """One runner per supported backend, for detection; only ``claude-code-cli`` for now."""
-    return [ClaudeCliRunner()]
+    """One runner per supported backend, for detection."""
+    return [ClaudeCliRunner(), CodexCliRunner()]

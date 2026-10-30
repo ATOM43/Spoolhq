@@ -1,13 +1,16 @@
-"""A stand-in for the ``claude`` CLI, run as a real subprocess by the adapter tests.
+"""A stand-in for the ``claude`` and ``codex`` CLIs, run as a real subprocess by the
+adapter tests.
 
-    python fake_claude.py --scenario <jsonl> --record <json> [options] <claude args...>
+    python fake_claude.py --scenario <jsonl> --record <json> [options] <cli args...>
 
-``--version`` prints ``--version-string``; ``auth status`` prints the login JSON (exit
-1 with ``--logged-out``, unless ``ANTHROPIC_API_KEY`` is set: then ``api_key``).
-Anything else is a run: it records its argv, environment variable names,
-``ANTHROPIC_BASE_URL``, ``ANTHROPIC_AUTH_TOKEN``, stdin and pid to ``--record``, prints
-the scenario's lines, then sleeps for ``--sleep`` seconds (``--spawn-child`` first
-starts a child process that sleeps too, and records its pid)
+``--version`` prints ``--version-string``; ``auth status`` prints Claude Code's login
+JSON (exit 1 with ``--logged-out``, unless ``ANTHROPIC_API_KEY`` is set: then
+``api_key``); ``login status`` prints Codex's login line (``--auth-method api_key`` for
+an API key; exit 1 with ``--logged-out``). Anything else is a run: it records its argv,
+cwd, environment variable names, ``ANTHROPIC_BASE_URL``, ``ANTHROPIC_AUTH_TOKEN``,
+Codex's endpoint token, stdin and pid to ``--record``, writes ``--write <name>`` (``x =
+1``) in its cwd, prints the scenario's lines, then sleeps for ``--sleep`` seconds
+(``--spawn-child`` first starts a child process that sleeps too, and records its pid)
 and exits with ``--exit-code``. ``--ignore-sigint`` and ``--ignore-sigterm`` make the
 run ignore those signals (POSIX), to test the adapter's stop sequence. With ``--stubs``,
 every mode first creates empty stub files and folders in its cwd, as the real CLI does
@@ -29,6 +32,7 @@ OPTIONS_WITH_VALUE = {
     "--auth-method",
     "--sleep",
     "--exit-code",
+    "--write",
 }
 FLAGS = {"--logged-out", "--spawn-child", "--stubs", "--ignore-sigint", "--ignore-sigterm"}
 # What Claude Code 2.1.302 leaves in its cwd with CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1.
@@ -67,6 +71,15 @@ def main() -> int:
     if claude_args == ["--version"]:
         print(f"{options.get('--version-string', '2.1.302')} (Claude Code)")
         return 0
+    if claude_args[:2] == ["login", "status"]:
+        if "--logged-out" in options:
+            print("Not logged in", file=sys.stderr)
+            return 1
+        if options.get("--auth-method") == "api_key":
+            print("Logged in using an API key - sk-proj-***", file=sys.stderr)
+        else:
+            print("Logged in using ChatGPT", file=sys.stderr)
+        return 0
     if claude_args[:2] == ["auth", "status"]:
         logged_out = "--logged-out" in options
         method = "none" if logged_out else options.get("--auth-method", "claude.ai")
@@ -85,6 +98,8 @@ def main() -> int:
         "env": sorted(os.environ),
         "base_url": os.environ.get("ANTHROPIC_BASE_URL"),
         "auth_token": os.environ.get("ANTHROPIC_AUTH_TOKEN"),
+        "codex_token": os.environ.get("SPOOLHQ_ENDPOINT_TOKEN_CODEX_CLI"),
+        "cwd": os.getcwd(),
         "stdin": stdin,
         "pid": os.getpid(),
     }
@@ -93,6 +108,8 @@ def main() -> int:
         child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])  # noqa: S603
         record["child_pid"] = child.pid
     Path(options["--record"]).write_text(json.dumps(record), encoding="utf-8")
+    if "--write" in options:
+        Path(options["--write"]).write_text("x = 1\n", encoding="utf-8")
 
     for line in Path(options["--scenario"]).read_text(encoding="utf-8").splitlines():
         if line.strip():
