@@ -136,7 +136,8 @@ def init(
         typer.Option(help="Generate the repo from a template: built-in name, folder or git URL."),
     ] = None,
     template_ref: Annotated[
-        str | None, typer.Option(help="Branch, tag or commit of a git URL template.")
+        str | None,
+        typer.Option(help="Branch, tag or commit of a git template (URL or local repository)."),
     ] = None,
 ) -> None:
     """Create a project workspace for an existing git repository, or generate the

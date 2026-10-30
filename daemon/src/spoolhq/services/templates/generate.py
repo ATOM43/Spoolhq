@@ -50,7 +50,6 @@ def render(template: ResolvedTemplate, dst: Path, project_name: str) -> None:
             template.copier_src,
             dst,
             data={"project_name": project_name},
-            vcs_ref=template.vcs_ref,
             settings=copier.Settings(),  # no user defaults, no trusted prefixes
             exclude=[CONTRACT_FILE],
             defaults=True,

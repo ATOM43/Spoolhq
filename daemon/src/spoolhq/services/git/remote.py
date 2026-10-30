@@ -49,7 +49,7 @@ def remote_ref(branch: str) -> str:
 
 
 def _network(repo: Path, *args: str) -> str:
-    return run_git(args, repo, timeout=NETWORK_TIMEOUT_S).check().stdout
+    return run_git(args, repo, timeout=NETWORK_TIMEOUT_S, remote=True).check().stdout
 
 
 def fetch(repo: Path, url: str, branch: str) -> str:
@@ -78,7 +78,10 @@ def push(repo: Path, url: str, commit: str, ref: str) -> PushResult:
     """``git push <url> <commit>:<ref>``, never forced. MOVED if the remote ref moved on;
     GitError (the trimmed git error) for any other refusal or failure."""
     result = run_git(
-        ["push", "--porcelain", "--", url, f"{commit}:{ref}"], repo, timeout=NETWORK_TIMEOUT_S
+        ["push", "--porcelain", "--", url, f"{commit}:{ref}"],
+        repo,
+        timeout=NETWORK_TIMEOUT_S,
+        remote=True,
     )
     if result.returncode == 0:
         return PushResult.PUSHED

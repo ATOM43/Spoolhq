@@ -106,10 +106,13 @@ def test_init_with_a_git_template_prints_the_commit_first(
 
 @pytest.mark.integration
 @pytest.mark.usefixtures("git_identity")
-def test_init_with_a_git_template_runs_no_global_git_hooks(tmp_path: Path) -> None:
+@pytest.mark.parametrize("local", [False, True], ids=["url", "local-repo"])
+def test_init_with_a_git_template_runs_no_global_git_hooks(tmp_path: Path, local: bool) -> None:
     # A subprocess, because Copier's git (plumbum) reads the environment once at import,
     # so a monkeypatched GIT_CONFIG_GLOBAL would never reach it.
     url, commit = make_git_template(tmp_path)
+    if local:  # the work tree the bare repo was cloned from: a local git repository
+        url = (tmp_path / "template-work").as_posix()
     hooks = tmp_path / "global-hooks"
     hooks.mkdir()
     marker = tmp_path / "hook-ran"

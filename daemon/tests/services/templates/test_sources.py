@@ -12,7 +12,13 @@ from spoolhq.services.templates import (
     is_git_url,
     open_template,
 )
-from tests.conftest import make_git_template, make_template, run_git
+from tests.conftest import (
+    commit_file,
+    make_git_template,
+    make_template,
+    run_git,
+    set_identity,
+)
 
 
 def test_fastapi_react_is_built_in() -> None:
@@ -67,25 +73,26 @@ def test_a_local_folder(tmp_path: Path) -> None:
         assert template.source == str(folder.resolve())
 
 
-def test_a_local_git_work_tree_records_its_head(tmp_path: Path) -> None:
-    folder = make_template(tmp_path / "my-tpl")
-    run_git(folder, "init", "--quiet", "--initial-branch=main")
-    run_git(folder, "add", "--all")
-    run_git(
-        folder,
-        "-c",
-        "user.name=t",
-        "-c",
-        "user.email=t@example.invalid",
-        "commit",
-        "--quiet",
-        "--no-verify",
-        "-m",
-        "t",
-    )
-    head = run_git(folder, "rev-parse", "HEAD").strip()
+def test_a_local_git_repository_is_cloned_at_head(tmp_path: Path) -> None:
+    url, head = make_git_template(tmp_path)
+    folder = Path(url).parent / "template-work"
+    (folder / "uncommitted.txt").write_text("x", encoding="utf-8")
     with open_template(str(folder)) as template:
-        assert (template.ref, template.vcs_ref) == (head, "HEAD")
+        assert (template.kind, template.label, template.ref) == ("git", "template-work", head)
+        assert template.source == str(folder.resolve())
+        assert template.root != folder.resolve()
+        assert not (template.root / ".git").exists()
+        assert not (template.root / "uncommitted.txt").exists()
+
+
+def test_a_local_git_repository_at_a_ref(tmp_path: Path) -> None:
+    url, first = make_git_template(tmp_path)
+    folder = Path(url).parent / "template-work"
+    run_git(folder, "tag", "v1", first)
+    set_identity(folder)
+    commit_file(folder, "later.txt", "x\n", "later")
+    with open_template(str(folder), "v1") as template:
+        assert template.ref == first
 
 
 def test_a_missing_local_folder(tmp_path: Path) -> None:
@@ -125,6 +132,6 @@ def test_a_bad_ref_is_refused(ref: str) -> None:
 
 
 def test_a_ref_without_a_git_url() -> None:
-    with pytest.raises(TemplateError, match="--template-ref only applies to a git URL"):
+    with pytest.raises(TemplateError, match="--template-ref only applies to a git template"):
         with open_template("fastapi-react", "main"):
             pass

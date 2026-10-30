@@ -2,6 +2,7 @@
 local bare repository standing in for GitHub."""
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -14,6 +15,7 @@ from spoolhq.services.git import (
     push,
     push_tag,
     remote_ref,
+    runner,
     unpushed,
 )
 from tests.conftest import (
@@ -106,3 +108,59 @@ def test_delete_branch(git_repo: Path, bare: Path) -> None:
 def test_fetch_of_a_missing_branch_fails(git_repo: Path, bare: Path) -> None:
     with pytest.raises(GitError, match="git fetch failed"):
         fetch(git_repo, GITHUB_URL, "nope")
+
+
+def _ssh_commands(monkeypatch: pytest.MonkeyPatch) -> list[str | None]:
+    """Record the ``GIT_SSH_COMMAND`` each git call gets."""
+    seen: list[str | None] = []
+    real = runner.subprocess.run
+
+    def spy(command: list[str], **kwargs: Any) -> Any:
+        seen.append(kwargs["env"].get("GIT_SSH_COMMAND"))
+        return real(command, **kwargs)
+
+    monkeypatch.setattr(runner.subprocess, "run", spy)
+    return seen
+
+
+@pytest.mark.parametrize("action", ["fetch", "push", "delete"])
+def test_remote_calls_run_ssh_in_batch_mode(
+    git_repo: Path, bare: Path, monkeypatch: pytest.MonkeyPatch, action: str
+) -> None:
+    monkeypatch.delenv("GIT_SSH_COMMAND", raising=False)
+    monkeypatch.delenv("GIT_SSH", raising=False)
+    sha = commit_file(git_repo, "a.txt", "a\n", "one")
+    push(git_repo, GITHUB_URL, sha, "refs/heads/x")
+    seen = _ssh_commands(monkeypatch)
+    if action == "fetch":
+        fetch(git_repo, GITHUB_URL, "main")
+    elif action == "push":
+        push(git_repo, GITHUB_URL, sha, "refs/heads/main")
+    else:
+        delete_branch(git_repo, GITHUB_URL, "x")
+    assert runner.SSH_BATCH_COMMAND in seen
+
+
+def test_a_users_own_ssh_command_is_kept_with_one_warning(
+    git_repo: Path, bare: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(runner, "_ssh_warned", False)
+    monkeypatch.setenv("GIT_SSH_COMMAND", "ssh -i mykey")
+    seen = _ssh_commands(monkeypatch)
+    fetch(git_repo, GITHUB_URL, "main")
+    fetch(git_repo, GITHUB_URL, "main")
+    assert runner.SSH_BATCH_COMMAND not in seen
+    assert "ssh -i mykey" in seen
+    warnings = [r for r in caplog.records if "passphrase prompt could hang" in r.message]
+    assert len(warnings) == 1
+
+
+def test_a_users_core_ssh_command_is_kept(
+    git_repo: Path, bare: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("GIT_SSH_COMMAND", raising=False)
+    monkeypatch.delenv("GIT_SSH", raising=False)
+    run_git(git_repo, "config", "core.sshCommand", "ssh -i mykey")
+    seen = _ssh_commands(monkeypatch)
+    fetch(git_repo, GITHUB_URL, "main")
+    assert runner.SSH_BATCH_COMMAND not in seen

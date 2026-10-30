@@ -1,10 +1,10 @@
 """Where a template comes from: a built-in name, a local folder or a git URL.
 
 Built-ins ship inside the package (``spoolhq/templates/<name>/``, package data). A git
-URL is cloned with SpoolHQ's own git runner (hooks and signing disabled) and checked
-out at the resolved commit; its ``.git`` folder is then removed, so Copier renders that
-plain folder and never runs git itself (its own clone would run the user's global
-hooks).
+URL, or a local folder that is itself a git repository, is cloned with SpoolHQ's own
+git runner (hooks and signing disabled) and checked out at the resolved commit; its
+``.git`` folder is then removed, so Copier renders that plain folder and never runs git
+itself (its own clone would run the user's global hooks).
 """
 
 import re
@@ -35,8 +35,6 @@ class ResolvedTemplate:
     root: Path
     """A local folder with the template's files, to read the contract from."""
     copier_src: str
-    vcs_ref: str | None
-    """The commit Copier renders (git templates); ``None`` for plain folders."""
     ref: str | None
     """What ``project.yaml`` records as ``template.ref``."""
 
@@ -67,8 +65,8 @@ def _is_path(source: str) -> bool:
     return "/" in source or "\\" in source or source.startswith((".", "~"))
 
 
-def _git(args: list[str], cwd: Path) -> str:
-    return run_git(args, cwd, timeout=CLONE_TIMEOUT_S).check().stdout.strip()
+def _git(args: list[str], cwd: Path, *, remote: bool = False) -> str:
+    return run_git(args, cwd, timeout=CLONE_TIMEOUT_S, remote=remote).check().stdout.strip()
 
 
 def _label(source: str) -> str:
@@ -83,7 +81,7 @@ def _clone(url: str, ref: str | None) -> Iterator[ResolvedTemplate]:
         clone = work / "template"
         label = _label(url)
         try:
-            _git(["clone", "--quiet", "--no-checkout", "--", url, str(clone)], work)
+            _git(["clone", "--quiet", "--no-checkout", "--", url, str(clone)], work, remote=True)
             target = ref if ref is not None else "HEAD"
             commit = _git(["rev-parse", "--verify", "--quiet", f"{target}^{{commit}}"], clone)
             _git(["checkout", "--quiet", "--detach", commit], clone)
@@ -97,7 +95,6 @@ def _clone(url: str, ref: str | None) -> Iterator[ResolvedTemplate]:
             source=url,
             root=clone,
             copier_src=str(clone),
-            vcs_ref=None,
             ref=commit,
         )
     finally:
@@ -107,22 +104,13 @@ def _clone(url: str, ref: str | None) -> Iterator[ResolvedTemplate]:
 def _local(folder: Path) -> ResolvedTemplate:
     if not folder.is_dir():
         raise TemplateError(f"template folder not found: {folder}")
-    commit = None
-    if (folder / ".git").exists():
-        # Copier renders a git work tree at HEAD (with uncommitted changes), not as a
-        # plain folder; record that commit.
-        try:
-            commit = _git(["rev-parse", "HEAD"], folder)
-        except GitError as exc:
-            raise TemplateError(f"template {folder.name!r}: {exc}") from exc
     return ResolvedTemplate(
         kind="local",
         label=folder.name,
         source=str(folder),
         root=folder,
         copier_src=str(folder),
-        vcs_ref="HEAD" if commit else None,
-        ref=commit,
+        ref=None,
     )
 
 
@@ -135,11 +123,19 @@ def open_template(source: str, ref: str | None = None) -> Iterator[ResolvedTempl
         with _clone(source, ref) as resolved:
             yield resolved
         return
-    if ref is not None:
-        raise TemplateError("--template-ref only applies to a git URL template")
     if _is_path(source):
-        yield _local(Path(source).expanduser().resolve())
+        folder = Path(source).expanduser().resolve()
+        if (folder / ".git").exists():
+            # Copier would clone a git work tree itself, running the user's global hooks.
+            with _clone(str(folder), ref) as resolved:
+                yield resolved
+            return
+        if ref is not None:
+            raise TemplateError("--template-ref only applies to a git template")
+        yield _local(folder)
         return
+    if ref is not None:
+        raise TemplateError("--template-ref only applies to a git template")
     if source not in builtin_names():
         raise TemplateError(
             f"unknown template {source!r}; spool templates list shows the built-in ones"
@@ -151,6 +147,5 @@ def open_template(source: str, ref: str | None = None) -> Iterator[ResolvedTempl
         source=source,
         root=folder,
         copier_src=str(folder),
-        vcs_ref=None,
         ref=spoolhq.__version__,
     )

@@ -7,6 +7,7 @@ or agents (ticket titles, commit messages, paths) are always separate arguments.
 Repository hooks never run and nothing is signed (see ``hook_and_signing_options``).
 """
 
+import logging
 import os
 import re
 import shutil
@@ -17,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from spoolhq.core.config import disabled_hooks_path, ensure_home
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_S = 60.0
 MIN_GIT_VERSION = (2, 36)
@@ -43,6 +46,8 @@ ENV_REMOVED = (
     "GIT_ALTERNATE_OBJECT_DIRECTORIES",
     "GIT_PREFIX",
 )
+# For remote calls: ssh fails at once instead of asking for a passphrase nobody sees.
+SSH_BATCH_COMMAND = "ssh -o BatchMode=yes"
 # Subcommands named with their first argument in error messages: "git worktree add".
 _TWO_WORD_SUBCOMMANDS = frozenset({"worktree", "stash", "remote", "submodule", "notes"})
 _VERSION_RE = re.compile(r"git version (\d+)\.(\d+)(?:\.(\d+))?\S*")
@@ -130,6 +135,28 @@ def git_env() -> dict[str, str]:
     return env
 
 
+_ssh_warned = False
+
+
+def remote_env(env: dict[str, str], cwd: Path) -> dict[str, str]:
+    """``env`` with ``GIT_SSH_COMMAND`` set to batch mode, unless the user chose their own
+    ssh command (``GIT_SSH_COMMAND``, ``GIT_SSH`` or ``core.sshCommand``): theirs is kept,
+    with one warning per process that a passphrase prompt could hang until the timeout."""
+    global _ssh_warned
+    own = any(env.get(name) for name in ("GIT_SSH_COMMAND", "GIT_SSH"))
+    if not own:
+        own = run_git(["config", "--get", "core.sshCommand"], cwd).returncode == 0
+    if not own:
+        return {**env, "GIT_SSH_COMMAND": SSH_BATCH_COMMAND}
+    if not _ssh_warned:
+        _ssh_warned = True
+        logger.warning(
+            "your own ssh command is set (GIT_SSH_COMMAND, GIT_SSH or core.sshCommand); "
+            "a passphrase prompt could hang a git push or fetch until the timeout"
+        )
+    return env
+
+
 def disabled_hooks_dir() -> Path:
     """The empty folder git is told to look in for hooks: ``<home>/hooks-disabled/``.
 
@@ -164,8 +191,17 @@ def hook_and_signing_options() -> tuple[str, ...]:
     )
 
 
-def run_git(args: Sequence[str], cwd: Path, *, timeout: float = DEFAULT_TIMEOUT_S) -> GitResult:
+def run_git(
+    args: Sequence[str],
+    cwd: Path,
+    *,
+    timeout: float = DEFAULT_TIMEOUT_S,
+    remote: bool = False,
+) -> GitResult:
     """Run ``git <args>`` in ``cwd`` and return its result, whatever the exit code.
+
+    ``remote`` marks a call that talks to another machine (fetch, push, clone): ssh then
+    runs in batch mode (see ``remote_env``).
 
     Raises GitError if git is not on PATH, cannot start in ``cwd`` (a missing folder),
     does not finish within ``timeout`` seconds, or the disabled-hooks folder is not
@@ -173,11 +209,14 @@ def run_git(args: Sequence[str], cwd: Path, *, timeout: float = DEFAULT_TIMEOUT_
     """
     arguments = tuple(args)
     command = [git_executable(), *GLOBAL_OPTIONS, *hook_and_signing_options(), *arguments]
+    env = git_env()
+    if remote:
+        env = remote_env(env, cwd)
     try:
         completed = subprocess.run(  # noqa: S603 - fixed argument list, no shell
             command,
             cwd=cwd,
-            env=git_env(),
+            env=env,
             # Nothing to read: git never waits on the daemon's terminal.
             stdin=subprocess.DEVNULL,
             capture_output=True,

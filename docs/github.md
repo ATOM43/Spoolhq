@@ -14,7 +14,7 @@ A ticket with `review_required: true` goes through a pull request; every other t
 
 ## Git authentication
 
-Fetches and pushes are plain `git fetch` and `git push` through SpoolHQ's git runner, so they use your own setup exactly as a manual `git push` would: your credential helper for an HTTPS remote, your SSH agent for an SSH one. SpoolHQ never writes credentials into git config, URLs or command lines. Hooks stay disabled and git never prompts (`GIT_TERMINAL_PROMPT=0`); a remote that needs a password you haven't stored fails with git's error.
+Fetches and pushes are plain `git fetch` and `git push` through SpoolHQ's git runner, so they use your own setup exactly as a manual `git push` would: your credential helper for an HTTPS remote, your SSH agent for an SSH one. SpoolHQ never writes credentials into git config, URLs or command lines. Hooks stay disabled and git never prompts (`GIT_TERMINAL_PROMPT=0`); a remote that needs a password you haven't stored fails with git's error. ssh runs with `GIT_SSH_COMMAND=ssh -o BatchMode=yes`, so a passphrase-protected key without an agent fails at once with ssh's error instead of waiting for the 300 s timeout. If you set `GIT_SSH_COMMAND`, `GIT_SSH` or `core.sshCommand` yourself, yours is used and the daemon logs one warning that a passphrase prompt could hang until the timeout.
 
 `git.remote` must be a `github.com` URL (`https://github.com/<owner>/<repo>` or `git@github.com:<owner>/<repo>.git`); SpoolHQ reads `owner/repo` from it. It doesn't need a matching `git remote` in your repository: SpoolHQ fetches by URL and stores what it fetched as `refs/spoolhq/remote/<branch>`, so your remotes and remote-tracking branches (`origin/main`) don't change.
 

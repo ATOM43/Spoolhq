@@ -11,18 +11,18 @@ The code is `services/templates/`: the contract in `contract.py`, sources in `so
 | Source | Looks like | `template.ref` in `project.yaml` |
 | --- | --- | --- |
 | A built-in name | `fastapi-react`: no `/`, `\`, leading `.` or `~` | SpoolHQ's package version |
-| A local folder | `./my-template`, `~/templates/api`, `/srv/tpl` | the folder's `HEAD` commit if it is a git work tree (Copier then renders `HEAD` with uncommitted changes), otherwise none |
+| A local folder | `./my-template`, `~/templates/api`, `/srv/tpl` | the resolved commit if it is a git repository (cloned like a git URL, so uncommitted changes are not rendered), otherwise none |
 | A git URL | a URL with a scheme (`https://`, `ssh://`, `file://`), `git@host:path`, `gh:owner/repo`, or anything ending in `.git` (a local bare repo works) | the resolved commit |
 
 Built-ins ship inside the package, under `daemon/src/spoolhq/templates/<name>/` (package data, like the prompt templates). `spool templates list` shows them with their descriptions. An unknown name is refused with `unknown template 'x'; spool templates list shows the built-in ones`.
 
-For a git URL, SpoolHQ clones it once with its own git runner (hooks disabled), resolves `--template-ref` (a branch, tag or commit; without it, the repository's default branch) to a commit, and prints the source and commit **before generating**:
+For a git URL, or a local folder that is a git repository, SpoolHQ clones it once with its own git runner (hooks disabled), resolves `--template-ref` (a branch, tag or commit; without it, the repository's default branch) to a commit, and prints the source and commit **before generating**:
 
 ```text
 template: https://github.com/me/tpl.git at commit 3f2a…
 ```
 
-SpoolHQ checks that commit out into a temp folder and removes its `.git`, so Copier renders exactly that commit as a plain folder and never runs git itself: Copier's own clone would use the user's global git config, including a `core.hooksPath` with checkout hooks. The answers file then records the git URL as `_src_path` and the commit as `_commit`, not the temp folder. `--template-ref` with anything but a git URL is an error.
+SpoolHQ checks that commit out into a temp folder and removes its `.git`, so Copier renders exactly that commit as a plain folder and never runs git itself: Copier's own clone would use the user's global git config, including a `core.hooksPath` with checkout hooks. The answers file then records the git URL as `_src_path` and the commit as `_commit`, not the temp folder. `--template-ref` with anything but a git URL or a local git repository is an error. Clones (and every fetch and push) run ssh with `BatchMode=yes`, so a passphrase-protected key without an agent fails at once; a `GIT_SSH_COMMAND`, `GIT_SSH` or `core.sshCommand` of your own is kept, with one warning that a passphrase prompt could hang until the timeout.
 
 ## The contract: `spoolhq-template.yaml`
 
