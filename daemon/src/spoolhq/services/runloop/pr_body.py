@@ -1,5 +1,6 @@
-"""A pull request's title and body: the ticket's title and purpose, the reviewer's verdict on each
-"Done when" item, the gate results and the run id.
+"""A pull request's title and body: why it needs a person (the merge policy's rule hits),
+the ticket's title and purpose, the reviewer's verdict on each "Done when" item, the
+gate results and the run id.
 
 Ticket and agent text is untrusted, so every piece of it is escaped: markdown and HTML
 show as text, and nobody gets mentioned. The body is capped at 60,000 characters.
@@ -67,11 +68,18 @@ def _gates(gates: dict[str, Any]) -> list[str]:
 
 
 def pull_request_body(
-    ticket: Ticket, run_id: int, review: dict[str, Any], gates: dict[str, Any]
+    ticket: Ticket,
+    run_id: int,
+    review: dict[str, Any],
+    gates: dict[str, Any],
+    rules: list[dict[str, Any]] | None = None,
 ) -> str:
-    """The body from the approved attempt's ``review.json`` and ``gates.json``."""
+    """The body from the approved attempt's ``review.json`` and ``gates.json``, starting
+    with the policy's ``rules`` (``rule``, ``detail``) that sent it to a person."""
     purpose = section(ticket.body, "Purpose") or section(ticket.body, "Scope")
+    why = [f"- **{md_escape(r['rule'])}**: {md_escape(str(r['detail']))}" for r in rules or []]
     parts = [
+        "## Why this needs you\n\n" + "\n".join(why) if why else "",
         md_escape(pull_request_title(ticket)),
         f"## Purpose\n\n{md_escape(purpose)}" if purpose else "",
         "## Done when\n\n" + "\n".join(_done_when(ticket, review)),

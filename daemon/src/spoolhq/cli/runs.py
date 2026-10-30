@@ -15,7 +15,8 @@ import typer
 
 from spoolhq.cli.common import fail, settings, table
 from spoolhq.services.projects import ProjectError, project_dir
-from spoolhq.services.runs import RunLog, RunLogError, Usage
+from spoolhq.services.runloop import describe
+from spoolhq.services.runs import Run, RunLog, RunLogError, Usage
 
 runs_app = typer.Typer(
     name="runs",
@@ -66,6 +67,13 @@ def _tokens(usage: Usage) -> str:
         f"{usage.input_tokens} in · {usage.output_tokens} out · "
         f"{usage.cache_read_tokens} cache reads · {usage.weighted_tokens} weighted"
     )
+
+
+def _policy(run: Run) -> str:
+    """``pr · needs you: diff_size (812 lines > 400)``, ``direct · no rule holds``."""
+    if run.policy is None:
+        return NONE
+    return f"{run.policy.get('mode')} · {describe(run.policy.get('rules', [])) or 'no rule holds'}"
 
 
 @runs_app.command("list")
@@ -128,6 +136,7 @@ def show_command(
         "reason": run.reason or NONE,
         "started_at": run.started_at,
         "ended_at": run.ended_at or NONE,
+        "policy": _policy(run),
         "tokens": _tokens(usage),
         "cost": _cost(usage.cost_micro_usd),
         "daemon": run.daemon_instance,

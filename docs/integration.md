@@ -14,7 +14,7 @@ For an approved run of T04, with `main` as the default branch:
    - A conflict goes back to the implementer (see [Conflicts](#conflicts)).
    - If main had nothing new, there is nothing to merge, and the gates are not rerun: the approved attempt already ran them on this exact tree.
    - Otherwise SpoolHQ concludes the merge with a commit on the run branch and **reruns the gates** in the worktree. Their results and logs replace the approved attempt's `gates.json` and gate logs, which the retry prompt reads. A failure there starts a `gate_retry` attempt, counted against `limits.gate_retries` like any other.
-4. **Build the squash commit** in the worktree: detach `HEAD` at the branch tip, `git reset --soft <main_sha>`, apply the [diff guard](#the-diff-guard), append the `PROGRESS.md` entry and commit. The commit's only parent is `main_sha`. Its tree is the branch tip, minus build junk, plus the entry. The run branch doesn't move, so a retry starts from the same work. **Journal: `committed`**, with the commit's sha.
+4. **Build the squash commit** in the worktree: detach `HEAD` at the branch tip, `git reset --soft <main_sha>`, apply the [diff guard](#the-diff-guard), ask the [merge policy](merge-policy.md) (a ticket that needs a person stops here: the worktree goes back to its branch and the ticket waits for `spool run approve`), append the `PROGRESS.md` entry and commit. The commit's only parent is `main_sha`. Its tree is the branch tip, minus build junk, plus the entry. The run branch doesn't move, so a retry starts from the same work. **Journal: `committed`**, with the commit's sha.
 5. **Advance main.** This is compare-and-swap: it succeeds only if `main` still points at `main_sha`.
    - `main` checked out: it must still be clean and its `HEAD` must be `main_sha`, then `git merge --ff-only <commit>` there.
    - Otherwise: `git update-ref refs/heads/main <commit> <main_sha>`, which fails if `main` moved.
@@ -115,13 +115,13 @@ CREATE TABLE integrations (
 
 `pushed` (T17) means the remote has the commit; `pr_open` closes a row delivered as a pull request until it is merged (`done`) or closed (`abandoned`). `start_integration`, `set_integration_state`, `get_integration` and `open_integrations` are in `services/runs/journal.py`.
 
-## `spool run integrate`
+## `spool run approve` (`spool run integrate`)
 
 ```sh
-spool run integrate <project> <ticket>
+spool run approve <project> <ticket>     # spool run integrate is an alias
 ```
 
-This integrates a ticket that waits in `awaiting_approval` with its worktree, after a dirty checkout, an interrupted integration, or in hold mode. It calls `POST /api/projects/{name}/tickets/{id}/integrate`, which continues the ticket's run in the daemon, then follows it like `spool run next`. Any other ticket is refused: `T04 is ready, not awaiting approval`. The real integrator is always used, even in hold mode: this is how a held ticket gets merged.
+This integrates a ticket that waits in `awaiting_approval` with its worktree: one the [merge policy](merge-policy.md#local-approval) held for you (hold mode included), or one held by a dirty checkout or an interrupted integration. It calls `POST /api/projects/{name}/tickets/{id}/approve`, which continues the ticket's run in the daemon, then follows it like `spool run next`. Any other ticket is refused: `T04 is ready, not awaiting approval`. `spool run reject <project> <ticket> --note "..."` sends it back to the implementer instead.
 
 ## Hold mode
 
@@ -130,10 +130,10 @@ run:
   integration: hold     # default: local
 ```
 
-With `hold`, an approved ticket is not merged. It waits in `awaiting_approval` with its worktree kept:
+With `hold`, an approved ticket is not merged: the merge policy's `hold_mode` rule holds it, with any other rule that holds, and it waits in `awaiting_approval` with its worktree kept:
 
 ```text
-T04 approved; merge it with `spool run integrate demo T04` — worktree kept at /home/u/.spoolhq/worktrees/demo/T04
+T04 needs you: hold_mode (run.integration is hold); approve with `spool run approve demo T04` or reject with `spool run reject demo T04 --note "..."` — worktree kept at /home/u/.spoolhq/worktrees/demo/T04
 ```
 
 `spool run all` stops there. It is for users who want to look at each change before it lands on `main`.

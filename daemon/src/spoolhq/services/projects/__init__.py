@@ -3,6 +3,8 @@
 from spoolhq.services.projects.errors import ProjectError, ProjectValidationError
 from spoolhq.services.projects.model import (
     AGENT_BACKENDS,
+    DEFAULT_PROTECTED_PATHS,
+    LOCKFILES,
     Agents,
     Budget,
     Commands,
@@ -33,6 +35,8 @@ __all__ = [
     "GitSettings",
     "InitResult",
     "Limits",
+    "DEFAULT_PROTECTED_PATHS",
+    "LOCKFILES",
     "MergePolicy",
     "Project",
     "ProjectError",

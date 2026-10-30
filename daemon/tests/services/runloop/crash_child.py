@@ -32,7 +32,7 @@ def main(state: str, projects_dir: Path, worktrees_dir: Path) -> None:
         integrator=Delivery(checkpoint=checkpoint),
         gates=FakeGates(),
     )
-    loop.integrate_ticket("demo", "T01")
+    loop.approve("demo", "T01")
     loop.wait("demo")
     loop.close()
     registry.close()

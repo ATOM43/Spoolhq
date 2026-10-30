@@ -9,6 +9,7 @@ main into a worktree, squash, fast-forward main, tag); ``remote.py`` fetches and
 """
 
 from spoolhq.core.ids import slugify
+from spoolhq.services.git.diffstat import ChangedFile, parse_numstat, staged_changes
 from spoolhq.services.git.integrate import (
     MergeIn,
     advance,
@@ -83,6 +84,7 @@ from spoolhq.services.git.worktrees import (
 )
 
 __all__ = [
+    "ChangedFile",
     "MergeIn",
     "advance",
     "branch_sha",
@@ -99,8 +101,10 @@ __all__ = [
     "merge_in",
     "operation_in_progress",
     "outside_symlinks",
+    "parse_numstat",
     "restore_branch",
     "stage",
+    "staged_changes",
     "start_squash",
     "tag_exists",
     "too_large",

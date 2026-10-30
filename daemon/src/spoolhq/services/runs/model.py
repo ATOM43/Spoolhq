@@ -75,6 +75,7 @@ class EventKind(StrEnum):
     REVIEW_VERDICT = "review.verdict"
     LOG = "log"
     INTEGRATE = "integrate"
+    POLICY_DECISION = "policy.decision"
 
 
 @dataclass(frozen=True)
@@ -98,6 +99,8 @@ class Run:
     pr_url: str | None = None
     pr_branch: str | None = None
     """The pull request's branch on GitHub, ``spoolhq/<ticket_id>-<slug>``."""
+    policy: dict[str, Any] | None = None
+    """The latest merge-policy decision (T18): ``mode`` and ``rules`` (``rule``, ``detail``)."""
 
 
 @dataclass(frozen=True)

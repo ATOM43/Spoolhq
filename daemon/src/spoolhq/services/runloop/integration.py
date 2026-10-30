@@ -1,8 +1,10 @@
 """Local integration: an approved run becomes one commit on the local default branch.
 
 ``LocalIntegrator`` merges the current main into the run's worktree, reruns the gates
-if that brought anything, builds one squash commit (with the ``PROGRESS.md`` entry) on
-top of main there, then fast-forwards main to it and tags it. main itself is only ever
+if that brought anything, stages the squash on top of main there and asks the merge
+policy (``approval.decide``): a ticket that needs a person waits for ``spool run
+approve``. Otherwise it commits the squash (with the ``PROGRESS.md`` entry), then
+fast-forwards main to it and tags it. main itself is only ever
 fast-forwarded. Every step is written to the integration journal first, so
 ``recover_integrations`` can finish or undo an integration a crash cut off. The git
 mechanics are ``services/git/integrate.py``. See ``docs/integration.md``.
@@ -45,9 +47,11 @@ from spoolhq.services.git import (
     unstage,
 )
 from spoolhq.services.projects import Project
+from spoolhq.services.runloop.approval import approval_message, decide
 from spoolhq.services.runloop.integrator import IntegrationResult, IntegrationStatus
 from spoolhq.services.runloop.machine import run_gates
 from spoolhq.services.runloop.model import Merged, RunContext
+from spoolhq.services.runloop.policy import DeliveryMode, describe
 from spoolhq.services.runs import (
     EventKind,
     Integration,
@@ -273,11 +277,18 @@ class LocalIntegrator:
             self._abandon(ctx, journal, restore=True)
             message = f"file too large to commit: {big[0]} ({big[1] / 2**20:.1f} MB)"
             return _result(IntegrationStatus.FAILED, message)
+        # The policy sees exactly what would land, less SpoolHQ's own PROGRESS.md entry.
+        mode = decide(ctx, main_sha)
+        if mode == "approval":
+            self._abandon(ctx, journal, restore=True)
+            policy = ctx.run.policy or {}
+            reason = approval_message(ctx, describe(policy.get("rules", [])))
+            return _result(IntegrationStatus.HELD, f"{tid} {reason}")
         self._append_progress(ctx)
         note, title = ctx.run.progress_note, ctx.ticket.meta.title
         sha = commit_staged(path, commit_message(tid, title, note, ctx.run.id))
         journal = self._state(ctx, journal, IntegrationState.COMMITTED, sha)
-        return self._deliver(ctx, journal, sha, main_sha)
+        return self._deliver(ctx, journal, sha, main_sha, mode)
 
     def _prepare(self, ctx: RunContext) -> IntegrationResult | None:
         """Before the merge, with the main checkout ready; a result stops the integration.
@@ -285,10 +296,11 @@ class LocalIntegrator:
         return None
 
     def _deliver(
-        self, ctx: RunContext, journal: Integration, sha: str, main_sha: str
+        self, ctx: RunContext, journal: Integration, sha: str, main_sha: str, mode: DeliveryMode
     ) -> IntegrationResult | None:
-        """Land the squash commit ``sha``: fast-forward main, tag, finish. None when main
-        moved since ``main_sha`` (the integration starts over)."""
+        """Land the squash commit ``sha`` (``mode`` is ``direct`` without a remote):
+        fast-forward main, tag, finish. None when main moved since ``main_sha`` (the
+        integration starts over)."""
         project, tid = ctx.project, ctx.ticket_id
         repo, branch = project.repo_path, project.default_branch
         try:

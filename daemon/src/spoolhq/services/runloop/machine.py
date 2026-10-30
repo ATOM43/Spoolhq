@@ -79,13 +79,13 @@ def _retries(limit: int) -> str:
 
 def next_kind(attempts: list[Attempt]) -> AttemptKind | None:
     """The kind of attempt a resumed run starts with; None when the last was approved
-    (only the integration is left)."""
+    or went to a person (only the integration is left)."""
     if not attempts:
         return AttemptKind.INITIAL
     last = attempts[-1]
     if last.status in (AttemptStatus.INTERRUPTED, AttemptStatus.RUNNING):
         return last.kind
-    if last.status is AttemptStatus.APPROVED:
+    if last.status in (AttemptStatus.APPROVED, AttemptStatus.NEEDS_HUMAN):
         return None
     return _NEXT_KIND.get(last.status, AttemptKind.INITIAL)
 
@@ -210,11 +210,12 @@ def previous_attempt(ctx: RunContext, kind: AttemptKind) -> PreviousAttempt | No
             'Check your work against every "Done when" item.'
         )
     tests = [name for result in gates.get("results", []) for name in result["failing_tests"]]
-    pr_review = None
-    if kind is AttemptKind.PR_CHANGES:  # stored by polling.py when it starts this attempt
+    feedback: dict[str, Any] = {}
+    if kind is AttemptKind.PR_CHANGES:  # stored by polling.py or approval.reject
         events = ctx.run_log.events_since(0, run_id=ctx.run.id, limit=100_000)
-        logged = [e.payload for e in events if e.kind is EventKind.LOG and "pr_review" in e.payload]
-        pr_review = str(logged[-1]["pr_review"]) if logged else None
+        keys = ("pr_review", "user_note")
+        logged = [e.payload for e in events if e.kind is EventKind.LOG and e.payload.keys() & keys]
+        feedback = logged[-1] if logged else {}
     return PreviousAttempt(
         kind=kind.value,
         number=last.number,
@@ -227,7 +228,8 @@ def previous_attempt(ctx: RunContext, kind: AttemptKind) -> PreviousAttempt | No
         ),
         conflict_files=conflicts,
         system_note=note,
-        pr_review=pr_review,
+        pr_review=str(feedback["pr_review"]) if "pr_review" in feedback else None,
+        user_note=str(feedback["user_note"]) if "user_note" in feedback else None,
     )
 
 
@@ -465,12 +467,12 @@ def attempt_once(ctx: RunContext, attempt: Attempt) -> Step:
     unmet = ", ".join(str(item.index) for item in reviewed.unmet())
     detail = f" (item {unmet})" if unmet and reviewed.verdict == "changes_requested" else ""
     ctx.phase("review", f"{label} · review · {reviewed.verdict}{detail}", attempt)
-    if reviewed.verdict == "approve":
-        ctx.run_log.finish_attempt(attempt.id, AttemptStatus.APPROVED)
+    if reviewed.verdict in ("approve", "needs_human"):
+        # The gates passed; the merge policy sends a needs_human verdict to a person.
+        approved = reviewed.verdict == "approve"
+        status = AttemptStatus.APPROVED if approved else AttemptStatus.NEEDS_HUMAN
+        ctx.run_log.finish_attempt(attempt.id, status)
         return integrate(ctx)
-    if reviewed.verdict == "needs_human":
-        ctx.run_log.finish_attempt(attempt.id, AttemptStatus.NEEDS_HUMAN)
-        return Ending(EndKind.BLOCKED, f"the reviewer asked for a person: {reviewed.summary}")
     ctx.run_log.finish_attempt(attempt.id, AttemptStatus.CHANGES_REQUESTED)
     return retry_or_block(ctx, AttemptKind.REVIEW_RETRY, "changes requested")
 

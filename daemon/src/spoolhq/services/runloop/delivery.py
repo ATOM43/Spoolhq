@@ -3,17 +3,16 @@
 Without ``git.remote`` nothing changes: ``Delivery`` is ``LocalIntegrator``. With one,
 it fetches the default branch first (local main must not have commits the remote
 lacks; a local main behind it is fast-forwarded) and builds the squash commit on top of
-the remote's main as T14 does. ``direct``: the commit is pushed to the default branch
-before local main moves. ``pr``: it is pushed to ``spoolhq/<id>-<slug>`` and opened as
+the remote's main as T14 does; the merge policy picks the mode (``policy.py``).
+``direct``: the commit is pushed to the default branch before local main moves.
+``pr``: it is pushed to ``spoolhq/<id>-<slug>`` and opened as
 a pull request, and the ticket waits; a later attempt (changes requested) pushes on top
 of it. Polling the pull requests is ``polling.py``. See ``docs/github.md``.
 """
 
-import json
 import logging
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Literal
 
 from spoolhq.services.git import (
     BRANCH_PREFIX,
@@ -38,36 +37,26 @@ from spoolhq.services.github import (
     create_pull,
     github_token,
 )
+from spoolhq.services.runloop.approval import read_artifact
 from spoolhq.services.runloop.integration import Checkpoint, LocalIntegrator, waiting_message
 from spoolhq.services.runloop.integrator import IntegrationResult, IntegrationStatus
 from spoolhq.services.runloop.model import RunContext
+from spoolhq.services.runloop.policy import DeliveryMode
 from spoolhq.services.runloop.pr_body import pull_request_body, pull_request_title
 from spoolhq.services.runs import (
     ArtifactName,
-    Attempt,
     EventKind,
     Integration,
     IntegrationState,
-    attempt_files,
     set_pull_request,
     utc_now,
 )
-from spoolhq.services.tickets import Ticket
 
 logger = logging.getLogger(__name__)
 
 PR_BRANCH_PREFIX = "spoolhq/"
 GitHubFactory = Callable[[str], GitHubClient]
 """Makes the API client for a token; tests pass one with a fake transport."""
-
-DeliveryMode = Literal["direct", "pr"]
-
-
-def delivery_mode(ticket: Ticket, attempt: Attempt | None) -> DeliveryMode:
-    """How an approved ticket reaches GitHub: ``review_required`` tickets go through a
-    pull request, every other one is pushed directly. Every rule lives here (T18 adds
-    more, which may look at the approved ``attempt``)."""
-    return "pr" if ticket.meta.review_required else "direct"
 
 
 def _failed(message: str) -> IntegrationResult:
@@ -81,16 +70,6 @@ def _held(message: str) -> IntegrationResult:
 def pr_branch(run_branch: str) -> str:
     """``spoolhq/<id>-<slug>`` for the run branch ``feat/<id>-<slug>`` (T08's naming)."""
     return PR_BRANCH_PREFIX + run_branch.removeprefix(BRANCH_PREFIX)
-
-
-def _approved(ctx: RunContext) -> Attempt:
-    return ctx.run_log.list_attempts(ctx.run.id)[-1]
-
-
-def _artifact(ctx: RunContext, attempt: Attempt, name: ArtifactName) -> dict[str, Any]:
-    path = attempt_files(ctx.workspace, attempt).get(name.value)
-    data = json.loads(path.read_text(encoding="utf-8")) if path is not None else {}
-    return data if isinstance(data, dict) else {}
 
 
 def ahead_message(branch: str, remote: str, commits: list[str]) -> str:
@@ -118,13 +97,11 @@ class Delivery(LocalIntegrator):
         return super().integrate(ctx)
 
     def _prepare(self, ctx: RunContext) -> IntegrationResult | None:
-        """PR mode needs a token. Then fetch first: local main must contain nothing the
-        remote lacks; behind, it is fast-forwarded (a dirty main checkout waits)."""
+        """Fetch first: local main must contain nothing the remote lacks; behind, it is
+        fast-forwarded (a dirty main checkout waits)."""
         project, remote = ctx.project, ctx.project.git.remote
         if remote is None:
             return None
-        if delivery_mode(ctx.ticket, _approved(ctx)) == "pr" and github_token() is None:
-            return _failed(MISSING_TOKEN)
         repo, branch = project.repo_path, project.default_branch
         try:
             remote_sha = fetch(repo, remote, branch)
@@ -142,17 +119,17 @@ class Delivery(LocalIntegrator):
         return None
 
     def _deliver(
-        self, ctx: RunContext, journal: Integration, sha: str, main_sha: str
+        self, ctx: RunContext, journal: Integration, sha: str, main_sha: str, mode: DeliveryMode
     ) -> IntegrationResult | None:
         project, remote = ctx.project, ctx.project.git.remote
         if remote is None:
-            return super()._deliver(ctx, journal, sha, main_sha)
+            return super()._deliver(ctx, journal, sha, main_sha, mode)
         repo, branch = project.repo_path, project.default_branch
         if not is_ancestor(repo, main_sha, remote_ref(branch)):
             # main moved locally after the fetch: never push the user's own commits.
             self._abandon(ctx, journal, restore=True)
             return _failed(ahead_message(branch, remote, unpushed(repo, branch)))
-        if delivery_mode(ctx.ticket, _approved(ctx)) == "pr":
+        if mode == "pr":
             return self._open_pr(ctx, journal, sha)
         return self._push_direct(ctx, journal, sha, main_sha)
 
@@ -209,12 +186,13 @@ class Delivery(LocalIntegrator):
                 f"run spool run integrate {project.name} {tid}"
             )
         journal = self._state(ctx, journal, IntegrationState.PUSHED)
-        approved = _approved(ctx)
+        approved = ctx.run_log.list_attempts(ctx.run.id)[-1]
         body = pull_request_body(
             ctx.ticket,
             ctx.run.id,
-            _artifact(ctx, approved, ArtifactName.REVIEW),
-            _artifact(ctx, approved, ArtifactName.GATES),
+            read_artifact(ctx, approved, ArtifactName.REVIEW),
+            read_artifact(ctx, approved, ArtifactName.GATES),
+            (ctx.run.policy or {}).get("rules", []),
         )
         try:
             with self.github(token) as client:

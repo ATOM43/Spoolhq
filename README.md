@@ -89,14 +89,15 @@ uv run --directory daemon spool review my-app T07 [--path <worktree>] [--base <r
 
 ## Run tickets
 
-With the daemon running (below), the run loop takes a ready ticket through its worktree, the implementer, the gates and the reviewer, with retries ([run loop](docs/run-loop.md)). An approved ticket becomes one commit on the local default branch, tagged `ticket/<id>`, with its `PROGRESS.md` entry ([integration](docs/integration.md)); with `run.integration: hold` it waits for `spool run integrate`. With `git.remote` set, it is pushed to GitHub first, or opened as a pull request when the ticket has `review_required: true`; the daemon polls those pull requests ([GitHub delivery](docs/github.md)).
+With the daemon running (below), the run loop takes a ready ticket through its worktree, the implementer, the gates and the reviewer, with retries ([run loop](docs/run-loop.md)). An approved ticket becomes one commit on the local default branch, tagged `ticket/<id>`, with its `PROGRESS.md` entry ([integration](docs/integration.md)); with `run.integration: hold` it waits for `spool run approve`. With `git.remote` set, it is pushed to GitHub first; the daemon polls pull requests ([GitHub delivery](docs/github.md)). The [merge policy](docs/merge-policy.md) sends a ticket to a person instead when it is `review_required`, its diff is over 400 lines, it touches a protected path (CI, migrations, auth, dependencies, agent instructions) or the reviewer said `needs_human`: a pull request with `git.remote`, else `spool run approve` or `spool run reject --note`.
 
 ```sh
 uv run --directory daemon spool run next my-app [T04]   # start and follow: one line per phase change
 uv run --directory daemon spool run all my-app          # ready tickets one after another
 uv run --directory daemon spool run status my-app
 uv run --directory daemon spool run pause|resume|cancel my-app [--run 12]
-uv run --directory daemon spool run integrate my-app T04  # merge a ticket waiting in awaiting_approval
+uv run --directory daemon spool run approve my-app T04    # merge a ticket waiting in awaiting_approval (alias: integrate)
+uv run --directory daemon spool run reject my-app T04 --note "rename the endpoint"  # send it back
 uv run --directory daemon spool run discard my-app T04  # remove an interrupted or blocked ticket's worktree
 uv run --directory daemon spool secrets set github      # the GitHub token for pull requests (hidden prompt)
 uv run --directory daemon spool github sync my-app      # check the project's open pull requests now

@@ -7,6 +7,7 @@ import pytest
 from spoolhq.services.gates import SHELL_SYNTAX_ERROR as SHELL_SYNTAX
 from spoolhq.services.projects import (
     AGENT_BACKENDS,
+    DEFAULT_PROTECTED_PATHS,
     Project,
     ProjectError,
     ProjectValidationError,
@@ -66,9 +67,8 @@ def test_valid_project_loads(projects_dir: Path, git_repo: Path) -> None:
     assert project.repo_path == git_repo
     assert project.limits.gate_retries == 3
     assert project.limits.review_retries == 2
-    assert project.merge_policy.max_direct_diff_lines == 400
-    assert project.merge_policy.protected_paths == ["**/migrations/**", ".github/**", "**/auth/**"]
-    assert project.merge_policy.always_pr is False
+    assert project.merge_policy.max_diff_lines == 400
+    assert project.merge_policy.protected() == list(DEFAULT_PROTECTED_PATHS)
     assert project.git.remote is None
     assert project.context.max_chars == 120_000
     assert (project.context.progress_entries, project.context.decisions_lines) == (3, 20)
@@ -101,7 +101,7 @@ limits:
   gate_retries: 3
   review_retries: 2
 merge_policy:
-  max_direct_diff_lines: 400
+  max_diff_lines: 400
   protected_paths: ["**/migrations/**", ".github/**", "**/auth/**"]
 git:
   remote: https://github.com/ATOM43/spoolhq   # optional
@@ -178,7 +178,8 @@ def test_missing_required_field_is_named(projects_dir: Path, git_repo: Path, fie
         ("agents.budget_per_ticket.tokens", 0, "must be greater than 0"),
         ("limits.gate_retries", 11, "must be at most 10"),
         ("limits.review_retries", -1, "must be at least 0"),
-        ("merge_policy.max_direct_diff_lines", 0, "must be greater than 0"),
+        ("merge_policy.max_diff_lines", 5, "must be at least 10"),
+        ("merge_policy.max_diff_lines", 100_001, "must be at most 100000"),
         ("commands.test", "  ", "must not be empty"),
         ("tracker.kind", "jira", "must be one of 'clickup'"),
         ("run.integration", "github", "must be one of 'local' or 'hold'"),
@@ -295,6 +296,36 @@ def test_list_items_use_index_paths(projects_dir: Path, git_repo: Path) -> None:
     data["merge_policy"] = {"protected_paths": ["docs/**", ""]}
     assert errors_for(projects_dir, data) == [
         "project.yaml: merge_policy.protected_paths[1]: must not be empty"
+    ]
+
+
+def test_protected_paths_replace_the_default_and_extra_adds(
+    projects_dir: Path, git_repo: Path
+) -> None:
+    data = valid_data(git_repo)
+    data["merge_policy"] = {"protected_paths": ["docs/**"]}
+    write_project(projects_dir, data)
+    assert load_project("demo", projects_dir=projects_dir).merge_policy.protected() == ["docs/**"]
+    data["merge_policy"] = {"protected_paths_extra": ["infra/**"]}
+    write_project(projects_dir, data)
+    protected = load_project("demo", projects_dir=projects_dir).merge_policy.protected()
+    assert protected == [*DEFAULT_PROTECTED_PATHS, "infra/**"]
+
+
+def test_bad_protected_path_patterns_are_refused(projects_dir: Path, git_repo: Path) -> None:
+    data = valid_data(git_repo)
+    data["merge_policy"] = {
+        "protected_paths": ["/etc/x", "../x"],
+        "protected_paths_extra": ["", "C:/x", "a/../b"],
+    }
+    assert errors_for(projects_dir, data) == [
+        "project.yaml: merge_policy.protected_paths[0]: must be a repo-relative pattern, "
+        "got '/etc/x'",
+        "project.yaml: merge_policy.protected_paths[1]: must not contain '..', got '../x'",
+        "project.yaml: merge_policy.protected_paths_extra[0]: must not be empty",
+        "project.yaml: merge_policy.protected_paths_extra[1]: must be a repo-relative pattern, "
+        "got 'C:/x'",
+        "project.yaml: merge_policy.protected_paths_extra[2]: must not contain '..', got 'a/../b'",
     ]
 
 

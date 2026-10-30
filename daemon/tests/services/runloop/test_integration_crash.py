@@ -159,7 +159,7 @@ def test_crash_after_each_journal_state(
             integrator=LocalIntegrator(),
             gates=FakeGates(),
         )
-        loop.integrate_ticket("demo", "T01")
+        loop.approve("demo", "T01")
         loop.wait("demo")
         loop.close()
         assert log.get_run(run.id).status is RunStatus.DONE

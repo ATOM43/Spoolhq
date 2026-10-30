@@ -13,7 +13,7 @@ from spoolhq.cli.main import app
 from spoolhq.services.agents import FakeRunner
 from spoolhq.services.projects import load_project, save_project
 from spoolhq.services.runloop import Agents
-from tests.conftest import REVIEW_FIXTURES, run_git
+from tests.conftest import AGENT_FIXTURES, REVIEW_FIXTURES, run_git
 
 runner = CliRunner()
 
@@ -71,7 +71,10 @@ def test_integrate_merges_a_held_ticket(daemon: TestClient, projects_dir: Path) 
     save_project(settings, projects_dir=projects_dir)
     held = runner.invoke(app, ["run", "next", "demo"])
     assert held.exit_code == 0, held.output
-    assert "spool run integrate demo T07" in held.output.splitlines()[-1]
+    assert held.output.splitlines()[-1].startswith(
+        "T07 needs you: hold_mode (run.integration is hold); approve with "
+        "`spool run approve demo T07`"
+    )
 
     result = runner.invoke(app, ["run", "integrate", "demo", "T07"])
 
@@ -153,13 +156,13 @@ def test_ctrl_c_detaches(daemon: TestClient, monkeypatch: pytest.MonkeyPatch) ->
 def test_cancel_resume_discard_and_status(
     daemon: TestClient, token: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A run that blocks: the reviewer asks for a person.
+    # A run that blocks: the implementer fails.
     loop = daemon.app.state.runloop  # type: ignore[attr-defined]
-    reviewer = FakeRunner(REVIEW_FIXTURES / "needs_human.jsonl")
-    monkeypatch.setattr(loop, "agents", Agents(loop.agents.implementer, reviewer))
+    implementer = FakeRunner(AGENT_FIXTURES / "error.jsonl")
+    monkeypatch.setattr(loop, "agents", Agents(implementer, loop.agents.reviewer))
     result = runner.invoke(app, ["run", "next", "demo"])
     assert result.exit_code == 1
-    assert result.output.splitlines()[-1].startswith("T07 · blocked · the reviewer asked")
+    assert result.output.splitlines()[-1].startswith("T07 · blocked · implementer error")
 
     result = runner.invoke(app, ["run", "discard", "demo", "T07"])
     assert (result.exit_code, result.output) == (0, "T07 discarded; it is ready again\n")
@@ -168,3 +171,28 @@ def test_cancel_resume_discard_and_status(
     assert "error: no active run in 'demo'" in result.output
     result = runner.invoke(app, ["run", "resume", "demo", "--run", "1"])
     assert "error: nothing to resume in 'demo'" in result.output
+
+
+@pytest.mark.integration
+def test_needs_human_waits_then_approve_merges(
+    daemon: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loop = daemon.app.state.runloop  # type: ignore[attr-defined]
+    reviewer = FakeRunner(REVIEW_FIXTURES / "needs_human.jsonl")
+    monkeypatch.setattr(loop, "agents", Agents(loop.agents.implementer, reviewer))
+    result = runner.invoke(app, ["run", "next", "demo"])
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[-1].startswith("T07 needs you: needs_human (")
+
+    status = runner.invoke(app, ["run", "status", "demo"])
+    assert "T07 · awaiting_approval · needs you: needs_human (" in status.output
+    shown = runner.invoke(app, ["runs", "show", "demo", "1"])
+    assert "policy:     approval · needs you: needs_human (" in shown.output
+
+    refused = runner.invoke(app, ["run", "reject", "demo", "T07"])
+    assert refused.exit_code == 1
+    assert "error: say what should change with --note" in refused.output
+
+    approved = runner.invoke(app, ["run", "approve", "demo", "T07"])
+    assert approved.exit_code == 0, approved.output
+    assert approved.output.splitlines()[-1] == "T07 · done"

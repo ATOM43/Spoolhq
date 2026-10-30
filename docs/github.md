@@ -2,15 +2,15 @@
 
 A project with `git.remote` in `project.yaml` delivers approved tickets to GitHub. Without it, nothing changes: tickets merge into the local default branch as in [integration](integration.md).
 
-The code is in three parts. The git mechanics are `services/git/remote.py` (fetch, compare, push, push a tag, delete a remote branch, parse `owner/repo`). The GitHub REST API is `services/github/` (the client with the token, headers, timeouts, rate limits and redaction; pull requests and their reviews; the token lookup), which imports no other service. The orchestration is `services/runloop/`: `delivery.py` (`delivery_mode`, `Delivery`, on top of T14's `LocalIntegrator` in `integration.py`, which also holds crash recovery), `pr_body.py` (the pull request's text) and `polling.py` (`GitHubPoller`).
+The code is in three parts. The git mechanics are `services/git/remote.py` (fetch, compare, push, push a tag, delete a remote branch, parse `owner/repo`). The GitHub REST API is `services/github/` (the client with the token, headers, timeouts, rate limits and redaction; pull requests and their reviews; the token lookup), which imports no other service. The orchestration is `services/runloop/`: `delivery.py` (`Delivery`, on top of T14's `LocalIntegrator` in `integration.py`, which also holds crash recovery), `pr_body.py` (the pull request's text) and `polling.py` (`GitHubPoller`).
 
 ## Which mode
 
 ```python
-delivery_mode(ticket, attempt) -> "direct" | "pr"
+delivery_mode(decision, has_remote) -> "direct" | "pr" | "approval"
 ```
 
-A ticket with `review_required: true` goes through a pull request; every other ticket is pushed directly to the default branch. Every rule for choosing lives in this one function (T18 adds more).
+The [merge policy](merge-policy.md) decides on the final squash diff: when no rule holds (`review_required`, `diff_size`, `protected_paths`, the reviewer's `needs_human`), the ticket is pushed directly to the default branch; when any holds, it goes through a pull request. `run.integration: hold` still holds every ticket locally first ([local approval](merge-policy.md#local-approval)).
 
 ## Git authentication
 
@@ -29,7 +29,7 @@ The GitHub API (opening pull requests and polling them) needs a token; git itsel
 spool secrets set github     # asks for the token without echoing it; never from the command line
 ```
 
-The token goes only into the `Authorization` header of API requests. It is never logged (the daemon log redacts it, as it does the daemon's own token), never written to the workspace, the run files or git config, never put in a URL or on a command line, and every API error message has it replaced with `[redacted]`. Direct mode works without a token; PR mode without one blocks the ticket before anything is pushed:
+The token goes only into the `Authorization` header of API requests. It is never logged (the daemon log redacts it, as it does the daemon's own token), never written to the workspace, the run files or git config, never put in a URL or on a command line, and every API error message has it replaced with `[redacted]`. Direct mode works without a token; PR mode without one blocks the ticket before anything is pushed (after the squash, once the policy has chosen PR mode):
 
 ```text
 PR mode needs a GitHub token; run spool secrets set github or set SPOOLHQ_GITHUB_TOKEN
@@ -66,15 +66,15 @@ SpoolHQ never pushes your own unpushed commits: the squash commit's parent is al
 
 ## PR mode
 
-1. Fetch first, merge, gates and the squash commit exactly as in direct mode.
+1. Fetch first, merge, gates and the squash commit exactly as in direct mode; the merge policy picks PR mode on that squash.
 2. Push the commit to the branch `spoolhq/<id>-<slug>` (the run branch's name from [git](git.md#paths-and-branch-names), with `spoolhq/` for `feat/`): a plain push. If that branch already exists on GitHub with other commits, the ticket is blocked: delete the branch there and integrate again. **Journal: `pushed`.**
 3. Open a pull request against the default branch:
    - **Title:** `<id>: <title>`, one line, as the squash commit's subject.
-   - **Body:** the title; the ticket's `## Purpose` (else its `## Scope`); the "Done when" list with the reviewer's verdict and reason for each item; a table of the gates (command, pass/fail, duration); and the run id. All ticket and agent text is escaped: markdown specials are backslash-escaped and `&`, `<`, `>` and `@` become HTML entities, so markup and HTML show as text and nobody is mentioned. The body is cut at 60,000 characters.
+   - **Body:** a **Why this needs you** section listing every merge-policy rule that holds (`needs_human` with the reviewer's summary first); the title; the ticket's `## Purpose` (else its `## Scope`); the "Done when" list with the reviewer's verdict and reason for each item; a table of the gates (command, pass/fail, duration); and the run id. All ticket and agent text is escaped: markdown specials are backslash-escaped and `&`, `<`, `>` and `@` become HTML entities, so markup and HTML show as text and nobody is mentioned. The body is cut at 60,000 characters.
    - If GitHub refuses it, the pushed branch is deleted again and the ticket is blocked with `cannot open a pull request: <the API error>`.
 4. The PR's number, URL and branch are stored on the run (run log schema 6), the journal row becomes `pr_open`, the worktree and its local branch are removed (the branch on GitHub holds the work), and the ticket and run wait in `awaiting_approval`: `T04 · PR #12 opened: https://github.com/acme/demo/pull/12`. `spool run all` stops there, as with any ticket that waits.
 
-`spool run status` and `spool tickets show` show the pull request, and the API's run views carry `pr_number` and `pr_url`. `spool run integrate` refuses such a ticket (`T04 waits on PR #12: …`): it is merged on GitHub.
+`spool run status` and `spool tickets show` show the pull request, and the API's run views carry `pr_number` and `pr_url`. `spool run approve` (and its alias `spool run integrate`) refuses such a ticket (`T04 waits on PR #12: …`): it is merged on GitHub.
 
 ## Polling pull requests
 

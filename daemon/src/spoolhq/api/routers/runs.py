@@ -1,7 +1,7 @@
-"""Run endpoints: start, pause, resume and cancel a project's run, integrate an approved
-ticket, discard a ticket's leftover worktree, and read the current run (token
-required). Thin: the work is ``services.runloop.RunLoop``'s; the full REST and
-WebSocket API comes in T19.
+"""Run endpoints: start, pause, resume and cancel a project's run, approve (or integrate)
+or reject a ticket waiting for a person, discard a ticket's leftover worktree, and read
+the current run (token required). Thin: the work is ``services.runloop.RunLoop``'s;
+the full REST and WebSocket API comes in T19.
 """
 
 from collections.abc import Iterator
@@ -9,7 +9,7 @@ from contextlib import contextmanager
 
 from fastapi import APIRouter, HTTPException, Request, Security, status
 
-from spoolhq.api.schemas.runs import CurrentRun, Discarded, RunView, StartRun
+from spoolhq.api.schemas.runs import CurrentRun, Discarded, Reject, RunView, StartRun
 from spoolhq.api.security import bearer_scheme
 from spoolhq.services.runloop import NotFoundError, RunLoop, RunLoopError
 
@@ -56,10 +56,17 @@ def cancel_run(name: str, run_id: int, request: Request) -> RunView:
         return RunView.of(_loop(request).cancel(name, run_id))
 
 
+@router.post("/tickets/{ticket_id}/approve")
 @router.post("/tickets/{ticket_id}/integrate")
-def integrate_ticket(name: str, ticket_id: str, request: Request) -> RunView:
+def approve_ticket(name: str, ticket_id: str, request: Request) -> RunView:
     with errors():
-        return RunView.of(_loop(request).integrate_ticket(name, ticket_id))
+        return RunView.of(_loop(request).approve(name, ticket_id))
+
+
+@router.post("/tickets/{ticket_id}/reject")
+def reject_ticket(name: str, ticket_id: str, body: Reject, request: Request) -> RunView:
+    with errors():
+        return RunView.of(_loop(request).reject(name, ticket_id, body.note))
 
 
 @router.post("/tickets/{ticket_id}/discard")

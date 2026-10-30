@@ -195,7 +195,7 @@ def test_a_pull_request_is_opened_then_merged(
     assert "| just test | ✅ pass | 0.1 s |" in data["body"]
     assert data["body"].endswith(f"SpoolHQ run {run.id} · ticket T01")
     with pytest.raises(RunLoopError, match="T01 waits on PR #1"):
-        loop.integrate_ticket("demo", "T01")
+        loop.approve("demo", "T01")
 
     poller = GitHubPoller(loop, registry, github=fake.client, clock=clock)
     assert poller.sync("demo") == ["T01: PR #1 open"]

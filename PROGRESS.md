@@ -224,3 +224,12 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - CLI `spool secrets set github`, `spool github sync`; the PR in `spool run status`, `spool tickets show` and the run views; `POST /api/projects/{name}/github/sync`.
 - Docs: new `docs/github.md`; `integration.md`, `git.md`, `project-yaml.md`, `run-loop.md`, `runs.md`, `context.md`, `templates.md`, `architecture.md`, the docs index and the README; DECISIONS 233–245.
 - Tests use a local bare repository as the remote (`url.<bare>.insteadOf`) and a fake GitHub API (`httpx.MockTransport`); the opt-in test against a real repository (`SPOOLHQ_GITHUB_TEST_REPO`) was not run.
+
+## T18 · Merge policy
+
+- Step 0: a local template folder that is a git repository is cloned through `run_git` (hooks and signing off) at `--template-ref` (default `HEAD`) and handed to Copier as a plain folder; remote git calls run ssh with `BatchMode=yes` unless the user set their own ssh command (kept, one warning). DECISIONS 246–247.
+- `services/runloop/policy.py` (new, pure): the rules (`needs_human`, `review_required`, `diff_size`, `protected_paths`, `hold_mode`), the path matcher, `PolicyDecision`, `delivery_mode` and `describe`. `services/git/diffstat.py` (new): the staged squash's files and line counts, renames included.
+- `services/runloop/approval.py` (new): the decision on the staged squash during integration (event `policy.decision`, run row `policy`, schema 7), local approval, `approve` and `reject`. A `needs_human` verdict with passed gates now goes to a person; hold mode is the `hold_mode` rule. PR bodies start with "Why this needs you".
+- `project.yaml`: `merge_policy.max_diff_lines` (10–100,000), `protected_paths` (replaces the new default list), `protected_paths_extra`; bad patterns are refused by field.
+- CLI `spool run approve` (alias `integrate`), `spool run reject --note`; the decision in `spool run status` and `spool runs show`. API `POST /api/projects/{name}/tickets/{id}/approve` (alias `/integrate`) and `/reject`; `policy` on the run view.
+- Docs: new `docs/merge-policy.md`; `github.md`, `run-loop.md`, `review.md`, `project-yaml.md`, `integration.md`, `runs.md`, `architecture.md`, `templates.md`, the docs index and the README; DECISIONS 246–256.

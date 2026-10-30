@@ -8,7 +8,7 @@ from spoolhq.services.agents import AgentPolicy, Budget, FakeRunner
 from spoolhq.services.agents.claude_config import build_argv
 from spoolhq.services.projects import Budget as ProjectBudget
 from spoolhq.services.projects import load_project, save_project
-from spoolhq.services.runloop import HoldForIntegration, RunLoop, next_kind
+from spoolhq.services.runloop import Delivery, HoldForIntegration, RunLoop, next_kind
 from spoolhq.services.runs import (
     Attempt,
     AttemptKind,
@@ -199,17 +199,21 @@ def test_changes_requested_three_times_blocks(
     assert (worktrees / "demo" / "T01").is_dir()
 
 
-def test_needs_human_blocks_at_once(
+def test_needs_human_with_passed_gates_waits_for_a_person(
     make_loop: LoopFactory, transcripts: Transcripts, registry: RunRegistry, worktrees: Path
 ) -> None:
-    loop, _ = make_loop([transcripts.implement()], [transcripts.review("needs_human")])
+    loop, _ = make_loop(
+        [transcripts.implement()], [transcripts.review("needs_human")], integrator=Delivery()
+    )
 
     run = run_once(loop)
 
     final = log_of(registry).get_run(run.id)
-    assert final.status is RunStatus.BLOCKED
-    assert final.reason == "the reviewer asked for a person: needs_human."
-    assert len(log_of(registry).list_attempts(run.id)) == 1
+    assert final.status is RunStatus.AWAITING_APPROVAL
+    assert final.reason is not None
+    assert final.reason.startswith("T01 needs you: needs_human (needs_human.); approve with")
+    attempts = log_of(registry).list_attempts(run.id)
+    assert [a.status for a in attempts] == [AttemptStatus.NEEDS_HUMAN]
     assert (worktrees / "demo" / "T01").is_dir()
 
 
@@ -370,12 +374,13 @@ def test_run_all_runs_every_ready_ticket_in_id_order(
     assert [run.status for run in log_of(registry).list_runs()] == [RunStatus.DONE] * 3
 
 
-def test_run_all_stops_at_a_blocked_ticket(
+def test_run_all_stops_at_a_ticket_that_waits(
     make_loop: LoopFactory, transcripts: Transcripts, projects_dir: Path
 ) -> None:
     loop, _ = make_loop(
         [transcripts.implement() for _ in range(2)],
         [transcripts.review("approve"), transcripts.review("needs_human")],
+        integrator=Delivery(),
     )
 
     loop.start("demo", "all")
@@ -383,7 +388,7 @@ def test_run_all_stops_at_a_blocked_ticket(
 
     assert [ticket_status(projects_dir, t) for t in ("T01", "T02", "T03")] == [
         "done",
-        "blocked",
+        "awaiting_approval",
         "ready",
     ]
 
@@ -391,7 +396,9 @@ def test_run_all_stops_at_a_blocked_ticket(
 def test_run_commits_on_the_branch_and_main_is_untouched(
     make_loop: LoopFactory, transcripts: Transcripts, repo: Path
 ) -> None:
-    loop, _ = make_loop([transcripts.implement()], [transcripts.review("needs_human")])
+    loop, _ = make_loop(
+        [transcripts.implement()], [transcripts.review("needs_human")], integrator=Delivery()
+    )
 
     run_once(loop)
 
@@ -412,6 +419,7 @@ def test_run_commits_on_the_branch_and_main_is_untouched(
         ([(AttemptKind.INITIAL, AttemptStatus.CHANGES_REQUESTED)], AttemptKind.REVIEW_RETRY),
         ([(AttemptKind.INITIAL, AttemptStatus.ERROR)], AttemptKind.GATE_RETRY),
         ([(AttemptKind.INITIAL, AttemptStatus.APPROVED)], None),
+        ([(AttemptKind.INITIAL, AttemptStatus.NEEDS_HUMAN)], None),
     ],
 )
 def test_next_kind(

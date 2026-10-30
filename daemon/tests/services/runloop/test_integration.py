@@ -395,10 +395,10 @@ def test_a_dirty_main_checkout_waits_then_integrates(
     with pytest.raises(RunLoopError, match="T01 is awaiting_approval"):
         loop.start("demo", "next", "T01")
     with pytest.raises(RunLoopError, match="T02 is ready, not awaiting approval"):
-        loop.integrate_ticket("demo", "T02")
+        loop.approve("demo", "T02")
 
     notes.unlink()
-    loop.integrate_ticket("demo", "T01")
+    loop.approve("demo", "T01")
     loop.wait("demo")
 
     assert log.get_run(run_id).status is RunStatus.DONE
@@ -527,12 +527,15 @@ def test_hold_mode_keeps_the_approved_ticket_until_integrate(
     path = worktrees / "demo" / "T01"
     assert (final.status, final.reason) == (
         RunStatus.AWAITING_APPROVAL,
-        f"T01 approved; merge it with `spool run integrate demo T01` — worktree kept at {path}",
+        "T01 needs you: hold_mode (run.integration is hold); approve with "
+        "`spool run approve demo T01` or reject with "
+        f'`spool run reject demo T01 --note "..."` — worktree kept at {path}',
     )
+    assert final.policy is not None and final.policy["mode"] == "approval"
     assert git(repo, "rev-parse", "main") == before
     assert status(projects_dir, "T02") == "ready"  # run all stopped there
 
-    loop.integrate_ticket("demo", "T01")
+    loop.approve("demo", "T01")
     loop.wait("demo")
 
     assert log.get_run(run_id).status is RunStatus.DONE

@@ -28,9 +28,8 @@ limits:
   gate_retries: 3
   review_retries: 2
 merge_policy:
-  max_direct_diff_lines: 400
-  protected_paths: ["**/migrations/**", ".github/**", "**/auth/**"]
-  always_pr: false
+  max_diff_lines: 400                         # optional
+  protected_paths_extra: ["infra/**"]         # optional: added to the default list
 git:
   remote: https://github.com/<owner>/<repo>   # optional
 tracker:
@@ -68,15 +67,15 @@ run:
 | `agents.budget_per_ticket.tokens` | no | | Positive whole number: cap on weighted tokens per ticket for subscription backends; one plan generation (both attempts) counts as one ticket. Weighted tokens = input + output + cache writes + cache reads × 0.1, since cache reads cost a tenth of fresh input. T29, for example, used about 2.2M raw tokens (2.1M of them cache reads) but about 300k weighted. `spool runs show` lists the raw numbers and the weighted total. |
 | `limits.gate_retries` | no | `3` | Whole number from 0 to 10. |
 | `limits.review_retries` | no | `2` | Whole number from 0 to 10. |
-| `merge_policy.max_direct_diff_lines` | no | `400` | Whole number above 0. Larger diffs wait for approval in a pull request. |
-| `merge_policy.protected_paths` | no | `["**/migrations/**", ".github/**", "**/auth/**"]` | List of globs. A ticket touching one of these waits for approval. |
-| `merge_policy.always_pr` | no | `false` | `true` sends every ticket through a pull request. |
+| `merge_policy.max_diff_lines` | no | `400` | Whole number from 10 to 100,000. A squash diff with more added plus removed lines (lockfiles not counted) needs a person ([merge policy](merge-policy.md)). |
+| `merge_policy.protected_paths` | no | the [default list](merge-policy.md#protected-paths) | List of repo-relative patterns (`**` spans folders); replaces the default. A ticket touching a match needs a person. Absolute patterns, `..` folders and empty ones are refused. |
+| `merge_policy.protected_paths_extra` | no | `[]` | Patterns added to `protected_paths`; same rules. |
 | `git.remote` | no | | A GitHub URL: `https://github.com/<owner>/<repo>` (optionally ending in `.git`) or `git@github.com:<owner>/<repo>.git`. The owner is 1–39 letters, digits or hyphens; the repository is 1–100 letters, digits, `.`, `_` or `-`; neither may start with `-` or `.`. With it, approved tickets are delivered to GitHub ([GitHub delivery](github.md)); without it, they merge locally. |
 | `context.max_chars` | no | `120000` | Whole number from 20,000 to 2,000,000: the most characters the implementer's prompt may have ([context](context.md)). |
 | `context.progress_entries` | no | `3` | Whole number from 1 to 1,000: how many of the newest `PROGRESS.md` entries the implementer's prompt includes. |
 | `context.decisions_lines` | no | `20` | Whole number from 1 to 10,000: how many of the newest non-blank `DECISIONS.md` lines the implementer's prompt includes. |
 | `gates.timeouts.install`, `gates.timeouts.lint`, `gates.timeouts.test` | no | `600`, `300`, `900` | Whole number of seconds from 10 to 7,200. When it passes, the gate's whole process tree is stopped ([gates](gates.md#timeouts)). |
-| `run.integration` | no | `local` | `local` merges each approved ticket into the default branch as one commit ([integration](integration.md)); `hold` keeps it in `awaiting_approval` until `spool run integrate`. |
+| `run.integration` | no | `local` | `local` merges each approved ticket into the default branch as one commit ([integration](integration.md)); `hold` keeps every ticket in `awaiting_approval` until `spool run approve` (the merge policy's `hold_mode` rule). |
 | `tracker.kind` | no | `clickup` | Only `clickup` for now. |
 | `tracker.list_id` | when `tracker` is set | | Non-empty string; quote it (`"901"`) if it is all digits. |
 
@@ -107,7 +106,7 @@ Every problem is reported at once, one line each, as `project.yaml: <dotted.path
 | Unclosed quote in a command | `project.yaml: commands.test: can't be split into arguments: No closing quotation` |
 | Unknown integration mode | `project.yaml: run.integration: must be one of 'local' or 'hold'` |
 | Gate timeout out of range | `project.yaml: gates.timeouts.test: must be at least 10` (or `must be at most 7200`) |
-| Wrong type | `project.yaml: merge_policy.always_pr: input should be a valid boolean, unable to interpret input` |
+| Wrong type | `project.yaml: limits.gate_retries: input should be a valid integer, unable to parse string as an integer` |
 | YAML syntax error | `project.yaml: line 3, column 1: expected the node content, but found '<stream end>'` |
 | Duplicate key | `project.yaml: line 2, column 1: found duplicate key "name" with value "again" (original value: "demo")` |
 

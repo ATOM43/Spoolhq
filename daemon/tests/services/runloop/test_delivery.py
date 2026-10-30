@@ -1,7 +1,6 @@
 """Direct GitHub delivery through the run loop: a local bare repository stands in for
 GitHub (``url.<bare>.insteadOf``), with fake agents and gates."""
 
-import dataclasses
 import os
 import subprocess
 import sys
@@ -15,7 +14,6 @@ from spoolhq.services.runloop import (
     Delivery,
     HoldForIntegration,
     RunLoop,
-    delivery_mode,
     recover_integrations,
 )
 from spoolhq.services.runs import RunLog, RunRegistry, RunStatus, open_integrations
@@ -72,15 +70,6 @@ def mate(bare: Path) -> Callable[[str], str]:
 @pytest.fixture
 def delivery(clock: ManualClock) -> Delivery:
     return Delivery(clock=clock)
-
-
-def test_delivery_mode(project: Path, projects_dir: Path) -> None:
-    ticket = load_ticket("demo", "T01", projects_dir=projects_dir)
-    assert delivery_mode(ticket, None) == "direct"
-    reviewed = dataclasses.replace(
-        ticket, meta=ticket.meta.model_copy(update={"review_required": True})
-    )
-    assert delivery_mode(reviewed, None) == "pr"
 
 
 @pytest.mark.integration
@@ -248,7 +237,7 @@ def test_local_main_behind_with_a_dirty_checkout_waits_untouched(
 
     # Once the checkout is clean, integrating fast-forwards main first, then delivers.
     dirty.unlink()
-    loop.integrate_ticket("demo", "T01")
+    loop.approve("demo", "T01")
     loop.wait("demo")
     assert status(projects_dir) == "done"
     sha = git(bare, "rev-parse", "main")

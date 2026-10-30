@@ -32,7 +32,40 @@ AGENT_BACKENDS: tuple[str, ...] = get_args(AgentBackend)
 SLUG_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
 SLUG_RULE = "must be 1-63 lowercase letters, digits or hyphens, starting with a letter or digit"
 
-DEFAULT_PROTECTED_PATHS = ["**/migrations/**", ".github/**", "**/auth/**"]
+LOCKFILES = (
+    "uv.lock",
+    "poetry.lock",
+    "pnpm-lock.yaml",
+    "package-lock.json",
+    "yarn.lock",
+    "Cargo.lock",
+)
+"""File names that don't count toward the merge policy's diff size (they are protected)."""
+DEFAULT_PROTECTED_PATHS = (
+    # CI and tooling
+    ".github/**",
+    "justfile",
+    "Makefile",
+    "**/Dockerfile",
+    "docker-compose*.yml",
+    # migrations
+    "**/migrations/**",
+    "**/alembic/**",
+    # auth and security
+    "**/auth/**",
+    "**/*auth*.py",
+    "**/security/**",
+    # dependencies
+    "**/pyproject.toml",
+    "**/package.json",
+    "**/Cargo.toml",
+    *(f"**/{name}" for name in LOCKFILES),
+    # agent instructions
+    "CLAUDE.md",
+    "**/CLAUDE.md",
+    ".claude/**",
+    "prompts/**",
+)
 
 # Set as validation context by load_project, so `name` must match the folder name.
 FOLDER_NAME_CONTEXT = "folder_name"
@@ -105,12 +138,30 @@ class Limits(_Strict):
     review_retries: int = Field(default=2, ge=0, le=10)
 
 
+def _check_path_pattern(value: str) -> str:
+    if value.startswith(("/", "\\")) or re.match(r"[A-Za-z]:", value):
+        raise ValueError(f"must be a repo-relative pattern, got {value!r}")
+    if ".." in value.split("/"):
+        raise ValueError(f"must not contain '..', got {value!r}")
+    return value
+
+
+PathPattern = Annotated[NonEmptyStr, AfterValidator(_check_path_pattern)]
+
+
 class MergePolicy(_Strict):
-    max_direct_diff_lines: int = Field(default=400, gt=0)
-    protected_paths: list[NonEmptyStr] = Field(
+    """When an approved ticket needs a person (docs/merge-policy.md)."""
+
+    max_diff_lines: int = Field(default=400, ge=10, le=100_000)
+    protected_paths: list[PathPattern] = Field(
         default_factory=lambda: list(DEFAULT_PROTECTED_PATHS)
     )
-    always_pr: bool = False
+    """Replaces the default list."""
+    protected_paths_extra: list[PathPattern] = Field(default_factory=list)
+    """Added to ``protected_paths``."""
+
+    def protected(self) -> list[str]:
+        return [*self.protected_paths, *self.protected_paths_extra]
 
 
 class GitSettings(_Strict):

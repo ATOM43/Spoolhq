@@ -1,5 +1,5 @@
-"""`spool run`: start, follow, pause, resume, cancel, integrate and discard runs in the
-daemon.
+"""`spool run`: start, follow, pause, resume, cancel, approve, reject and discard runs in
+the daemon.
 
 The daemon owns the loop, so these commands only call its API. `next` and `all` start
 a run and then print one line per phase change until it ends; Ctrl-C detaches and
@@ -117,21 +117,38 @@ def cancel_command(project: ProjectArg, run_id: RunOption = None) -> None:
     typer.echo(f"cancelling run {run['id']} ({run['ticket_id']})")
 
 
+TicketArg = Annotated[str, typer.Argument(metavar="TICKET", help="Ticket id, like T04.")]
+
+
+@run_app.command("approve")
 @run_app.command("integrate")
-def integrate_command(
-    project: ProjectArg,
-    ticket: Annotated[str, typer.Argument(metavar="TICKET", help="Ticket id, like T04.")],
-) -> None:
-    """Merge an approved ticket waiting for integration, and follow it."""
-    _call("POST", f"{_base(project)}/tickets/{ticket}/integrate")
+def approve_command(project: ProjectArg, ticket: TicketArg) -> None:
+    """Merge a ticket waiting for your approval (or for integration), and follow it."""
+    _call("POST", f"{_base(project)}/tickets/{ticket}/approve")
     _follow(project)
 
 
-@run_app.command("discard")
-def discard_command(
+@run_app.command("reject")
+def reject_command(
     project: ProjectArg,
-    ticket: Annotated[str, typer.Argument(metavar="TICKET", help="Ticket id, like T04.")],
+    ticket: TicketArg,
+    note: Annotated[str, typer.Option("--note", help="What should change.")] = "",
 ) -> None:
+    """Send a waiting ticket back to the agent with your note, and follow it."""
+    if not note.strip():
+        fail("error: say what should change with --note")
+    _call("POST", f"{_base(project)}/tickets/{ticket}/reject", {"note": note})
+    _follow(project)
+
+
+def policy_line(run: dict[str, Any]) -> str:
+    """The run's merge-policy hits (``needs you: …``), or ``""``."""
+    policy = run.get("policy")
+    return str(policy["summary"]) if policy else ""
+
+
+@run_app.command("discard")
+def discard_command(project: ProjectArg, ticket: TicketArg) -> None:
     """Remove an interrupted or blocked ticket's worktree and set it back to ready."""
     _call("POST", f"{_base(project)}/tickets/{ticket}/discard")
     typer.echo(f"{ticket} discarded; it is ready again")
@@ -148,6 +165,8 @@ def status_command(project: ProjectArg) -> None:
             typer.echo(
                 f"{run['ticket_id']} · {run['status']} · PR #{run['pr_number']} · {run['pr_url']}"
             )
+        if run is not None and run["status"] == "awaiting_approval" and policy_line(run):
+            typer.echo(f"{run['ticket_id']} · {run['status']} · {policy_line(run)}")
         merged = current.get("last_merged")
         if merged is not None:
             sha = merged["commit"][:SHORT_SHA]
@@ -160,5 +179,7 @@ def status_command(project: ProjectArg) -> None:
     )
     if run.get("pr_number") is not None:
         typer.echo(f"PR #{run['pr_number']} · {run['pr_url']}")
+    if policy_line(run):
+        typer.echo(policy_line(run))
     if current["phases"]:
         typer.echo(current["phases"][-1]["text"])

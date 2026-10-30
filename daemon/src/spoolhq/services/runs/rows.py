@@ -14,7 +14,7 @@ MAX_PAYLOAD_BYTES = 64 * 1024
 
 RUN_COLUMNS = (
     "id, ticket_id, status, reason, daemon_instance, started_at, ended_at, progress_note, "
-    "reset_at, kind, pr_number, pr_url, pr_branch"
+    "reset_at, kind, pr_number, pr_url, pr_branch, policy"
 )
 ATTEMPT_COLUMNS = (
     "id, run_id, ticket_id, number, kind, status, dir, backend, model, input_tokens, "
@@ -72,6 +72,7 @@ def to_run(row: tuple[Any, ...]) -> Run:
         pr_number=row[10],
         pr_url=row[11],
         pr_branch=row[12],
+        policy=json.loads(row[13]) if row[13] is not None else None,
     )
 
 

@@ -18,9 +18,10 @@ from spoolhq.services.gates import run_gates
 from spoolhq.services.git import GitError, Worktree, WorktreeManager, ensure_clean
 from spoolhq.services.git import ensure_no_operation_in_progress as ensure_no_operation
 from spoolhq.services.projects import Project, load_project, project_dir
+from spoolhq.services.runloop import approval
 from spoolhq.services.runloop.delivery import Delivery
 from spoolhq.services.runloop.integration import last_merged
-from spoolhq.services.runloop.integrator import HoldForIntegration, Integrator
+from spoolhq.services.runloop.integrator import Integrator
 from spoolhq.services.runloop.lock import active_message, take_run_lock
 from spoolhq.services.runloop.machine import drive, next_kind
 from spoolhq.services.runloop.model import (
@@ -121,9 +122,6 @@ class RunLoop:
         worktree: Worktree,
         integrator: Integrator | None = None,
     ) -> RunContext:
-        if integrator is None:
-            hold = settings.run.integration == "hold"
-            integrator = HoldForIntegration() if hold else self.integrator
         return RunContext(
             project=settings,
             workspace=workspace,
@@ -135,7 +133,7 @@ class RunLoop:
             worktrees=manager,
             worktree=worktree,
             agents=self.agents,
-            integrator=integrator,
+            integrator=integrator or self.integrator,
             gates=self.gates,
             flags=Flags(),
         )
@@ -408,22 +406,13 @@ class RunLoop:
             self._spawn(active, ctx, kind, False)
             return ctx.run
 
-    def integrate_ticket(self, project: str, ticket_id: str) -> Run:
-        """Integrate an approved ticket waiting in ``awaiting_approval`` (a dirty main
-        checkout, an interrupted integration, or ``run.integration: hold``)."""
-        settings, workspace, run_log = self._project(project)
-        with self._mutex:
-            self._check_free(project)
-            with user_errors():
-                ticket = load_ticket(project, ticket_id, projects_dir=self.projects_dir)
-                runs = run_log.list_runs(ticket_id=ticket_id, limit=1)
-            latest, status = runs[0] if runs else None, ticket.meta.status
-            if status != "awaiting_approval" or latest is None or latest.status != status:
-                raise RunLoopError(f"{ticket_id} is {status}, not awaiting approval")
-            if latest.pr_number is not None:
-                raise RunLoopError(f"{ticket_id} waits on PR #{latest.pr_number}: {latest.pr_url}")
-            # Always the real integrator: this is how a held ticket gets merged.
-            return self._continue(settings, workspace, run_log, latest, self.integrator)
+    def approve(self, project: str, ticket_id: str) -> Run:
+        """Integrate a ticket waiting in ``awaiting_approval`` (``approval.approve``)."""
+        return approval.approve(self, project, ticket_id)
+
+    def reject(self, project: str, ticket_id: str, note: str) -> Run:
+        """A ``pr_changes`` attempt with ``note`` for a waiting ticket (``approval.reject``)."""
+        return approval.reject(self, project, ticket_id, note)
 
     def discard(self, project: str, ticket_id: str) -> None:
         """Remove the worktree of an interrupted or blocked ticket; ticket back to ``ready``."""

@@ -1,11 +1,14 @@
-"""services/runs/pulls.py: the pull request stored on a run, and the open ones."""
+"""services/runs/pulls.py and policy.py: the pull request and the policy decision stored
+on a run."""
 
 from pathlib import Path
 
 from spoolhq.services.runs import (
+    EventKind,
     RunLog,
     RunStatus,
     open_pull_requests,
+    record_policy,
     set_pull_request,
 )
 
@@ -26,3 +29,14 @@ def test_open_pull_requests_are_each_tickets_latest_waiting_run(tmp_path: Path) 
 
         assert [r.ticket_id for r in open_pull_requests(log)] == ["T02"]
         assert newer.pr_number is None
+
+
+def test_record_policy_stores_the_decision_and_logs_it(tmp_path: Path) -> None:
+    decision = {"mode": "pr", "rules": [{"rule": "diff_size", "detail": "401 lines > 400"}]}
+    with RunLog(tmp_path, daemon_instance="A") as log:
+        run = log.start_run("T01")
+        assert run.policy is None
+        assert record_policy(log, run.id, decision).policy == decision
+        assert log.get_run(run.id).policy == decision
+        events = log.events_since(0, run_id=run.id, limit=100)
+        assert [e.payload for e in events if e.kind is EventKind.POLICY_DECISION] == [decision]

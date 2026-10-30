@@ -16,4 +16,5 @@ User and developer documentation will live here: architecture, the daemon API, t
 - [run-loop.md](run-loop.md): the run loop: retries, pause, resume, cancel and the integration seam
 - [integration.md](integration.md): merging an approved ticket into the local default branch
 - [github.md](github.md): GitHub delivery: direct pushes, pull requests, the token and polling
+- [merge-policy.md](merge-policy.md): when an approved ticket needs a person: the rules, pull requests and local approval
 - [testing.md](testing.md): running and writing tests

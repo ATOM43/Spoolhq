@@ -15,7 +15,7 @@ For each run:
 5. **Review** ([review](review.md)) of `git diff <base>...HEAD`, with the items the gates checked taken from `check_done_when`. The worktree's `HEAD` and `git status` must be the same before and after; if not, the run is blocked with `reviewer changed the worktree`. The verdict goes to `review.json`.
    - `approve`: the attempt ends `approved`; step 6.
    - `changes_requested`: with review retries left, a `review_retry` attempt starts at step 2 with the unmet items as review notes, else blocked: `changes requested after 2 retries`.
-   - `needs_human`: blocked at once: `the reviewer asked for a person: <summary>`.
+   - `needs_human`: the attempt ends `needs_human` and the run goes to integration like an approved one; the [merge policy](merge-policy.md) then sends it to a person (a pull request with a remote, else local approval) with the reviewer's summary first.
 6. **Integrate.** The `Integrator` gets the approved run (see [The integration seam](#the-integration-seam) and [integration.md](integration.md)). A merge conflict with main starts one `conflict_retry` attempt; gates failing on the merged code start a `gate_retry`.
 
 Before each attempt the loop checks `agents.budget_per_ticket` (tokens and/or USD) against the run's total usage (tokens weighted, cache reads at a tenth); when it is used up the run is blocked: `budget used up: 2,104,331 of 2,000,000 weighted tokens` (or `budget used up: $2.10 of $2.00`).
@@ -61,10 +61,10 @@ After an early stop the next prompt's `<previous_attempt>` says so (`Your last a
 | Run status | How | Ticket | Worktree | What next |
 | --- | --- | --- | --- | --- |
 | `paused` | a usage limit, or `spool run pause` | `running` | kept | resumes by itself at `reset_at` + 60 s (usage limit, daemon running), or `spool run resume` |
-| `blocked` | retries used up, `needs_human`, an agent error, budget used up, the reviewer changed the worktree, an internal error | `blocked` | kept, for inspection | fix it, then `spool run discard` and run again |
+| `blocked` | retries used up, an agent error, budget used up, the reviewer changed the worktree, an internal error | `blocked` | kept, for inspection | fix it, then `spool run discard` and run again |
 | `cancelled` | `spool run cancel` | `ready` | removed, with its branch | — |
 | `interrupted` | the daemon stopped while the run was active ([runs](runs.md#recovery)) | `running` | kept | `spool run resume`, or `spool run discard` |
-| `awaiting_approval` | approved, and held (`run.integration: hold`), waiting for a clean main checkout, or its integration was interrupted | `awaiting_approval` | kept | `spool run integrate` |
+| `awaiting_approval` | the [merge policy](merge-policy.md) wants a person (hold mode included), waiting for a clean main checkout, or its integration was interrupted | `awaiting_approval` | kept | `spool run approve` (alias `integrate`) or `spool run reject --note` |
 | `awaiting_approval` with a pull request | delivered as a GitHub pull request ([github.md](github.md#pr-mode)) | `awaiting_approval` | removed | the poller: merged → `done`, changes requested → a `pr_changes` attempt, closed → `blocked` |
 | `done` | approved and merged | `done` | removed | — |
 
@@ -72,7 +72,7 @@ After an early stop the next prompt's `<previous_attempt>` says so (`Your last a
 
 **Pause** waits for the current agent call to finish (its work is committed), then stops before the next step. The attempt it stopped is `interrupted`, so resume starts a new attempt of the same kind, which doesn't count against the retries. A paused run still counts as the project's active run.
 
-**Resume** continues a `paused` run, or the newest `interrupted` run whose ticket is still `running`, in its kept worktree (`WorktreeManager.resume`). An interrupted run is reopened (`RunLog.reopen_run`: `interrupted` → `running`, the only way out of a terminal status). The next attempt's kind comes from the last attempt: an `interrupted` one is repeated, `gates_failed` (or an implementer `error` from an early stop) gives `gate_retry`, `changes_requested` gives `review_retry`, and an `approved` one only integrates. If the worktree is gone, the run is blocked: `the worktree of T04 is gone; discard it with spool run discard T04`.
+**Resume** continues a `paused` run, or the newest `interrupted` run whose ticket is still `running`, in its kept worktree (`WorktreeManager.resume`). An interrupted run is reopened (`RunLog.reopen_run`: `interrupted` → `running`, the only way out of a terminal status). The next attempt's kind comes from the last attempt: an `interrupted` one is repeated, `gates_failed` (or an implementer `error` from an early stop) gives `gate_retry`, `changes_requested` gives `review_retry`, and an `approved` or `needs_human` one only integrates. If the worktree is gone, the run is blocked: `the worktree of T04 is gone; discard it with spool run discard T04`.
 
 **Crash recovery.** At startup the run log marks a stopped daemon's active runs `interrupted` and keeps their worktrees ([git](git.md#crash-recovery)); their tickets stay `running`. Nothing resumes automatically after a crash: `spool run resume` continues the run, `spool run discard <ticket>` removes its worktree and branch and puts the ticket back to `ready`. Discard also works on a `blocked` ticket.
 
@@ -111,13 +111,13 @@ class Integrator(Protocol):
 - `failed` blocks the run with the message.
 - `held` puts the ticket and the run in `awaiting_approval` and keeps the worktree.
 
-The default is `Delivery`: `LocalIntegrator` ([integration.md](integration.md)) for a project without `git.remote`, GitHub delivery ([github.md](github.md)) for one with it. With `run.integration: hold` in `project.yaml`, the project gets `HoldForIntegration`, which holds every approved run:
+The default is `Delivery`: `LocalIntegrator` ([integration.md](integration.md)) for a project without `git.remote`, GitHub delivery ([github.md](github.md)) for one with it. Both ask the [merge policy](merge-policy.md) on the staged squash; a ticket that needs a person is `held`. `run.integration: hold` is one of its rules (`hold_mode`), so every ticket waits for `spool run approve`:
 
 ```text
-T04 approved; merge it with `spool run integrate demo T04` — worktree kept at /home/u/.spoolhq/worktrees/demo/T04
+T04 needs you: hold_mode (run.integration is hold); approve with `spool run approve demo T04` or reject with `spool run reject demo T04 --note "..."` — worktree kept at /home/u/.spoolhq/worktrees/demo/T04
 ```
 
-Tests use a fake one that returns `merged`.
+Tests use a fake one that returns `merged` (it never asks the policy), or `HoldForIntegration`, which holds every approved run without merging.
 
 ## Dependencies are injected
 
@@ -133,7 +133,8 @@ All routes need the token. Unknown projects, runs and tickets give 404; refusals
 | `POST /api/projects/{name}/runs/{id}/pause` | pause after the current step |
 | `POST /api/projects/{name}/runs/{id}/resume` | resume a paused or interrupted run |
 | `POST /api/projects/{name}/runs/{id}/cancel` | cancel |
-| `POST /api/projects/{name}/tickets/{id}/integrate` | integrate a ticket waiting in `awaiting_approval` ([integration](integration.md#spool-run-integrate)) |
+| `POST /api/projects/{name}/tickets/{id}/approve` (alias `/integrate`) | integrate a ticket waiting in `awaiting_approval` ([merge policy](merge-policy.md#local-approval)) |
+| `POST /api/projects/{name}/tickets/{id}/reject` `{"note": "..."}` | send a waiting ticket back with a note: a `pr_changes` attempt |
 | `POST /api/projects/{name}/tickets/{id}/discard` | discard an interrupted or blocked ticket's worktree |
 | `GET /api/projects/{name}/runs/current` | `active`, `working`, the active (else latest) run, its attempts, tokens and phase lines, and `last_merged` (`ticket_id`, full `commit`, `tag` of the latest finished integration, or `null`) |
 
@@ -141,14 +142,15 @@ All routes need the token. Unknown projects, runs and tickets give 404; refusals
 spool run next <project> [<ticket>]     # start, then follow: one line per phase change
 spool run all <project>
 spool run pause|resume|cancel <project> [--run <id>]
-spool run integrate <project> <ticket>
+spool run approve <project> <ticket>    # alias: spool run integrate
+spool run reject <project> <ticket> --note "<what should change>"
 spool run discard <project> <ticket>
 spool run status <project>              # or: no active run in 'demo'
 ```
 
-With no active run, `spool run status` shows the latest run's pull request if it has one (`T04 · awaiting_approval · PR #12 · <url>`), and adds the last merged ticket once a ticket has been integrated: `last merged: T04 · 1a2b3c4 · ticket/T04` (the squash commit's first 7 hex digits and its tag).
+With no active run, `spool run status` shows the latest run's pull request if it has one (`T04 · awaiting_approval · PR #12 · <url>`), and why it waits (`T04 · awaiting_approval · needs you: diff_size (812 lines > 400)`); an active run's status shows the same `needs you: …` line, and adds the last merged ticket once a ticket has been integrated: `last merged: T04 · 1a2b3c4 · ticket/T04` (the squash commit's first 7 hex digits and its tag).
 
-`next`, `all`, `resume` and `integrate` poll `runs/current` once a second until no worker is on the run, and exit 1 if it ended `blocked` or `cancelled`. Ctrl-C detaches and prints `run continues in the daemon; spool run status to check`; it does not cancel.
+`next`, `all`, `resume`, `approve` and `reject` poll `runs/current` once a second until no worker is on the run, and exit 1 if it ended `blocked` or `cancelled`. Ctrl-C detaches and prints `run continues in the daemon; spool run status to check`; it does not cancel.
 
 ## The real run
 

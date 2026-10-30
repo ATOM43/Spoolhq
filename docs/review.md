@@ -113,6 +113,8 @@ parse_slug has no test.
 
 It exits 0 for `approve`, 1 for `changes_requested` or `needs_human` (and for errors), 2 when the run didn't complete.
 
+In the run loop, a `needs_human` verdict (which comes only after the gates passed) no longer blocks: the [merge policy](merge-policy.md) sends the work to a person, a pull request with `git.remote` or local approval without, with the reviewer's summary shown first.
+
 ## Known limits
 
 - **A reviewer can still be misled by code it reads.** Text in the diff or the repository can try to talk it into a verdict. The tag blocks and rules make that harder; the code-side consistency checks are the backstop (an unmet item can never be approved), and the merge policy (T18) is the next one.
