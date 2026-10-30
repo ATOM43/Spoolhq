@@ -124,7 +124,8 @@ def test_no_bypass_flag_and_no_prompt(policy: AgentPolicy, worktree: Path, home:
 
 
 def test_paths_are_quoted_for_toml(tmp_path: Path) -> None:
-    worktree = tmp_path / 'a "quoted" \\ tree'
+    # Quotes and backslashes come through CODEX_HOME; Windows folder names can't hold quotes.
+    worktree = tmp_path / "tree with spaces"
     worktree.mkdir()
     policy = AgentPolicy.for_worktree(worktree, {}, tmp_path / "spool-home")
     odd = with_codex_home(policy, {"CODEX_HOME": 'C:\\Users\\me\\"codex"'})
