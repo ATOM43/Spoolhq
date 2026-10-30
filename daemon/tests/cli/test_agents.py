@@ -8,7 +8,8 @@ from typer.testing import CliRunner
 from spoolhq.cli import agents as agents_cli
 from spoolhq.cli import app
 from spoolhq.services.agents import BackendInfo, ClaudeCliRunner
-from tests.conftest import AGENT_FIXTURES, fake_claude_cmd, sandbox_which
+from spoolhq.services.projects import BackendSettings, load_project, save_project
+from tests.conftest import AGENT_FIXTURES, FakeBackend, fake_claude_cmd, sandbox_which
 
 runner = CliRunner()
 
@@ -65,3 +66,34 @@ def test_backends_are_separated_by_a_blank_line(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(agents_cli, "available_runners", lambda: [missing, missing])
     result = runner.invoke(app, ["agents"])
     assert result.output.splitlines()[3:5] == ["", "claude-code-cli"]
+
+
+def test_project_shows_each_roles_backend_model_and_endpoint(
+    workspace: Path, projects_dir: Path, fake_backend: FakeBackend
+) -> None:
+    fake_backend("fake-reviewer", ClaudeCliRunner())
+    settings = load_project("demo", projects_dir=projects_dir)
+    agents = settings.agents.model_copy(
+        update={
+            "reviewer": "fake-reviewer",
+            "backends": {
+                "claude-code-cli": BackendSettings(
+                    base_url="http://localhost:11434", model="qwen3-coder"
+                )
+            },
+        }
+    )
+    save_project(settings.model_copy(update={"agents": agents}), projects_dir=projects_dir)
+    result = runner.invoke(app, ["agents", "--project", "demo"])
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines() == [
+        "planner      claude-code-cli  model: qwen3-coder  endpoint: http://localhost:11434",
+        "implementer  claude-code-cli  model: qwen3-coder  endpoint: http://localhost:11434",
+        "reviewer     fake-reviewer  model: default  endpoint: default",
+    ]
+
+
+def test_unknown_project_fails() -> None:
+    result = runner.invoke(app, ["agents", "--project", "nope"])
+    assert result.exit_code == 1
+    assert "nope" in result.output

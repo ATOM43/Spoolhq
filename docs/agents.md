@@ -4,7 +4,7 @@ A coding agent implements one ticket in its own worktree. SpoolHQ talks to agent
 
 This is the security core of SpoolHQ: the agent must not be able to touch anything outside its worktree. SpoolHQ does not enforce that itself. Claude Code does, in four layers that SpoolHQ configures and then checks took effect.
 
-The code is `services/agents/`: the policy, budget, events and result in `model.py`, the interface in `runner.py`, the stream parser in `claude_stream.py`, the Claude Code adapter in `claude_cli.py`, with its command line, settings and environment in `claude_config.py`, the fake runner in `fake.py` and the list of backends in `backends.py`. It imports no other service package (an import-linter contract checks this); callers pass plain values in.
+The code is `services/agents/`: the policy, budget, events and result in `model.py`, the interface in `runner.py`, the stream parser in `claude_stream.py`, the Claude Code adapter in `claude_cli.py`, with its command line, settings and environment in `claude_config.py`, the fake runner in `fake.py` and the backend registry in `backends.py`. It imports no other service package (an import-linter contract checks this); callers pass plain values in.
 
 ## The interface
 
@@ -48,6 +48,53 @@ All are frozen dataclasses with a `kind`:
 | `timed_out` | `timeout_s` passed. |
 | `cancelled` | the `cancel` event was set. |
 | `error` | anything else; `error` holds the text and the last 50 lines of stderr. A policy check failing gives `policy not enforced: …`. |
+
+## Roles and backends
+
+`project.yaml` picks a backend per role: `agents.planner`, `agents.implementer` and `agents.reviewer`, each falling back to `agents.default` ([project.yaml](project-yaml.md)). `backends.py` holds the registry from backend name to adapter factory; today it knows only `claude-code-cli` (tests add fakes). An unknown name is refused when `project.yaml` loads, naming the field.
+
+The daemon builds each role's runner per project for every run (`Agents.for_project`), and the planner's when a plan starts; `spool plan generate` and `spool review` use the project's `agents.planner` and `agents.reviewer`.
+
+Each backend takes an optional `base_url` and `model` under `agents.backends`:
+
+```yaml
+agents:
+  default: claude-code-cli
+  backends:
+    claude-code-cli: { base_url: http://localhost:11434, model: qwen3-coder }
+```
+
+- `base_url` must be http or https, plain http only for `localhost`, `127.0.0.1` and `::1`, with no username or password.
+- For Claude Code, `base_url` becomes `ANTHROPIC_BASE_URL` in the `claude` process's environment and `model` becomes `--model` ([Claude Code environment variables](https://code.claude.com/docs/en/env-vars); `--model` overrides `ANTHROPIC_MODEL`). They are set for that child only; SpoolHQ never writes `~/.claude`, `~/.claude.json` or any other config of the user's. A daemon's own `ANTHROPIC_BASE_URL` is never passed on; without `base_url` and `model`, the command line and environment are as before.
+
+`spool agents --project <name>` prints the backend, model and endpoint of each role:
+
+```text
+planner      claude-code-cli  model: qwen3-coder  endpoint: http://localhost:11434
+implementer  claude-code-cli  model: qwen3-coder  endpoint: http://localhost:11434
+reviewer     claude-code-cli  model: qwen3-coder  endpoint: http://localhost:11434
+```
+
+### Local models with Ollama
+
+Ollama serves an Anthropic-compatible API, so Claude Code can drive a local model:
+
+1. Install Ollama and pull a coding model with tool use, e.g. `ollama pull qwen3-coder`.
+2. Point the backend at it in `project.yaml`:
+
+   ```yaml
+   agents:
+     backends:
+       claude-code-cli: { base_url: http://localhost:11434, model: qwen3-coder }
+   ```
+
+3. Check with `spool agents --project <name>`.
+
+SpoolHQ hasn't been tested against a real local model. Keep in mind:
+
+- Claude Code still checks your login (`claude auth status`) and may send its login credentials to whatever `base_url` points at (not verified). Only use an endpoint you trust; that's why plain http is limited to this machine.
+- The policy checks still apply: the model must work through Claude Code's tools, and the run stops if `init` lists the wrong tools.
+- Local models are much weaker at multi-step tool use; set it per role (for example only `agents.reviewer`) if you want to try one.
 
 ## The four policy layers
 
@@ -121,7 +168,7 @@ The worktree must not be, or contain, the user's home folder or the SpoolHQ home
 
 ## The environment allowlist
 
-The `claude` process gets only these variables from the daemon's environment: `PATH`, `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_*`, `TMPDIR`, `TMP`, `TEMP`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`, `CLAUDE_CONFIG_DIR`, `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, `https_proxy`, `http_proxy`, `no_proxy`, `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, and on Windows `SYSTEMROOT`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMSPEC`, `PATHEXT`. It always adds `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` and `DISABLE_AUTOUPDATER=1`.
+The `claude` process gets only these variables from the daemon's environment: `PATH`, `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_*`, `TMPDIR`, `TMP`, `TEMP`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`, `CLAUDE_CONFIG_DIR`, `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, `https_proxy`, `http_proxy`, `no_proxy`, `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, and on Windows `SYSTEMROOT`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMSPEC`, `PATHEXT`. It always adds `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` and `DISABLE_AUTOUPDATER=1`, and `ANTHROPIC_BASE_URL` when the backend has a `base_url` ([roles](#roles-and-backends)).
 
 `ANTHROPIC_API_KEY` is passed only for API billing. If it were in the environment, Claude Code would bill the API instead of the subscription, so a subscription login always wins: `detect()` checks `claude auth status` without the key first, and offers the key only when there is no subscription login. Tokens such as `GITHUB_TOKEN`, `CLICKUP_TOKEN` and `SPOOLHQ_TOKEN` never reach the agent.
 
@@ -155,9 +202,11 @@ The `rate_limit_event` fields, as observed from Claude Code 2.1.302 and in the A
 
 ## The fake runner
 
-`FakeRunner(transcript)` replays a recorded stream-json file through the same `ClaudeStreamParser` and calls the same callbacks (with the same tool check, read-only included), so tests can drive agent runs without a model or network. For a `Write` inside the worktree it writes the given content, so file effects can be tested. Given a list of transcripts, each `run()` replays the next one and a run past the end raises, so retries can be tested; `calls` holds each run's prompt and policy. Its `detect()` reports installed, logged in, `subscription`, enforceable. Transcripts live in `daemon/tests/fixtures/agents/claude/`; `recorded/real_run.jsonl` is an anonymised recording of the opt-in real run below.
+`FakeRunner(transcript, *, name="fake", stall_s=0)` replays a recorded stream-json file through the same `ClaudeStreamParser` and calls the same callbacks (with the same tool check, read-only included), so tests can drive agent runs without a model or network. For a `Write` inside the worktree it writes the given content, so file effects can be tested. Given a list of transcripts, each `run()` replays the next one and a run past the end raises, so retries can be tested; `calls` holds each run's prompt and policy. Its `detect()` reports installed, logged in, `subscription`, enforceable. Transcripts live in `daemon/tests/fixtures/agents/claude/`; `recorded/real_run.jsonl` is an anonymised recording of the opt-in real run below.
 
 The adapter itself is tested end to end with `daemon/tests/services/agents/fake_claude.py`, a stand-in `claude` binary that records its argv, environment and stdin and prints a scenario.
+
+**The contract suite** (`tests/services/agents/test_contract.py`) is one parametrised file every adapter must pass: a run that creates a file, a denied command reported and logged, a usage-limit pause with its reset time, a timeout, a cancel, and usage reported and weighted (cache reads count a tenth toward `max_tokens`). It runs over a list of `AdapterCase`s: the Claude Code adapter through the fake binary and the recorded transcripts, and `FakeRunner` (whose `stall_s` makes it hang like a stuck agent, so timeout and cancel apply). A new adapter adds one entry.
 
 **The real run** (`tests/services/agents/test_real_run.py`, marker `real_agent`) uses the installed `claude` and your subscription. It is skipped unless `SPOOLHQ_REAL_AGENT=1` and `claude auth status` says you are logged in:
 
@@ -168,7 +217,7 @@ SPOOLHQ_REAL_AGENT=1 SPOOLHQ_RECORD=1 uv run --directory daemon pytest -m real_a
 
 ## `spool agents`
 
-Lists the detected backends, for now only `claude-code-cli`:
+Lists the detected backends, for now only `claude-code-cli` (with `--project <name>`, the roles instead; see [roles](#roles-and-backends)):
 
 ```text
 claude-code-cli

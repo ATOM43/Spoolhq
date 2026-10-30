@@ -2,10 +2,10 @@
 
 from spoolhq.services.projects.errors import ProjectError, ProjectValidationError
 from spoolhq.services.projects.model import (
-    AGENT_BACKENDS,
     DEFAULT_PROTECTED_PATHS,
     LOCKFILES,
     Agents,
+    BackendSettings,
     Budget,
     Commands,
     ContextSettings,
@@ -13,6 +13,7 @@ from spoolhq.services.projects.model import (
     Limits,
     MergePolicy,
     Project,
+    Role,
     TemplateInfo,
     Tracker,
 )
@@ -27,8 +28,8 @@ from spoolhq.services.projects.workspace import (
 )
 
 __all__ = [
-    "AGENT_BACKENDS",
     "Agents",
+    "BackendSettings",
     "Budget",
     "Commands",
     "ContextSettings",
@@ -39,6 +40,7 @@ __all__ = [
     "LOCKFILES",
     "MergePolicy",
     "Project",
+    "Role",
     "ProjectError",
     "ProjectValidationError",
     "TemplateInfo",

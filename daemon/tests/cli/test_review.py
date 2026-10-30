@@ -27,7 +27,7 @@ def repo(workspace: Path, git_repo: Path, isolated_git: None) -> Path:
 
 def fake(monkeypatch: pytest.MonkeyPatch, *names: str) -> FakeRunner:
     runner_ = FakeRunner([REVIEW_FIXTURES / f"{name}.jsonl" for name in names])
-    monkeypatch.setattr(review, "make_runner", lambda: runner_)
+    monkeypatch.setattr(review, "make_runner", lambda project: runner_)
     return runner_
 
 

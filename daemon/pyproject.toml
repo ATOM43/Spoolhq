@@ -194,8 +194,8 @@ forbidden_modules = [
 name = "services.templates imports only projects, gates and git"
 type = "forbidden"
 source_modules = ["spoolhq.services.templates"]
+# agents is not listed: projects uses its backend registry to validate project.yaml.
 forbidden_modules = [
-    "spoolhq.services.agents",
     "spoolhq.services.context",
     "spoolhq.services.planner",
     "spoolhq.services.review",

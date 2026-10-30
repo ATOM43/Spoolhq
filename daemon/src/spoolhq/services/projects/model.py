@@ -6,7 +6,8 @@ setting. Validation also checks the repository on disk (read-only git calls).
 
 import re
 from pathlib import Path
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from pydantic import (
     AfterValidator,
@@ -17,6 +18,7 @@ from pydantic import (
     field_validator,
 )
 
+from spoolhq.services.agents import AgentRunner, backend_names, make_runner
 from spoolhq.services.gates import DEFAULT_TIMEOUTS, check_gate_command
 from spoolhq.services.git import (
     GitError,
@@ -26,8 +28,8 @@ from spoolhq.services.git import (
     is_work_tree,
 )
 
-AgentBackend = Literal["claude-code-cli", "codex-cli", "gemini-cli", "claude-agent-sdk"]
-AGENT_BACKENDS: tuple[str, ...] = get_args(AgentBackend)
+Role = Literal["planner", "implementer", "reviewer"]
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 SLUG_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
 SLUG_RULE = "must be 1-63 lowercase letters, digits or hyphens, starting with a letter or digit"
@@ -116,21 +118,57 @@ class Budget(_Strict):
     tokens: int | None = Field(default=None, gt=0)
 
 
+def _check_base_url(value: str) -> str:
+    """http(s) only, plain http only to this machine, and no credentials in the URL."""
+    try:
+        parts = urlsplit(value)
+        parts.port  # noqa: B018 - raises ValueError for a bad port
+    except ValueError as exc:
+        raise ValueError(f"{value!r} is not a valid URL") from exc
+    if parts.scheme not in {"http", "https"} or not parts.hostname:
+        raise ValueError(f"{value!r} must be an http or https URL")
+    if parts.username is not None or parts.password is not None:
+        raise ValueError("must not contain a username or password")
+    if parts.scheme == "http" and parts.hostname not in LOOPBACK_HOSTS:
+        raise ValueError(f"{value!r}: plain http is allowed only for localhost; use https")
+    return value
+
+
+def _check_backend(value: str) -> str:
+    names = backend_names()
+    if value not in names:
+        raise ValueError(f"unknown backend {value!r}; expected one of: {', '.join(names)}")
+    return value
+
+
+BackendName = Annotated[str, AfterValidator(_check_backend)]
+
+
+class BackendSettings(_Strict):
+    """A custom endpoint and model for one backend, e.g. a local Ollama server."""
+
+    base_url: Annotated[str, AfterValidator(_check_base_url)] | None = None
+    model: NonEmptyStr | None = None
+
+
 class Agents(_Strict):
-    default: AgentBackend = "claude-code-cli"
-    planner: AgentBackend | None = None
-    implementer: AgentBackend | None = None
-    reviewer: AgentBackend | None = None
+    default: BackendName = "claude-code-cli"
+    planner: BackendName | None = None
+    implementer: BackendName | None = None
+    reviewer: BackendName | None = None
+    backends: dict[BackendName, BackendSettings] = Field(default_factory=dict)
     budget_per_ticket: Budget | None = None
 
-    @field_validator("default", "planner", "implementer", "reviewer", mode="before")
-    @classmethod
-    def _known_backend(cls, value: object) -> object:
-        # Runs before the Literal check so the message lists the backends.
-        if isinstance(value, str) and value not in AGENT_BACKENDS:
-            expected = ", ".join(AGENT_BACKENDS)
-            raise ValueError(f"unknown backend {value!r}; expected one of: {expected}")
-        return value
+    def backend_for(self, role: Role) -> str:
+        """The role's backend: its override, or ``default``."""
+        override: str | None = getattr(self, role)
+        return override or self.default
+
+    def runner_for(self, role: Role) -> AgentRunner:
+        """The role's runner, with its backend's ``base_url`` and ``model``."""
+        name = self.backend_for(role)
+        backend = self.backends.get(name, BackendSettings())
+        return make_runner(name, base_url=backend.base_url, model=backend.model)
 
 
 class Limits(_Strict):

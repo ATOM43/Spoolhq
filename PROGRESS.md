@@ -233,3 +233,11 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - `project.yaml`: `merge_policy.max_diff_lines` (10–100,000), `protected_paths` (replaces the new default list), `protected_paths_extra`; bad patterns are refused by field.
 - CLI `spool run approve` (alias `integrate`), `spool run reject --note`; the decision in `spool run status` and `spool runs show`. API `POST /api/projects/{name}/tickets/{id}/approve` (alias `/integrate`) and `/reject`; `policy` on the run view.
 - Docs: new `docs/merge-policy.md`; `github.md`, `run-loop.md`, `review.md`, `project-yaml.md`, `integration.md`, `runs.md`, `architecture.md`, `templates.md`, the docs index and the README; DECISIONS 246–256.
+
+## T27 · Agent roles, custom endpoints and contract suite
+
+- `services/agents/backends.py`: a registry from backend name to factory `factory(base_url, model)`; only `claude-code-cli` is built in, and tests register fakes. `ClaudeCliRunner(base_url=…, model=…)` passes `ANTHROPIC_BASE_URL` in that child's environment and `--model` on its command line; without them, argv and environment are unchanged.
+- `project.yaml`: `agents.default`, `planner`, `implementer` and `reviewer` are checked against the registry (so `codex-cli`, `gemini-cli` and `claude-agent-sdk` are refused until T30/T31). New `agents.backends.<name>.base_url` (http(s); plain http only to localhost; no credentials) and `.model`.
+- The daemon builds each role's runner per project (`Agents.for_project`; `PlanJobs` for the planner); `spool plan generate` and `spool review` use the project's roles. `spool agents --project <name>` shows each role's backend, model and endpoint.
+- `tests/services/agents/test_contract.py`: one suite over adapter cases (Claude Code through the fake binary, and `FakeRunner`, which gained `name` and `stall_s`): file created, denial logged, usage-limit pause, timeout, cancel, weighted usage.
+- Docs: `agents.md` (roles and backends, local models with Ollama, contract suite), `project-yaml.md`, `planner.md`; DECISIONS 257–260. The opt-in real run passes with every role set explicitly.

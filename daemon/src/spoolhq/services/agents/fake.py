@@ -8,6 +8,7 @@ retries can be tested. No process, network or model is involved.
 
 import json
 import threading
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -30,12 +31,16 @@ class FakeRunner:
     """``AgentRunner`` that replays ``transcript`` (one JSON message per line).
 
     With a sequence, each ``run`` replays the next transcript, and a run past the end
-    raises. ``calls`` holds each run's prompt and policy.
+    raises. ``calls`` holds each run's prompt and policy. ``name`` tells fakes registered
+    as different backends apart. With ``stall_s``, the run then waits that long like a
+    hung agent, so the budget's ``timeout_s`` and ``cancel`` apply as in a real run.
     """
 
-    name = "fake"
-
-    def __init__(self, transcript: Path | Sequence[Path]) -> None:
+    def __init__(
+        self, transcript: Path | Sequence[Path], *, name: str = "fake", stall_s: float = 0
+    ) -> None:
+        self.name = name
+        self.stall_s = stall_s
         # One path is replayed on every run, as before sequences existed.
         self._repeat = isinstance(transcript, Path)
         self.transcripts = (transcript,) if isinstance(transcript, Path) else tuple(transcript)
@@ -80,9 +85,12 @@ class FakeRunner:
             backend=self.name,
             backend_version=FAKE_VERSION,
         )
+        deadline = time.monotonic() + budget.timeout_s
         for line in transcript.read_text(encoding="utf-8").splitlines():
             if cancel.is_set():
                 return parser.finish(Outcome.CANCELLED)
+            if time.monotonic() > deadline:
+                return parser.finish(Outcome.TIMED_OUT)
             if not line.strip():
                 continue
             message = json.loads(line)
@@ -97,6 +105,12 @@ class FakeRunner:
                 on_event(event)
             if budget.max_tokens is not None and parser.weighted_tokens > budget.max_tokens:
                 return parser.finish(Outcome.BUDGET_EXHAUSTED)
+        if self.stall_s:
+            remaining = max(deadline - time.monotonic(), 0)
+            if cancel.wait(min(self.stall_s, remaining)):
+                return parser.finish(Outcome.CANCELLED)
+            if self.stall_s > remaining:
+                return parser.finish(Outcome.TIMED_OUT)
         return parser.finish()
 
     @staticmethod

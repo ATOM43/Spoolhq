@@ -13,6 +13,7 @@ from spoolhq.core.daemon_lock import DaemonLock
 from spoolhq.services.agents import AgentRunner
 from spoolhq.services.gates import GateRun
 from spoolhq.services.git import GitError, Worktree, WorktreeManager
+from spoolhq.services.projects import Agents as AgentSettings
 from spoolhq.services.projects import Project, ProjectError
 from spoolhq.services.runs import Attempt, EventKind, Run, RunLog, Usage
 from spoolhq.services.scheduler import SchedulerError
@@ -48,12 +49,22 @@ class RunActiveError(RunLoopError):
 
 @dataclass(frozen=True)
 class Agents:
-    """The runner for each role; tests pass ``FakeRunner``s."""
+    """The runner for each role. The daemon builds them per project from ``project.yaml``
+    (``for_project``); tests may pass fixed ``FakeRunner``s instead."""
 
     implementer: AgentRunner
     reviewer: AgentRunner
     planner: AgentRunner | None = None
     """The planner's runner; ``None`` uses the implementer's."""
+
+    @classmethod
+    def for_project(cls, settings: AgentSettings) -> "Agents":
+        """Each role's backend from ``agents.*``, with ``agents.backends``' endpoint."""
+        return cls(
+            implementer=settings.runner_for("implementer"),
+            reviewer=settings.runner_for("reviewer"),
+            planner=settings.runner_for("planner"),
+        )
 
 
 class EndKind(StrEnum):

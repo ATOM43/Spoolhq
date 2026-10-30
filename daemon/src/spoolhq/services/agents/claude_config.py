@@ -18,6 +18,7 @@ from spoolhq.services.agents.claude_stream import CLAUDE_TOOLS, FILE_TOOLS, READ
 from spoolhq.services.agents.model import AgentPolicy, Billing, Budget, PolicyError
 
 API_KEY_VAR = "ANTHROPIC_API_KEY"
+BASE_URL_VAR = "ANTHROPIC_BASE_URL"
 ENV_SET = {
     # Claude Code removes its own credentials from the environment of the commands
     # the agent runs.
@@ -59,14 +60,19 @@ SCRUB_STUBS = (
 )
 
 
-def child_env(parent: Mapping[str, str], *, billing: Billing, platform: str) -> dict[str, str]:
+def child_env(
+    parent: Mapping[str, str], *, billing: Billing, platform: str, base_url: str | None = None
+) -> dict[str, str]:
     """The only environment the ``claude`` process gets: an allowlist, plus ENV_SET.
 
     ``ANTHROPIC_API_KEY`` is passed only for API billing; with it, Claude Code would
-    bill the API instead of the subscription.
+    bill the API instead of the subscription. ``base_url`` becomes ``ANTHROPIC_BASE_URL``
+    (https://code.claude.com/docs/en/env-vars); the parent's own value never passes.
     """
     env = allowed_env(parent, platform=platform, extra={API_KEY_VAR} if billing == "api" else ())
     env.update(ENV_SET)
+    if base_url is not None:
+        env[BASE_URL_VAR] = base_url
     return env
 
 

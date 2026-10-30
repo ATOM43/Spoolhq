@@ -13,19 +13,19 @@ import typer
 
 from spoolhq.cli.common import fail, settings
 from spoolhq.core.config import home_dir
-from spoolhq.services.agents import AgentRunner, BackendUnavailableError, available_runners
+from spoolhq.services.agents import AgentRunner, BackendUnavailableError
 from spoolhq.services.gates import GateRun, check_done_when
 from spoolhq.services.git import DirtyRepoError, GitError, ensure_clean, is_work_tree, run_git
-from spoolhq.services.projects import ProjectError, load_project, project_dir
+from spoolhq.services.projects import Project, ProjectError, load_project, project_dir
 from spoolhq.services.review import ReviewInputs, ReviewResult, review
 from spoolhq.services.tickets import TicketError, TicketValidationError, load_ticket
 
 PROMPTS_DIR = "prompts"
 
 
-def make_runner() -> AgentRunner:
-    """The reviewer's backend; tests replace it with a fake."""
-    return available_runners()[0]
+def make_runner(project: Project) -> AgentRunner:
+    """The project's ``agents.reviewer`` backend; tests replace it with a fake."""
+    return project.agents.runner_for("reviewer")
 
 
 def describe(result: ReviewResult) -> list[str]:
@@ -92,7 +92,7 @@ def review_command(
     try:
         result = review(
             inputs,
-            make_runner(),
+            make_runner(project_settings),
             home=home_dir(),
             override_dir=project_dir(project, projects_dir) / PROMPTS_DIR,
             cancel=threading.Event(),

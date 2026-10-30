@@ -50,8 +50,14 @@ class PlanJobs:
     """Starts plan generation for the daemon's projects and approves plans."""
 
     def __init__(
-        self, registry: RunRegistry, *, projects_dir: Path, home: Path, runner: AgentRunner
+        self,
+        registry: RunRegistry,
+        *,
+        projects_dir: Path,
+        home: Path,
+        runner: AgentRunner | None = None,
     ) -> None:
+        """Without ``runner``, each project's ``agents.planner`` backend is used."""
         self._registry = registry
         self.projects_dir = projects_dir
         self.home = home
@@ -69,7 +75,8 @@ class PlanJobs:
         """Start generating ``project``'s plan; returns the ``plan`` run (``running``)."""
         workspace = self._workspace(project)
         with user_errors():
-            load_project(project, projects_dir=self.projects_dir)
+            settings = load_project(project, projects_dir=self.projects_dir)
+        runner = self.runner or settings.agents.runner_for("planner")
         try:
             read_spec(workspace)
             load_existing(project, projects_dir=self.projects_dir)
@@ -83,11 +90,11 @@ class PlanJobs:
                 )
             run_log = self._registry.open(workspace).run_log
             run = run_log.start_plan_run()
-            attempt = run_log.start_attempt(run.id, AttemptKind.PLAN, backend=self.runner.name)
+            attempt = run_log.start_attempt(run.id, AttemptKind.PLAN, backend=runner.name)
             cancel = threading.Event()
             thread = threading.Thread(
                 target=self._work,
-                args=(project, run_log, attempt, template_description, cancel),
+                args=(project, runner, run_log, attempt, template_description, cancel),
                 name=f"plan-{project}",
                 daemon=True,
             )
@@ -98,6 +105,7 @@ class PlanJobs:
     def _work(
         self,
         project: str,
+        runner: AgentRunner,
         run_log: RunLog,
         attempt: Attempt,
         template_description: str | None,
@@ -111,7 +119,7 @@ class PlanJobs:
         try:
             result = generate_plan(
                 project,
-                self.runner,
+                runner,
                 projects_dir=self.projects_dir,
                 home=self.home,
                 template_description=template_description,

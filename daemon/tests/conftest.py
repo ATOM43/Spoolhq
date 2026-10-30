@@ -5,7 +5,7 @@ import shutil
 import socket
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -17,6 +17,7 @@ from keyring.backend import KeyringBackend
 
 from spoolhq.api import create_app
 from spoolhq.core.config import load_settings
+from spoolhq.services.agents import AgentRunner, backends
 from spoolhq.services.projects import init_project
 
 TESTS_DIR = Path(__file__).parent
@@ -212,6 +213,22 @@ def fake_claude_cmd(scenario: Path, record: Path, *options: str) -> list[str]:
 def sandbox_which(name: str) -> str | None:
     """A ``which`` that finds the Linux sandbox packages (bwrap, socat) and nothing else."""
     return f"/usr/bin/{name}" if name in {"bwrap", "socat"} else None
+
+
+FakeBackend = Callable[[str, AgentRunner], AgentRunner]
+
+
+@pytest.fixture
+def fake_backend(monkeypatch: pytest.MonkeyPatch) -> FakeBackend:
+    """``fake_backend(name, runner)`` registers ``runner`` as backend ``name`` (whatever
+    its ``base_url`` and ``model``) until the test ends, and returns it. A built-in
+    backend registered this way is restored afterwards."""
+
+    def register(name: str, runner: AgentRunner) -> AgentRunner:
+        monkeypatch.setitem(backends.BACKENDS, name, lambda base_url, model: runner)
+        return runner
+
+    return register
 
 
 FAKE_TOOL = TESTS_DIR / "services" / "gates" / "fake_tool.py"

@@ -20,7 +20,7 @@ Invalid ticket files stop the planner before it starts (`some ticket files are i
 
 ## The agent
 
-A fresh `claude` process with the reviewer's read-only policy (`AgentPolicy.read_only_for`): tools `Read`, `Glob` and `Grep` only, the same credential deny list, working folder the project's repository. Nothing is written by the agent, so no worktree is needed. The budget is 30 turns and, when `agents.budget_per_ticket.tokens` is set, at most that many weighted tokens over both attempts together (the planner counts as one ticket). The role is `agents.planner`, falling back to `agents.default`; only `claude-code-cli` exists for now.
+A fresh `claude` process with the reviewer's read-only policy (`AgentPolicy.read_only_for`): tools `Read`, `Glob` and `Grep` only, the same credential deny list, working folder the project's repository. Nothing is written by the agent, so no worktree is needed. The budget is 30 turns and, when `agents.budget_per_ticket.tokens` is set, at most that many weighted tokens over both attempts together (the planner counts as one ticket). The role is `agents.planner`, falling back to `agents.default` ([agents](agents.md#roles-and-backends)).
 
 ## The rules (the default prompt)
 
@@ -159,5 +159,4 @@ The planner's work is recorded in the [run log](runs.md) as a run of kind `plan`
 ## Known limits
 
 - **The spec isn't trimmed.** The whole `CONTEXT.md` goes into the prompt; a very large spec costs tokens on every turn.
-- **Only `claude-code-cli` runs the planner.** `agents.planner` accepts the other backend names, but they don't exist yet.
 - **Ids are not renumbered.** A plan with an id below the next free one is retried, not fixed.

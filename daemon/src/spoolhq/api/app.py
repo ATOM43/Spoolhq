@@ -13,17 +13,10 @@ from spoolhq.api.security import LocalOnlyMiddleware
 from spoolhq.api.worktrees import check_git, recover_all_integrations, recover_all_worktrees
 from spoolhq.core.auth import load_or_create_token
 from spoolhq.core.config import Settings, ensure_home, home_dir
-from spoolhq.services.agents import available_runners
 from spoolhq.services.runloop import Agents, GitHubPoller, Integrator, PlanJobs, RunLoop
 from spoolhq.services.runs import RunRegistry
 
 logger = logging.getLogger("spoolhq.daemon")
-
-
-def default_agents() -> Agents:
-    """The installed Claude Code for every role (``agents.*`` picks only it for now)."""
-    runner = available_runners()[0]
-    return Agents(implementer=runner, reviewer=runner, planner=runner)
 
 
 def create_app(
@@ -41,7 +34,7 @@ def create_app(
     one is given; then it checks git, finishes or undoes interrupted integrations
     (``app.state.integration_recovery``), removes the worktrees those runs left behind
     (``app.state.worktree_recovery``), and starts the run loop (``app.state.runloop``)
-    with ``agents`` (default: the installed Claude Code for every role) and
+    with ``agents`` (default: each project's ``agents.*`` backends) and
     ``integrator`` (default: ``Delivery``, local or to ``git.remote``; ``run.integration:
     hold`` per project).
     Plan generation runs beside it (``app.state.plans``, with ``agents.planner``), and
@@ -70,13 +63,12 @@ def create_app(
             app.state.worktree_recovery = recover_all_worktrees(
                 settings.projects_dir, settings.worktrees_dir, registry
             )
-            roles = agents or default_agents()
             app.state.runloop = RunLoop(
                 registry,
                 projects_dir=settings.projects_dir,
                 worktrees_dir=settings.worktrees_dir,
                 home=home_dir(),
-                agents=roles,
+                agents=agents,
                 integrator=integrator,
             )
             app.state.github = GitHubPoller(app.state.runloop, registry)
@@ -85,7 +77,7 @@ def create_app(
                 registry,
                 projects_dir=settings.projects_dir,
                 home=home_dir(),
-                runner=roles.planner or roles.implementer,
+                runner=(agents.planner or agents.implementer) if agents else None,
             )
             try:
                 yield

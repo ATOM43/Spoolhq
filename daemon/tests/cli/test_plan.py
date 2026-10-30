@@ -222,7 +222,7 @@ def test_set_status_on_an_invalid_file(projects_dir: Path) -> None:
 
 def use_planner(monkeypatch: pytest.MonkeyPatch, *transcripts: Path) -> FakeRunner:
     planner = FakeRunner(list(transcripts))
-    monkeypatch.setattr(plan, "make_runner", lambda: planner)
+    monkeypatch.setattr(plan, "make_runner", lambda project: planner)
     return planner
 
 

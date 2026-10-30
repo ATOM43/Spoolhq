@@ -4,9 +4,9 @@ from typing import Any
 
 import pytest
 
+from spoolhq.services.agents import FakeRunner
 from spoolhq.services.gates import SHELL_SYNTAX_ERROR as SHELL_SYNTAX
 from spoolhq.services.projects import (
-    AGENT_BACKENDS,
     DEFAULT_PROTECTED_PATHS,
     Project,
     ProjectError,
@@ -17,6 +17,9 @@ from spoolhq.services.projects import (
     template_description,
 )
 from spoolhq.services.projects import workspace as workspace_module
+from tests.conftest import AGENT_FIXTURES, FakeBackend
+
+ONLY_CLAUDE = "expected one of: claude-code-cli"
 
 
 def valid_data(repo: Path) -> dict[str, Any]:
@@ -92,8 +95,12 @@ commands:
   lint: just lint
   test: just test
 agents:
-  default: claude-code-cli        # claude-code-cli | codex-cli | gemini-cli | claude-agent-sdk
-  reviewer: codex-cli             # optional per-role override
+  default: claude-code-cli        # claude-code-cli (more backends come later)
+  reviewer: claude-code-cli       # optional per-role override
+  backends:
+    claude-code-cli:
+      base_url: http://localhost:11434
+      model: qwen3-coder
   budget_per_ticket:
     usd: 5                        # API backends
     tokens: 2000000               # subscription backends
@@ -111,7 +118,9 @@ tracker:
 """,
     )
     project = load_project("demo", projects_dir=projects_dir)
-    assert project.agents.reviewer == "codex-cli"
+    assert project.agents.reviewer == "claude-code-cli"
+    backend = project.agents.backends["claude-code-cli"]
+    assert (backend.base_url, backend.model) == ("http://localhost:11434", "qwen3-coder")
     assert project.agents.budget_per_ticket is not None
     assert project.agents.budget_per_ticket.tokens == 2_000_000
     assert project.template is not None
@@ -163,17 +172,34 @@ def test_missing_required_field_is_named(projects_dir: Path, git_repo: Path, fie
         ("git.remote", "https://github.com/owner/" + "r" * 101, "not a GitHub URL"),
         ("git.remote", "git@github.com:-owner/repo.git", "not a GitHub URL"),
         ("git.remote", "git@github.com:owner/.repo.git", "not a GitHub URL"),
+        ("agents.default", "copilot", "unknown backend 'copilot'; " + ONLY_CLAUDE),
+        ("agents.reviewer", "codex-cli", "unknown backend 'codex-cli'; " + ONLY_CLAUDE),
         (
-            "agents.default",
-            "copilot",
-            "unknown backend 'copilot'; expected one of: "
-            "claude-code-cli, codex-cli, gemini-cli, claude-agent-sdk",
+            "agents.backends.claude-code-cli.base_url",
+            "http://example.com",
+            "'http://example.com': plain http is allowed only for localhost; use https",
         ),
         (
-            "agents.reviewer",
-            "gpt",
-            "unknown backend 'gpt'; expected one of: " + ", ".join(AGENT_BACKENDS),
+            "agents.backends.claude-code-cli.base_url",
+            "https://user:pw@api.example.com",
+            "must not contain a username or password",
         ),
+        (
+            "agents.backends.claude-code-cli.base_url",
+            "http://user@localhost:11434",
+            "must not contain a username or password",
+        ),
+        (
+            "agents.backends.claude-code-cli.base_url",
+            "ftp://localhost",
+            "'ftp://localhost' must be an http or https URL",
+        ),
+        (
+            "agents.backends.claude-code-cli.base_url",
+            "http://localhost:99999",
+            "'http://localhost:99999' is not a valid URL",
+        ),
+        ("agents.backends.claude-code-cli.model", " ", "must not be empty"),
         ("agents.budget_per_ticket.usd", -1, "must be greater than 0"),
         ("agents.budget_per_ticket.tokens", 0, "must be greater than 0"),
         ("limits.gate_retries", 11, "must be at most 10"),
@@ -229,12 +255,42 @@ def test_github_remotes_are_accepted(projects_dir: Path, git_repo: Path, remote:
     assert load_project("demo", projects_dir=projects_dir).git.remote == remote
 
 
-@pytest.mark.parametrize("backend", AGENT_BACKENDS)
-def test_every_backend_is_accepted(projects_dir: Path, git_repo: Path, backend: str) -> None:
+def test_registered_backends_are_accepted(
+    projects_dir: Path, git_repo: Path, fake_backend: FakeBackend
+) -> None:
+    fake = fake_backend("fake-a", FakeRunner(AGENT_FIXTURES / "success_writes_file.jsonl"))
     data = valid_data(git_repo)
-    data["agents"] = {"default": backend, "planner": backend}
+    data["agents"] = {"default": "claude-code-cli", "planner": "fake-a"}
     write_project(projects_dir, data)
-    assert load_project("demo", projects_dir=projects_dir).agents.planner == backend
+    agents = load_project("demo", projects_dir=projects_dir).agents
+    assert agents.backend_for("planner") == "fake-a"
+    assert agents.runner_for("planner") is fake
+    assert agents.backend_for("implementer") == agents.backend_for("reviewer") == "claude-code-cli"
+
+
+def test_unknown_backend_in_backends_names_the_field(projects_dir: Path, git_repo: Path) -> None:
+    data = valid_data(git_repo)
+    data["agents"] = {"backends": {"codex-cli": {"model": "x"}}}
+    [error] = errors_for(projects_dir, data)
+    assert error.startswith("project.yaml: agents.backends")
+    assert "unknown backend 'codex-cli'" in error
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://localhost:11434",
+        "http://127.0.0.1:8080/v1",
+        "http://[::1]:11434",
+        "https://api.example.com",
+    ],
+)
+def test_good_base_urls_are_accepted(projects_dir: Path, git_repo: Path, url: str) -> None:
+    data = valid_data(git_repo)
+    data["agents"] = {"backends": {"claude-code-cli": {"base_url": url}}}
+    write_project(projects_dir, data)
+    agents = load_project("demo", projects_dir=projects_dir).agents
+    assert agents.backends["claude-code-cli"].base_url == url
 
 
 @pytest.mark.parametrize("name", ["../x", "Demo", "-demo", "demo_1", "a" * 64, "", "demo/x"])

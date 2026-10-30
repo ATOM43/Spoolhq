@@ -11,9 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from spoolhq.services.agents import ClaudeCliRunner
 from spoolhq.services.projects import init_project, load_project, save_project
-from spoolhq.services.runloop import Agents, RunLoop
+from spoolhq.services.runloop import RunLoop
 from spoolhq.services.runs import RunRegistry, RunStatus, attempt_dir
 from tests.services.agents.test_real_run import REAL, logged_in
 from tests.services.runloop.conftest import Merging
@@ -68,15 +67,16 @@ def test_real_run_implements_and_approves_a_tiny_ticket(
     settings.commands.install = f"{PYTHON} --version"
     settings.commands.lint = f"{PYTHON} -m compileall -q ."
     settings.commands.test = TEST_COMMAND
+    # Every role set explicitly; the loop builds the runners from project.yaml.
+    for role in ("planner", "implementer", "reviewer"):
+        setattr(settings.agents, role, "claude-code-cli")
     save_project(settings, projects_dir=projects_dir)
     registry = RunRegistry.start(projects_dir, daemon_instance="real")
-    claude = ClaudeCliRunner()
     loop = RunLoop(
         registry,
         projects_dir=projects_dir,
         worktrees_dir=tmp_path / "worktrees",
         home=home,
-        agents=Agents(implementer=claude, reviewer=claude),
         integrator=Merging(),
     )
     try:

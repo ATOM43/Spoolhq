@@ -13,8 +13,9 @@ import typer
 
 from spoolhq.cli.common import fail, hours, settings, table
 from spoolhq.core.config import home_dir
-from spoolhq.services.agents import AgentRunner, BackendUnavailableError, available_runners
+from spoolhq.services.agents import AgentRunner, BackendUnavailableError
 from spoolhq.services.planner import PlannerError, PlanResult, approve_plan, generate_plan
+from spoolhq.services.projects import ProjectError, load_project
 from spoolhq.services.scheduler import (
     PlanError,
     critical_path,
@@ -121,9 +122,13 @@ def summary_command(project: ProjectArg) -> None:
 # generate, show, approve ------------------------------------------------------------------
 
 
-def make_runner() -> AgentRunner:
-    """The planner's backend; tests replace it with a fake."""
-    return available_runners()[0]
+def make_runner(project: str) -> AgentRunner:
+    """The project's ``agents.planner`` backend; tests replace it with a fake."""
+    try:
+        settings_ = load_project(project, projects_dir=settings().projects_dir)
+    except ProjectError as exc:
+        fail(f"error: {exc}")
+    return settings_.agents.runner_for("planner")
 
 
 def _problem_lines(listing: TicketListing) -> list[str]:
@@ -177,7 +182,7 @@ def generate_command(
     try:
         result = generate_plan(
             project,
-            make_runner(),
+            make_runner(project),
             projects_dir=projects_dir,
             home=home_dir(),
             template_description=description,

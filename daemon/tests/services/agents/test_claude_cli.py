@@ -311,6 +311,42 @@ def test_claude_config_dir_reaches_the_settings(
 
 
 @pytest.mark.integration
+def test_custom_endpoint_and_model_reach_the_child_only(
+    tmp_path: Path, policy: AgentPolicy, user_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(user_home))
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://parent.example.com")  # never passed on
+    run(runner(tmp_path, user_home=user_home), policy)
+    plain = read_record(tmp_path)
+    assert plain["argv"] == build_argv([], policy, BUDGET, billing="subscription")
+    assert plain["base_url"] is None
+
+    custom = ClaudeCliRunner(
+        claude_cmd=fake_claude_cmd(SUCCESS, tmp_path / "record.json"),
+        platform="linux",
+        which=sandbox_which,
+        home=user_home,
+        base_url="http://localhost:11434",
+        model="qwen3-coder",
+    )
+    run(custom, policy)
+    record = read_record(tmp_path)
+    expected = build_argv([], policy, BUDGET, billing="subscription", model="qwen3-coder")
+    assert record["argv"] == expected
+    assert record["base_url"] == "http://localhost:11434"
+    assert set(record["env"]) - set(plain["env"]) == {"ANTHROPIC_BASE_URL"}
+    # Passed per child; Claude Code's own config is never written.
+    assert not (user_home / ".claude").exists()
+    assert not (user_home / ".claude.json").exists()
+
+    # A model given to run() wins over the configured one.
+    cancel = threading.Event()
+    custom.run(AGENT_PROMPT, policy, BUDGET, model="given", on_event=lambda e: None, cancel=cancel)
+    argv = read_record(tmp_path)["argv"]
+    assert argv[argv.index("--model") + 1] == "given"
+
+
+@pytest.mark.integration
 def test_api_key_billing_passes_the_key_and_the_budget(
     tmp_path: Path, policy: AgentPolicy, monkeypatch: pytest.MonkeyPatch
 ) -> None:

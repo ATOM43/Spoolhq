@@ -107,6 +107,9 @@ def billing_for(auth_method: str | None) -> Billing:
 class ClaudeCliRunner:
     """``AgentRunner`` for the ``claude`` CLI (Claude Code 2.1.259 or newer).
 
+    ``base_url`` (a custom endpoint, as ``ANTHROPIC_BASE_URL`` in the child's
+    environment) and ``model`` (``--model``, unless ``run`` is given one) come from
+    ``agents.backends`` in ``project.yaml``; neither touches the user's own config.
     ``claude_cmd``, ``platform``, ``which`` and ``home`` (the user's home folder) are
     injectable for tests only. ``platform`` decides the sandbox rules ``detect``
     applies; the environment and process handling always follow the real OS.
@@ -120,7 +123,12 @@ class ClaudeCliRunner:
         platform: str = sys.platform,
         which: Which = shutil.which,
         home: Path | None = None,
+        *,
+        base_url: str | None = None,
+        model: str | None = None,
     ) -> None:
+        self.base_url = base_url
+        self.model = model
         self._claude_cmd = tuple(claude_cmd) if claude_cmd is not None else None
         self._platform = platform
         self._which = which
@@ -234,7 +242,7 @@ class ClaudeCliRunner:
 
     def _env(self, billing: Billing) -> dict[str, str]:
         # The real OS, not the injected platform: the process runs here.
-        return child_env(os.environ, billing=billing, platform=sys.platform)
+        return child_env(os.environ, billing=billing, platform=sys.platform, base_url=self.base_url)
 
     # --- running --------------------------------------------------------------------
 
@@ -258,7 +266,7 @@ class ClaudeCliRunner:
         check_worktree(policy, self._home)
         if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
             raise ValueError("the prompt is larger than Claude Code's 10 MB stdin limit")
-        argv = build_argv(cmd, policy, budget, billing=info.billing, model=model)
+        argv = build_argv(cmd, policy, budget, billing=info.billing, model=model or self.model)
         parser = ClaudeStreamParser(
             policy.worktree,
             billing=info.billing,

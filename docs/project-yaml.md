@@ -19,8 +19,10 @@ commands:
   lint: just lint
   test: just test
 agents:
-  default: claude-code-cli        # claude-code-cli | codex-cli | gemini-cli | claude-agent-sdk
-  reviewer: codex-cli             # optional per-role override
+  default: claude-code-cli        # the only backend for now
+  reviewer: claude-code-cli       # optional per-role override
+  backends:                       # optional: a custom endpoint and model per backend
+    claude-code-cli: { base_url: http://localhost:11434, model: qwen3-coder }
   budget_per_ticket:
     usd: 5                        # API backends
     tokens: 2000000               # subscription backends
@@ -61,8 +63,10 @@ run:
 | `commands.install` | yes | | Non-empty command the gates run to install dependencies. It runs without a shell ([gates](gates.md#no-shell)): no `&&`, `\|\|`, `\|`, `;`, `>`, `<`, `` ` `` or `$(`; put anything longer in a justfile recipe. |
 | `commands.lint` | yes | | Non-empty lint command; same rules. |
 | `commands.test` | yes | | Non-empty test command; same rules. The planner ends every ticket's "Done when" with `` `<test command>` passes ``. |
-| `agents.default` | no | `claude-code-cli` | One of `claude-code-cli`, `codex-cli`, `gemini-cli`, `claude-agent-sdk`. |
-| `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override; same values as `agents.default`. `agents.planner` is the backend of the [planner](planner.md). Only `claude-code-cli` exists for now. |
+| `agents.default` | no | `claude-code-cli` | A known backend; only `claude-code-cli` exists for now ([agents](agents.md#roles-and-backends)). |
+| `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override; same values as `agents.default`. `agents.planner` is the backend of the [planner](planner.md). `spool agents --project <name>` shows what each role uses. |
+| `agents.backends.<backend>.base_url` | no | | Custom endpoint for that backend, e.g. a local [Ollama](agents.md#local-models-with-ollama). http or https; plain http only for `localhost`, `127.0.0.1` and `::1`; no username or password. |
+| `agents.backends.<backend>.model` | no | | Model name for that backend; without it, the backend's own default. |
 | `agents.budget_per_ticket.usd` | no | | Positive number: spending cap per ticket for API backends. |
 | `agents.budget_per_ticket.tokens` | no | | Positive whole number: cap on weighted tokens per ticket for subscription backends; one plan generation (both attempts) counts as one ticket. Weighted tokens = input + output + cache writes + cache reads × 0.1, since cache reads cost a tenth of fresh input. T29, for example, used about 2.2M raw tokens (2.1M of them cache reads) but about 300k weighted. `spool runs show` lists the raw numbers and the weighted total. |
 | `limits.gate_retries` | no | `3` | Whole number from 0 to 10. |
@@ -98,7 +102,9 @@ Every problem is reported at once, one line each, as `project.yaml: <dotted.path
 | Branch missing | `project.yaml: default_branch: branch 'develop' not found in /home/me/code/app` |
 | git not installed | `project.yaml: repo: git was not found on PATH` |
 | Bad remote | `project.yaml: git.remote: not a GitHub URL` |
-| Unknown backend | `project.yaml: agents.default: unknown backend 'copilot'; expected one of: claude-code-cli, codex-cli, gemini-cli, claude-agent-sdk` |
+| Unknown backend | `project.yaml: agents.default: unknown backend 'copilot'; expected one of: claude-code-cli` |
+| Plain http to another host | `project.yaml: agents.backends.claude-code-cli.base_url: 'http://example.com': plain http is allowed only for localhost; use https` |
+| Credentials in the URL | `project.yaml: agents.backends.claude-code-cli.base_url: must not contain a username or password` |
 | Budget not positive | `project.yaml: agents.budget_per_ticket.usd: must be greater than 0` |
 | Retries out of range | `project.yaml: limits.gate_retries: must be at most 10` (or `must be at least 0`) |
 | Empty command | `project.yaml: commands.lint: must not be empty` |
