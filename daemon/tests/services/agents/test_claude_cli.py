@@ -30,11 +30,13 @@ from spoolhq.services.agents import (
 )
 from spoolhq.services.agents.claude_cli import INSTALL_HINT, LOGIN_HINT
 from spoolhq.services.agents.claude_config import build_argv
+from spoolhq.services.agents.endpoint import LOCAL_TOKEN
 from spoolhq.services.agents.model import CREDENTIAL_PATHS
 from tests.conftest import (
     AGENT_FIXTURES,
     AGENT_PROMPT,
     AGENT_SECRETS,
+    MemoryKeyring,
     fake_claude_cmd,
     sandbox_which,
 )
@@ -334,7 +336,7 @@ def test_custom_endpoint_and_model_reach_the_child_only(
     expected = build_argv([], policy, BUDGET, billing="subscription", model="qwen3-coder")
     assert record["argv"] == expected
     assert record["base_url"] == "http://localhost:11434"
-    assert set(record["env"]) - set(plain["env"]) == {"ANTHROPIC_BASE_URL"}
+    assert set(record["env"]) - set(plain["env"]) == {"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"}
     # Passed per child; Claude Code's own config is never written.
     assert not (user_home / ".claude").exists()
     assert not (user_home / ".claude.json").exists()
@@ -344,6 +346,63 @@ def test_custom_endpoint_and_model_reach_the_child_only(
     custom.run(AGENT_PROMPT, policy, BUDGET, model="given", on_event=lambda e: None, cancel=cancel)
     argv = read_record(tmp_path)["argv"]
     assert argv[argv.index("--model") + 1] == "given"
+
+
+def endpoint_runner(tmp_path: Path, base_url: str) -> ClaudeCliRunner:
+    return ClaudeCliRunner(
+        claude_cmd=fake_claude_cmd(SUCCESS, tmp_path / "record.json", "--auth-method", "claude.ai"),
+        platform="linux",
+        which=sandbox_which,
+        home=tmp_path / "user-home",
+        base_url=base_url,
+    )
+
+
+@pytest.mark.integration
+def test_a_custom_endpoint_never_gets_the_users_login(
+    tmp_path: Path, policy: AgentPolicy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "users-key")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "users-login")
+    local = endpoint_runner(tmp_path, "http://127.0.0.1:11434")
+    info = local.detect()
+    assert (info.usable, info.auth_method, info.billing) == (True, "endpoint token", "unknown")
+    run(local, policy)
+    record = read_record(tmp_path)
+    assert record["auth_token"] == LOCAL_TOKEN
+    assert not {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"} & set(record["env"])
+    assert "--max-budget-usd" not in record["argv"]
+
+    monkeypatch.setenv("SPOOLHQ_ENDPOINT_TOKEN_CLAUDE_CODE_CLI", "remote-token")
+    run(endpoint_runner(tmp_path, "https://llm.example.com"), policy)
+    assert read_record(tmp_path)["auth_token"] == "remote-token"  # noqa: S105 - a test value
+
+
+@pytest.mark.integration
+def test_a_remote_endpoint_without_a_token_is_refused(
+    tmp_path: Path, policy: AgentPolicy, keychain: MemoryKeyring
+) -> None:
+    remote = endpoint_runner(tmp_path, "https://llm.example.com")
+    message = (
+        "custom endpoint https://llm.example.com needs its own token; "
+        "run spool secrets set endpoint:claude-code-cli"
+    )
+    assert remote.detect().reason == message
+    with pytest.raises(BackendUnavailableError) as raised:
+        run(remote, policy)
+    assert str(raised.value) == message
+    assert not (tmp_path / "record.json").exists()  # nothing started
+
+    keychain.passwords[("spoolhq", "endpoint:claude-code-cli")] = "stored-token"
+    run(remote, policy)
+    assert read_record(tmp_path)["auth_token"] == "stored-token"  # noqa: S105 - a test value
+
+
+@pytest.mark.integration
+def test_no_endpoint_means_no_token(tmp_path: Path, policy: AgentPolicy) -> None:
+    run(runner(tmp_path), policy)
+    record = read_record(tmp_path)
+    assert (record["auth_token"], record["base_url"]) == (None, None)
 
 
 @pytest.mark.integration

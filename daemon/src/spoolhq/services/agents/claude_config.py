@@ -18,6 +18,7 @@ from spoolhq.services.agents.claude_stream import CLAUDE_TOOLS, FILE_TOOLS, READ
 from spoolhq.services.agents.model import AgentPolicy, Billing, Budget, PolicyError
 
 API_KEY_VAR = "ANTHROPIC_API_KEY"
+AUTH_TOKEN_VAR = "ANTHROPIC_AUTH_TOKEN"  # noqa: S105 - a variable name
 BASE_URL_VAR = "ANTHROPIC_BASE_URL"
 ENV_SET = {
     # Claude Code removes its own credentials from the environment of the commands
@@ -61,18 +62,29 @@ SCRUB_STUBS = (
 
 
 def child_env(
-    parent: Mapping[str, str], *, billing: Billing, platform: str, base_url: str | None = None
+    parent: Mapping[str, str],
+    *,
+    billing: Billing,
+    platform: str,
+    base_url: str | None = None,
+    endpoint_token: str | None = None,
 ) -> dict[str, str]:
     """The only environment the ``claude`` process gets: an allowlist, plus ENV_SET.
 
     ``ANTHROPIC_API_KEY`` is passed only for API billing; with it, Claude Code would
     bill the API instead of the subscription. ``base_url`` becomes ``ANTHROPIC_BASE_URL``
     (https://code.claude.com/docs/en/env-vars); the parent's own value never passes.
+    With ``base_url``, ``endpoint_token`` becomes ``ANTHROPIC_AUTH_TOKEN``, which Claude
+    Code sends instead of the saved subscription login, and no API key is passed
+    (https://code.claude.com/docs/en/authentication#authentication-precedence).
     """
-    env = allowed_env(parent, platform=platform, extra={API_KEY_VAR} if billing == "api" else ())
+    api_key = billing == "api" and base_url is None
+    env = allowed_env(parent, platform=platform, extra={API_KEY_VAR} if api_key else ())
     env.update(ENV_SET)
     if base_url is not None:
         env[BASE_URL_VAR] = base_url
+        if endpoint_token is not None:
+            env[AUTH_TOKEN_VAR] = endpoint_token
     return env
 
 

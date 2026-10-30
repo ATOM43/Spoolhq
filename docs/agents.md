@@ -67,6 +67,19 @@ agents:
 - `base_url` must be http or https, plain http only for `localhost`, `127.0.0.1` and `::1`, with no username or password.
 - For Claude Code, `base_url` becomes `ANTHROPIC_BASE_URL` in the `claude` process's environment and `model` becomes `--model` ([Claude Code environment variables](https://code.claude.com/docs/en/env-vars); `--model` overrides `ANTHROPIC_MODEL`). They are set for that child only; SpoolHQ never writes `~/.claude`, `~/.claude.json` or any other config of the user's. A daemon's own `ANTHROPIC_BASE_URL` is never passed on; without `base_url` and `model`, the command line and environment are as before.
 
+### A custom endpoint never gets your login
+
+Without its own credential, an agent CLI pointed at a custom `base_url` would send your subscription login there. So with a `base_url`, SpoolHQ supplies the credential itself:
+
+- **An endpoint on this machine** (`localhost`, `127.0.0.1`, `::1`) gets the fixed dummy token `spoolhq-local-endpoint`; local servers such as Ollama ignore it.
+- **A remote endpoint** gets `SPOOLHQ_ENDPOINT_TOKEN_<BACKEND>` from the daemon's environment (`SPOOLHQ_ENDPOINT_TOKEN_CLAUDE_CODE_CLI`, `SPOOLHQ_ENDPOINT_TOKEN_CODEX_CLI`), else the OS keychain, stored with `spool secrets set endpoint:<backend>` (hidden prompt; service `spoolhq`, key `endpoint:<backend>`). Without one the backend is refused before anything starts:
+
+  ```text
+  custom endpoint https://llm.example.com needs its own token; run spool secrets set endpoint:claude-code-cli
+  ```
+
+For Claude Code the token becomes `ANTHROPIC_AUTH_TOKEN`, which outranks the saved claude.ai login; Claude Code keeps that login on the machine but doesn't send it ([authentication precedence](https://code.claude.com/docs/en/authentication#authentication-precedence), [subscriptions and gateways](https://code.claude.com/docs/en/llm-gateway#subscriptions-and-gateways)). `ANTHROPIC_API_KEY` is never passed with a custom endpoint, and `claude auth status` isn't consulted: the login line of `detect()` reads `endpoint token` and billing is `unknown`. `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` keeps the token out of the agent's commands.
+
 `spool agents --project <name>` prints the backend, model and endpoint of each role:
 
 ```text
@@ -92,7 +105,7 @@ Ollama serves an Anthropic-compatible API, so Claude Code can drive a local mode
 
 SpoolHQ hasn't been tested against a real local model. Keep in mind:
 
-- Claude Code still checks your login (`claude auth status`) and may send its login credentials to whatever `base_url` points at (not verified). Only use an endpoint you trust; that's why plain http is limited to this machine.
+- Claude Code gets SpoolHQ's dummy token, never your login ([above](#a-custom-endpoint-never-gets-your-login)). Plain http is still limited to this machine.
 - The policy checks still apply: the model must work through Claude Code's tools, and the run stops if `init` lists the wrong tools.
 - Local models are much weaker at multi-step tool use; set it per role (for example only `agents.reviewer`) if you want to try one.
 
@@ -168,7 +181,7 @@ The worktree must not be, or contain, the user's home folder or the SpoolHQ home
 
 ## The environment allowlist
 
-The `claude` process gets only these variables from the daemon's environment: `PATH`, `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_*`, `TMPDIR`, `TMP`, `TEMP`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`, `CLAUDE_CONFIG_DIR`, `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, `https_proxy`, `http_proxy`, `no_proxy`, `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, and on Windows `SYSTEMROOT`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMSPEC`, `PATHEXT`. It always adds `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` and `DISABLE_AUTOUPDATER=1`, and `ANTHROPIC_BASE_URL` when the backend has a `base_url` ([roles](#roles-and-backends)).
+The `claude` process gets only these variables from the daemon's environment: `PATH`, `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_*`, `TMPDIR`, `TMP`, `TEMP`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`, `CLAUDE_CONFIG_DIR`, `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, `https_proxy`, `http_proxy`, `no_proxy`, `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, and on Windows `SYSTEMROOT`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMSPEC`, `PATHEXT`. It always adds `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` and `DISABLE_AUTOUPDATER=1`, and `ANTHROPIC_BASE_URL` with `ANTHROPIC_AUTH_TOKEN` when the backend has a `base_url` ([roles](#roles-and-backends)).
 
 `ANTHROPIC_API_KEY` is passed only for API billing. If it were in the environment, Claude Code would bill the API instead of the subscription, so a subscription login always wins: `detect()` checks `claude auth status` without the key first, and offers the key only when there is no subscription login. Tokens such as `GITHUB_TOKEN`, `CLICKUP_TOKEN` and `SPOOLHQ_TOKEN` never reach the agent.
 

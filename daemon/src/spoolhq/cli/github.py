@@ -1,11 +1,14 @@
-"""`spool secrets set github` and `spool github sync`.
+"""`spool secrets set github|endpoint:<backend>` and `spool github sync`.
 
-The token is read from a hidden prompt, never from argv, and stored in the OS keychain;
-`SPOOLHQ_GITHUB_TOKEN` in the daemon's environment wins over it. `github sync` asks
+A token is read from a hidden prompt, never from argv, and stored in the OS keychain;
+`SPOOLHQ_GITHUB_TOKEN` (or `SPOOLHQ_ENDPOINT_TOKEN_<BACKEND>`) in the daemon's
+environment wins over it. `github sync` asks
 the daemon to check the project's open pull requests now.
 """
 
 import getpass
+from collections.abc import Callable
+from functools import partial
 from typing import Annotated
 
 import typer
@@ -13,6 +16,8 @@ from keyring.errors import KeyringError
 
 from spoolhq.cli.client import ApiClient, ApiError
 from spoolhq.cli.common import fail, settings
+from spoolhq.services.agents import backend_names
+from spoolhq.services.agents.endpoint import keyring_key, store_endpoint_token, token_var
 from spoolhq.services.github import store_github_token
 
 secrets_app = typer.Typer(
@@ -30,22 +35,34 @@ def _client() -> ApiClient:
 
 @secrets_app.command("set")
 def set_command(
-    name: Annotated[str, typer.Argument(metavar="NAME", help="The secret to set: github.")],
+    name: Annotated[
+        str,
+        typer.Argument(metavar="NAME", help="The secret to set: github or endpoint:<backend>."),
+    ],
 ) -> None:
     """Store a secret, read from a hidden prompt (never from the command line)."""
-    if name != "github":
-        fail(f"error: unknown secret {name!r}; the only one is github")
-    token = getpass.getpass("GitHub token (input hidden): ")
+    endpoints = {keyring_key(backend): backend for backend in backend_names()}
+    store: Callable[[str], None]
+    if name == "github":
+        label, key, env_var = "GitHub token", "github", "SPOOLHQ_GITHUB_TOKEN"
+        store = store_github_token
+    elif name in endpoints:
+        backend = endpoints[name]
+        label, key, env_var = f"token for {backend}'s custom endpoint", name, token_var(backend)
+        store = partial(store_endpoint_token, backend)
+    else:
+        fail(f"error: unknown secret {name!r}; expected one of: github, {', '.join(endpoints)}")
+    token = getpass.getpass(f"{label[0].upper()}{label[1:]} (input hidden): ")
     try:
-        store_github_token(token)
+        store(token)
     except ValueError as exc:
         fail(f"error: {exc}")
     except (KeyringError, RuntimeError) as exc:
         fail(
             f"error: cannot write to the OS keychain ({type(exc).__name__}); "
-            "set SPOOLHQ_GITHUB_TOKEN in the daemon's environment instead"
+            f"set {env_var} in the daemon's environment instead"
         )
-    typer.echo("Stored the GitHub token in the OS keychain (service spoolhq, key github).")
+    typer.echo(f"Stored the {label} in the OS keychain (service spoolhq, key {key}).")
 
 
 @github_app.command("sync")

@@ -5,9 +5,9 @@
 ``--version`` prints ``--version-string``; ``auth status`` prints the login JSON (exit
 1 with ``--logged-out``, unless ``ANTHROPIC_API_KEY`` is set: then ``api_key``).
 Anything else is a run: it records its argv, environment variable names,
-``ANTHROPIC_BASE_URL``, stdin and pid to ``--record``, prints the scenario's lines, then
-sleeps for ``--sleep`` seconds (``--spawn-child`` first starts a child process that
-sleeps too, and records its pid)
+``ANTHROPIC_BASE_URL``, ``ANTHROPIC_AUTH_TOKEN``, stdin and pid to ``--record``, prints
+the scenario's lines, then sleeps for ``--sleep`` seconds (``--spawn-child`` first
+starts a child process that sleeps too, and records its pid)
 and exits with ``--exit-code``. ``--ignore-sigint`` and ``--ignore-sigterm`` make the
 run ignore those signals (POSIX), to test the adapter's stop sequence. With ``--stubs``,
 every mode first creates empty stub files and folders in its cwd, as the real CLI does
@@ -84,6 +84,7 @@ def main() -> int:
         "argv": claude_args,
         "env": sorted(os.environ),
         "base_url": os.environ.get("ANTHROPIC_BASE_URL"),
+        "auth_token": os.environ.get("ANTHROPIC_AUTH_TOKEN"),
         "stdin": stdin,
         "pid": os.getpid(),
     }

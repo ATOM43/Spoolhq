@@ -40,6 +40,7 @@ from spoolhq.services.agents.claude_stream import (
     ClaudeStreamParser,
     PolicyViolation,
 )
+from spoolhq.services.agents.endpoint import endpoint_token, missing_token
 from spoolhq.services.agents.model import (
     AgentPolicy,
     BackendInfo,
@@ -208,10 +209,17 @@ class ClaudeCliRunner:
         parsed = parse_version(probed[1])
         version = format_version(parsed) if parsed else probed[1].strip() or None
 
-        # A subscription login wins; ANTHROPIC_API_KEY is only offered if there is none.
-        logged_in, method = self._auth_status(cmd, self._env("subscription"))
-        if not logged_in and os.environ.get(API_KEY_VAR):
-            logged_in, method = self._auth_status(cmd, self._env("api"))
+        login_hint = LOGIN_HINT
+        method: str | None
+        if self.base_url is not None:
+            # A custom endpoint gets SpoolHQ's token, never the user's login.
+            logged_in, method = self._token() is not None, "endpoint token"
+            login_hint = missing_token(self.name, self.base_url)
+        else:
+            # A subscription login wins; ANTHROPIC_API_KEY is only offered if there is none.
+            logged_in, method = self._auth_status(cmd, self._env("subscription"))
+            if not logged_in and os.environ.get(API_KEY_VAR):
+                logged_in, method = self._auth_status(cmd, self._env("api"))
 
         reason: str | None
         if parsed is None:
@@ -228,7 +236,7 @@ class ClaudeCliRunner:
             reason = self._platform_reason()
         enforceable = reason is None
         if reason is None and not logged_in:
-            reason = LOGIN_HINT
+            reason = login_hint
         return BackendInfo(
             name=self.name,
             installed=True,
@@ -240,9 +248,18 @@ class ClaudeCliRunner:
             reason=reason,
         )
 
+    def _token(self) -> str | None:
+        return None if self.base_url is None else endpoint_token(self.name, self.base_url)
+
     def _env(self, billing: Billing) -> dict[str, str]:
         # The real OS, not the injected platform: the process runs here.
-        return child_env(os.environ, billing=billing, platform=sys.platform, base_url=self.base_url)
+        return child_env(
+            os.environ,
+            billing=billing,
+            platform=sys.platform,
+            base_url=self.base_url,
+            endpoint_token=self._token(),
+        )
 
     # --- running --------------------------------------------------------------------
 

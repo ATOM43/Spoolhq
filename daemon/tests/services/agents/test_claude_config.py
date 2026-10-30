@@ -191,6 +191,31 @@ def test_api_billing_keeps_only_the_api_key() -> None:
     assert not {"GITHUB_TOKEN", "CLICKUP_TOKEN", "SPOOLHQ_TOKEN"} & set(env)
 
 
+def test_a_custom_endpoint_gets_spoolhqs_token_and_no_login() -> None:
+    parent = {
+        **parent_env(),
+        "ANTHROPIC_AUTH_TOKEN": "users-own",
+        "CLAUDE_CODE_OAUTH_TOKEN": "users-login",
+    }
+    plain = child_env(parent, billing="api", platform="linux")
+    assert "ANTHROPIC_AUTH_TOKEN" not in plain
+    for billing in ("subscription", "api"):
+        env = child_env(
+            parent,
+            billing=billing,
+            platform="linux",
+            base_url="https://llm.example.com",
+            endpoint_token="spoolhq-token",  # noqa: S106 - a test value
+        )
+        assert env["ANTHROPIC_AUTH_TOKEN"] == "spoolhq-token"  # noqa: S105 - a test value
+        assert env["ANTHROPIC_BASE_URL"] == "https://llm.example.com"
+        assert not {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"} & set(env)
+        assert set(env) - set(plain) - {"ANTHROPIC_API_KEY"} == {
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_BASE_URL",
+        }
+
+
 def test_windows_variables_only_on_windows() -> None:
     parent = {**parent_env(), "Path": "C:\\bin", "ComSpec": "cmd.exe"}
     del parent["PATH"]

@@ -49,6 +49,26 @@ def test_secrets_set_refuses_other_names_and_empty_tokens(
     assert keychain.passwords == {}
 
 
+def test_secrets_set_endpoint_token(
+    keychain: MemoryKeyring, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prompts: list[str] = []
+
+    def fake_getpass(prompt: str) -> str:
+        prompts.append(prompt)
+        return "endpoint-secret"
+
+    monkeypatch.setattr(getpass, "getpass", fake_getpass)
+    result = runner.invoke(app, ["secrets", "set", "endpoint:claude-code-cli"])
+    assert result.exit_code == 0, result.output
+    assert prompts == ["Token for claude-code-cli's custom endpoint (input hidden): "]
+    assert keychain.passwords == {("spoolhq", "endpoint:claude-code-cli"): "endpoint-secret"}
+    assert "endpoint-secret" not in result.output
+    unknown = runner.invoke(app, ["secrets", "set", "endpoint:nope"])
+    assert unknown.exit_code == 1
+    assert "expected one of: github, endpoint:claude-code-cli" in unknown.output
+
+
 def test_secrets_set_without_a_keychain(monkeypatch: pytest.MonkeyPatch) -> None:
     from keyring.errors import NoKeyringError
 
