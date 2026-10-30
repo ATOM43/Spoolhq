@@ -89,7 +89,9 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T22 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
-| T27 | Code graph with Graphify | 3 Planner and Git | T14, T16 | 2.5 |
+| T27 | Agent roles, custom endpoints and contract suite | 3 Planner and Git | T09, T14 | 2 |
+| T30 | Codex CLI backend | 3 Planner and Git | T27 | 2 |
+| T31 | Gemini CLI and Claude Agent SDK backends | 3 Planner and Git | T27 | 2.5 |
 |  | **Total** |  |  | **73** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T22 → T23 → T26 (27.5 h).
@@ -370,21 +372,47 @@ Done when:
 - [ ] Tests: each rule on its own sends a ticket to a PR
 - [ ] The run log names the rule behind each PR
 
-### T27 · More agent backends
+### T27 · Agent roles, custom endpoints and contract suite
 
-Codex CLI, Gemini CLI and the Claude Agent SDK behind the same interface, chosen per project and per role. Numbered T27 so existing IDs stay fixed. *Depends on: T09, T14 · 3.5 h*
+The shared parts every backend needs. Numbered T27 so existing IDs stay fixed. *Depends on: T09, T14 · 2 h*
 
-- Codex CLI adapter (exec mode, JSON events) and Gemini CLI adapter (headless, JSON output), each mapping the policy onto that CLI's own sandbox and approval settings.
-- Claude Agent SDK adapter for users with an API key, with the allowlist enforced by a hook.
-- `project.yaml` picks a backend per role (planner, implementer, reviewer), so the reviewer can run on a different model from the implementer.
-- One contract test suite every adapter must pass: against the fake runner in CI, against installed CLIs locally.
-- Before release, check each vendor's terms for driving its CLI from a third-party tool with a subscription login, and record the result in DECISIONS.md.
+- `project.yaml` picks a backend per role (planner, implementer, reviewer), with `agents.default` as the fallback.
+- Each backend takes an optional `base_url` and `model`, so a local model server (for example Ollama) can be used later without code changes. Plain http only for localhost.
+- One contract test suite every adapter must pass: recorded transcripts in CI, installed CLIs locally.
+- `spool agents --project <name>` shows which backend each role uses.
 
 Done when:
 
-- [ ] The same ticket fixture runs end to end on each installed backend
-- [ ] A backend that cannot enforce the policy is refused with a clear message
 - [ ] Planner, implementer and reviewer can each use a different backend
+- [ ] Each backend accepts a custom `base_url` and `model`
+- [ ] The contract suite passes for every adapter
+
+### T30 · Codex CLI backend
+
+Codex CLI behind the same interface. *Depends on: T27 · 2 h*
+
+- Adapter for Codex exec mode with JSON events, mapping the policy onto Codex's own sandbox and approval settings through a per-run config, never the user's own.
+- A policy part Codex can't enforce is refused with a clear message; no fallback to weaker modes.
+- Usage with Codex's own cache weighting; usage limits pause the run.
+- Check OpenAI's terms for driving Codex with a subscription login; record in DECISIONS.md.
+
+Done when:
+
+- [ ] The same ticket fixture runs end to end on Codex (recorded in CI)
+- [ ] A backend that cannot enforce the policy is refused with a clear message
+
+### T31 · Gemini CLI and Claude Agent SDK backends
+
+Two more backends behind the same interface. *Depends on: T27 · 2.5 h*
+
+- Gemini CLI adapter (headless, stream-JSON), policy mapped onto its own settings.
+- Claude Agent SDK adapter for API keys, with the allowlist enforced by a hook; key from the environment or keychain.
+- Both pass T27's contract suite. Check Google's terms for subscription logins; record in DECISIONS.md.
+
+Done when:
+
+- [ ] Both adapters pass the contract suite
+- [ ] The API key never appears in argv, logs or files
 
 ## Phase 4 — Desktop UI (v0 screens)
 
