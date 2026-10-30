@@ -111,8 +111,10 @@ def test_init_with_a_git_template_runs_no_global_git_hooks(tmp_path: Path, local
     # A subprocess, because Copier's git (plumbum) reads the environment once at import,
     # so a monkeypatched GIT_CONFIG_GLOBAL would never reach it.
     url, commit = make_git_template(tmp_path)
+    shown = url
     if local:  # the work tree the bare repo was cloned from: a local git repository
         url = (tmp_path / "template-work").as_posix()
+        shown = str((tmp_path / "template-work").resolve())  # a folder prints resolved
     hooks = tmp_path / "global-hooks"
     hooks.mkdir()
     marker = tmp_path / "hook-ran"
@@ -131,7 +133,7 @@ def test_init_with_a_git_template_runs_no_global_git_hooks(tmp_path: Path, local
         timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.splitlines()[0] == f"template: {url} at commit {commit}"
+    assert result.stdout.splitlines()[0] == f"template: {shown} at commit {commit}"
     assert (repo / "README.md").is_file()
     assert not marker.exists()
 
