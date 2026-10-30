@@ -215,7 +215,7 @@ limits:
   gate_retries: 3
   review_retries: 2
 merge_policy:
-  max_direct_diff_lines: 400
+  max_diff_lines: 400
   protected_paths: ["**/migrations/**", ".github/**", "**/auth/**"]
 git:
   remote: https://github.com/<owner>/<repo>   # optional
