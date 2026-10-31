@@ -64,7 +64,13 @@ def _assistant(
         "cache_creation_input_tokens": 0,
         "cache_read_input_tokens": cache_reads,
     }
-    message = {"id": msg_id, "role": "assistant", "content": content, "usage": usage}
+    message = {
+        "id": msg_id,
+        "role": "assistant",
+        "model": "claude-test-model",
+        "content": content,
+        "usage": usage,
+    }
     return {"type": "assistant", "message": message}
 
 
@@ -75,7 +81,10 @@ def _result(
         "type": "result",
         "subtype": subtype,
         "is_error": subtype != "success",
+        "duration_ms": 1000,
+        "duration_api_ms": 900,
         "num_turns": 2,
+        "session_id": "fake",
         "usage": {
             "input_tokens": tokens,
             "output_tokens": tokens // 4,

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import keyring
 import pytest
+from claude_agent_sdk._internal.message_parser import parse_message
 
 from spoolhq.services.agents import (
     AgentSdkRunner,
@@ -183,6 +184,16 @@ def test_a_ticket_runs_end_to_end_on_codex(
     assert 'extends=":workspace"' in " ".join(impl["argv"])
     assert 'extends=":workspace"' not in " ".join(review["argv"])  # read-only reviewer
     assert "T01" in impl["stdin"]
+
+
+def test_the_shared_transcripts_parse_as_the_agent_sdk_reads_them(transcripts: Transcripts) -> None:
+    """Regression: the reviewer transcript's assistant line had no ``model``. The SDK's
+    reader task forwards lines while ``query()`` parses them, so its parse error raced
+    the ``result`` line: under load the run sometimes ended without a result."""
+    paths = [transcripts.implement({"hello.txt": "hi"}), transcripts.review("approve")]
+    for path in paths:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            parse_message(json.loads(line))  # raises MessageParseError on a missing field
 
 
 @pytest.mark.integration

@@ -91,7 +91,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T27 | Agent roles, custom endpoints and contract suite | 3 Planner and Git | T09, T14 | 2 |
 | T30 | Codex CLI backend | 3 Planner and Git | T27 | 2 |
 | T31 | Claude Agent SDK backend | 3 Planner and Git | T27 | 2 |
-| T27 | Code graph with Graphify | 3 Planner and Git | T14, T16 | 2.5 |
+| T28 | Code graph with Graphify | 3 Planner and Git | T14, T16 | 2.5 |
 |  | **Total** |  |  | **76** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T22 → T23 → T26 (27.5 h).
@@ -533,7 +533,7 @@ Done when:
 - [ ] Someone else installs it and runs a template project from the README alone
 - [ ] Every v1 item in the overview maps to a ticket, a test or a doc page
 
-### T27 · Code graph with Graphify
+### T28 · Code graph with Graphify
 
 A map of the codebase that stays current, so the agent finds the right files without re-reading the repo. *Depends on: T14, T16 · 2.5 h*
 
