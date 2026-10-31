@@ -1,7 +1,7 @@
 # SpoolHQ — Task
 
 Name: SpoolHQ (package `spoolhq`, CLI `spool`).
-Status: building. Ticket plan: "Agent Orchestrator — Ticket Plan" (27 tickets, 6 phases, ~71 h).
+Status: building. Ticket plan: "Agent Orchestrator — Ticket Plan" (30 tickets, 6 phases, ~76 h).
 
 This file is the root context for the project. It states what to build and why. The ticket plan states the order to build it in. Once SpoolHQ reaches milestone M1, this file becomes the `CONTEXT.md` it reads while implementing its own remaining tickets.
 
@@ -15,7 +15,7 @@ It must work for people who pay for a coding-agent subscription (Claude, ChatGPT
 
 ## Background
 
-Coding agents such as Claude Code, Codex CLI and Gemini CLI can implement a well-scoped ticket on their own. What is still manual is everything around that:
+Coding agents such as Claude Code and Codex CLI can implement a well-scoped ticket on their own. What is still manual is everything around that:
 
 - Splitting a large task into small, ordered tickets with clear acceptance criteria.
 - Setting up the same project structure and tooling for each new stack.
@@ -37,7 +37,7 @@ Existing open-source tools cover parts of this (Kontora, Task Master, OpenAI Sym
 | Gate | A deterministic check (install, lint, test) run by code, not by an agent. |
 | Template | A reusable project skeleton (Copier) that also defines the commands gates run. |
 | Merge policy | Rules deciding whether a ticket merges directly or waits for human approval via a pull request. |
-| Agent backend | The coding agent that does the work: an installed CLI (Claude Code, Codex, Gemini) using the user's own login, or the Claude Agent SDK with an API key. |
+| Agent backend | The coding agent that does the work: an installed CLI (Claude Code, Codex) using the user's own login, or the Claude Agent SDK with an API key. |
 
 ## User workflow
 
@@ -106,7 +106,7 @@ Only three roles are LLM agents. Everything else is plain, testable code. Each r
 ### Agent backends
 
 - One `AgentRunner` interface; each backend is an adapter that streams normalised events (message, tool call, file edit, usage) and returns a summary, files changed and usage.
-- Backends: Claude Code CLI (default, first), Codex CLI, Gemini CLI — each driven headless with JSON output, using the user's own installed CLI and login — and the Claude Agent SDK for users with an API key.
+- Backends: Claude Code CLI (default, first) and Codex CLI — each driven headless with JSON output, using the user's own installed CLI and login — and the Claude Agent SDK for users with an API key.
 - Each adapter translates SpoolHQ's policy (worktree-only file access, shell allowlist) into that CLI's own permission or sandbox settings. A backend that cannot enforce the policy is refused.
 - Subscription backends report tokens and usage limits; API backends report cost. Budgets apply to whichever the backend reports.
 - `spool agents` and the Settings dialog list detected backends, versions and login status. The backend is chosen per project and per role.
@@ -206,7 +206,7 @@ commands:
   lint: just lint
   test: just test
 agents:
-  default: claude-code-cli        # claude-code-cli | codex-cli | gemini-cli | claude-agent-sdk
+  default: claude-code-cli        # claude-code-cli | codex-cli | claude-agent-sdk
   reviewer: codex-cli             # optional per-role override
   budget_per_ticket:
     usd: 5                        # API backends
@@ -231,7 +231,7 @@ Planned as later phases, with v1 interfaces designed so they slot in:
 - Docker execution, with the worktree bind-mounted so code changes stay on the host.
 - Several agents working on independent tickets in parallel, with a merge queue.
 - Two-way tracker sync, a Jira adapter, webhook intake.
-- Further agent backends (Aider and others).
+- Further agent backends (Aider and others), and Antigravity CLI (replaces Gemini CLI, closed source; check its headless mode and sandbox first).
 - A shared template registry.
 - Multi-user accounts, hosted service, authentication beyond the local token.
 
@@ -256,7 +256,7 @@ Planned as later phases, with v1 interfaces designed so they slot in:
 - Name: SpoolHQ; package `spoolhq`, CLI `spool`, repo `spoolhq`.
 - Desktop shell: Tauri 2 with a React + TypeScript frontend.
 - Backend: a Python daemon (FastAPI) separate from the UI, so runs survive closing the window and the same code runs headless.
-- Agent backends: an `AgentRunner` interface with adapters for installed coding CLIs (Claude Code first, then Codex and Gemini) so a subscription is enough, plus the Claude Agent SDK for API keys.
+- Agent backends: an `AgentRunner` interface with adapters for installed coding CLIs (Claude Code first, then Codex) so a subscription is enough, plus the Claude Agent SDK for API keys.
 - Templates: Copier rather than cookiecutter, because it can update generated projects.
 - Storage: files for projects and tickets, SQLite for run history.
 - Execution: directly on the machine first, Docker later.

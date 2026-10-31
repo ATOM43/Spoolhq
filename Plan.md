@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **27 tickets in 6 phases, about 71 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **30 tickets in 6 phases, about 76 hours** for one developer.
 
 **What v1 includes**
 
@@ -22,7 +22,7 @@ The app turns a written task spec into an approved ticket plan, then has one cod
 - **Daemon** (Python, FastAPI): owns projects, the run loop, git and the tracker. Keeps running when the window closes, and runs headless on a server.
 - **CLI** (`orch`, Typer): every action without the UI. It is how the tool builds itself from Phase 3 on.
 - **Desktop app** (Tauri 2, React, TypeScript): a view and control panel over the daemon's API.
-- **Agent runtime**: an `AgentRunner` interface, with adapters for the coding CLIs people already pay for (Claude Code by default, Codex, Gemini), so a subscription is enough; the Claude Agent SDK covers API keys.
+- **Agent runtime**: an `AgentRunner` interface, with adapters for the coding CLIs people already pay for (Claude Code by default, Codex), so a subscription is enough; the Claude Agent SDK covers API keys.
 
 **How the tickets are sliced** (same rules as the dashboard plan)
 
@@ -80,7 +80,6 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T16 | Template library | 3 Planner and Git | T04, T11 | 3.5 |
 | T17 | GitHub delivery | 3 Planner and Git | T14 | 3.5 |
 | T18 | Merge policy | 3 Planner and Git | T12, T17 | 1.5 |
-| T27 | More agent backends | 3 Planner and Git | T09, T14 | 3.5 |
 | T19 | Live API | 4 Desktop UI | T07, T13 | 2.5 |
 | T20 | Home, project panel and dialogs | 4 Desktop UI | T03, T19 | 3 |
 | T21 | Tickets tab and drawer | 4 Desktop UI | T15, T20 | 3 |
@@ -91,8 +90,9 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
 | T27 | Agent roles, custom endpoints and contract suite | 3 Planner and Git | T09, T14 | 2 |
 | T30 | Codex CLI backend | 3 Planner and Git | T27 | 2 |
-| T31 | Gemini CLI and Claude Agent SDK backends | 3 Planner and Git | T27 | 2.5 |
-|  | **Total** |  |  | **73** |
+| T31 | Claude Agent SDK backend | 3 Planner and Git | T27 | 2 |
+| T27 | Code graph with Graphify | 3 Planner and Git | T14, T16 | 2.5 |
+|  | **Total** |  |  | **76** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T22 → T23 → T26 (27.5 h).
 
@@ -401,17 +401,16 @@ Done when:
 - [ ] The same ticket fixture runs end to end on Codex (recorded in CI)
 - [ ] A backend that cannot enforce the policy is refused with a clear message
 
-### T31 · Gemini CLI and Claude Agent SDK backends
+### T31 · Claude Agent SDK backend
 
-Two more backends behind the same interface. *Depends on: T27 · 2.5 h*
+The Claude Agent SDK behind the same interface, for users with an API key. *Depends on: T27 · 2 h*
 
-- Gemini CLI adapter (headless, stream-JSON), policy mapped onto its own settings.
-- Claude Agent SDK adapter for API keys, with the allowlist enforced by a hook; key from the environment or keychain.
-- Both pass T27's contract suite. Check Google's terms for subscription logins; record in DECISIONS.md.
+- Claude Agent SDK adapter for API keys, with the allowlist enforced by a hook; key from the environment or keychain, never a subscription login.
+- Passes T27's contract suite.
 
 Done when:
 
-- [ ] Both adapters pass the contract suite
+- [ ] The adapter passes the contract suite
 - [ ] The API key never appears in argv, logs or files
 
 ## Phase 4 — Desktop UI (v0 screens)
@@ -555,7 +554,7 @@ Not estimated yet; each gets its own ticket plan after v0.1.0. The v1 interfaces
 | 6 Docker execution | The agent runs in a container with the worktree bind-mounted, so code changes stay on your machine; network allowlist; secrets from an env file, not the command line | AgentRunner (T09) |
 | 7 Parallel agents | Several independent ready tickets at once; a merge queue integrates one at a time; a conflict re-runs the ticket on the new main | Scheduler (T06), integration (T14) |
 | 8 Trackers | Two-way ClickUp sync, a Jira adapter, and webhook intake so a new tracker task can start a run | TrackerAdapter (T24) |
-| 9 More agents | Aider and other coding agents behind the same runner interface | AgentRunner (T09) |
+| 9 More agents | Aider and other coding agents behind the same runner interface; Antigravity CLI (replaces Gemini CLI, closed source; check its headless mode and sandbox first) | AgentRunner (T09) |
 | 10 Template registry | A shared index of community templates, versioned and contract-checked | Template library (T16) |
 | 11 Full desktop UI | The 16-screen design in screens-prompt.md: Inbox, Overview, History, plan graph, Templates and Settings screens, global run bar | v0 screens (T20–T22) |
 
