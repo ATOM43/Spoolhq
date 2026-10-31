@@ -354,7 +354,7 @@ def test_the_recorded_cli_stream_replays(
     API scripted the model's calls), replayed with the hook asked again."""
     recorded = AGENT_FIXTURES / "recorded" / "agent_sdk_run.jsonl"
     lines = recorded.read_text(encoding="utf-8").splitlines()
-    worktree = str(policy.worktree)
+    worktree = json.dumps(str(policy.worktree))[1:-1]  # escaped: Windows backslashes
     path = tmp_path / "recorded.jsonl"
     path.write_text("\n".join(lines).replace("/work/wt", worktree) + "\n", encoding="utf-8")
     result, events, _ = run(runner(tmp_path, path), policy)
