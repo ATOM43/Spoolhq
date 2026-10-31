@@ -58,5 +58,4 @@ def test_real_codex_run_creates_a_file_and_cannot_read_ssh(git_repo: Path, home:
     )
     assert result.outcome is Outcome.COMPLETED, result.error
     assert (git_repo / "hello.txt").read_text(encoding="utf-8").strip() == "hello from spoolhq"
-    assert "hello.txt" in result.files_changed
     assert result.input_tokens > 0

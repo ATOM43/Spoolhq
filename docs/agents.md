@@ -238,6 +238,8 @@ codex exec --json --ephemeral --ignore-user-config --ignore-rules --cd <worktree
 ```
 
 - **Never a bypass.** No `--dangerously-bypass-approvals-and-sandbox` (`--yolo`), `danger-full-access`, `--full-auto`, `--approve-for-me` or `--skip-git-repo-check`; a test fails if any appears in `services/agents/` outside comments and docstrings. `--sandbox` isn't passed either: it would switch Codex back to its older sandbox settings, which can't deny reads.
+- **Unknown settings stop the run.** `--strict-config` makes Codex refuse any `-c` override it doesn't recognise ("unknown configuration field … in -c/--config override") before it starts, so a renamed key can't silently drop part of the policy. Real Codex 0.166.0 ignored `tools.view_image` without it.
+- **Features off.** Besides web search, apps, plugins, hooks, multi-agent and memories, these 0.166.0 features are on by default and are turned off (`features.<name>=false`): `view_image`, `browser_use`, `browser_use_external`, `browser_use_full_cdp_access`, `computer_use`, `in_app_browser`, `remote_plugin`, `skill_mcp_dependency_install`, `tool_suggest`. `code_mode_host` stays on: without it the model's tool calls fail closed ("code-mode host is disabled").
 - **Per-run settings, never the user's.** `--ignore-user-config` skips `$CODEX_HOME/config.toml` while "authentication still uses `CODEX_HOME`", so the login keeps working without a per-run `CODEX_HOME`. Project `.codex/` layers (config, hooks, rules) load only for trusted projects and trust is recorded in the user config, so a repository's `.codex/` is skipped; `--ignore-rules` skips execpolicy `.rules` and `features.hooks=false` turns hooks off. SpoolHQ writes nothing under `~/.codex`.
 
 ### The permission profile
@@ -253,11 +255,13 @@ A writing policy (the implementer) gets Codex's `:workspace` profile plus SpoolH
 
 The deny list is the [credential deny list](#the-credential-deny-list) plus Codex's own `~/.codex` and the `CODEX_HOME` folder when set; a worktree overlapping any of it is refused, as for Claude Code.
 
+Codex runs its own binary again inside bubblewrap, and the standalone installer puts it in `~/.codex/packages/standalone/releases/<version>/`. When the `codex` on `PATH` resolves into a denied Codex folder, that folder isn't denied as a whole: every entry is, except the folders on the way down to the release (the same rule as for a worktree inside the SpoolHQ home; symlinks are skipped, since bubblewrap can't mount over them and their targets are denied on their own). So `auth.json`, sessions and logs stay unreadable while the release (binaries only) can run. A read-only profile also gets `"<release>"="read"`, since `:root` is denied there and `:minimal` doesn't cover it.
+
 ### The policy mapping
 
 | Part | Roles | How Codex enforces it |
 | --- | --- | --- |
-| Writes confined to the worktree | implementer | The `:workspace` profile: commands and file edits write only in the workspace root (the worktree) and the temp folders; its `.git`, `.agents` and `.codex` stay read-only. Bubblewrap and seccomp on Linux, Seatbelt on macOS; Codex refuses a command it can't sandbox. |
+| Writes confined to the worktree | implementer | The `:workspace` profile: commands and file edits write only in the workspace root (the worktree) and the temp folders (all of `/tmp` on Linux: a real run wrote to a folder under `/tmp` outside its worktree, so keep `worktrees_dir` out of `/tmp`); its `.git`, `.agents` and `.codex` stay read-only. Bubblewrap and seccomp on Linux, Seatbelt on macOS; Codex refuses a command it can't sandbox. |
 | Read-only | reviewer, planner | A profile with no `write` entry, reads confined to the worktree and `:minimal`. A file change by a read-only run stops it (`policy not enforced: …`). |
 | Approvals never asked | all | `approval_policy="never"`: nothing waits for a person and no command is escalated outside the sandbox. |
 | Network off | all | `network={enabled=false}` for the agent's commands, `web_search="disabled"`, apps (connectors), plugins and multi-agent off; MCP servers come only from the config files SpoolHQ doesn't load, and an `mcp_tool_call` or `web_search` item stops the run. |
@@ -296,19 +300,21 @@ backend 'codex-cli' can't enforce denied reads; choose another backend for the i
 | --- | --- |
 | `thread.started` | `Started` (the configured model or `""`; Codex reports neither model nor tools) |
 | `command_execution` item | `ToolCall` named `command_execution`, input the command |
-| a failed command whose output says `Operation not permitted`, `Permission denied`, `Read-only file system` or `sandbox` | `PermissionDenied` (best effort: Codex reports no denial as such), also logged |
+| a failed command whose output says `Operation not permitted`, `Permission denied`, `Read-only file system`, `sandbox`, `Could not resolve host`, `Temporary failure in name resolution` or `Network is unreachable` | `PermissionDenied` (best effort: Codex reports no denial as such), also logged |
 | completed `file_change` item | `ToolCall` named `file_change`, then a `FileEdit` per path inside the worktree |
 | `agent_message` item | `Message`; the last one is the summary |
 | `turn.completed` | `Usage` from `usage`: `input_tokens` (which includes the cached part), `output_tokens`, `cached_input_tokens`, `cache_write_input_tokens` |
 | `turn.failed`, `error` | outcome `error` with the message, or `usage_limited` when it says `usage limit` |
-| `reasoning`, `todo_list`, `error` items, `item.updated` | ignored |
+| `reasoning`, `todo_list`, `error` items, `item.updated` | ignored (0.166.0 sends `error` items for config warnings) |
 | anything else | counted in `debug.unknown_events` |
+
+**What real Codex 0.166.0 leaves out of `--json`** (checked 2026-10-31): a command the sandbox stops from reading or writing files (`cat ~/.ssh/known_hosts`: `Permission denied`; a write to the home folder: `Read-only file system`) is not reported as an item at all, so SpoolHQ can't log those denials; the sandbox still blocks them. A blocked network call is reported (`curl: (6) Could not resolve host`) and logged. Calls the model makes through code mode can be missing too, so `files_changed` and `FileEdit` are best effort for Codex; the run loop takes the changed files from git, not from them. `file_change` paths are absolute and the model is never named. `daemon/tests/fixtures/agents/codex/recorded/real_sandbox_probe.jsonl` is a redacted real stream.
 
 ### Usage, limits and cost
 
 - **Weighted tokens**: cached input counts a tenth, as for Claude Code. OpenAI's Codex credit table puts cached input at a tenth of input for GPT-6 Sol and GPT-6 Astra and a twentieth for GPT-6.1 Sol and Terra ([pricing](https://learn.chatgpt.com/docs/pricing)); SpoolHQ uses a tenth for every model, the more conservative of the two.
 - **Usage limits**: Codex documents no reset time, so a usage-limit error gives `usage_limited` with `reset_at` `None` and the run loop pauses without one.
-- **Budget**: `max_tokens` is checked against each turn's usage, which Codex reports when the turn ends; `max_turns` and `max_usd` have no Codex option and aren't enforced; `timeout_s` and `cancel` work as for Claude Code (same process handling, `process.py`).
+- **Budget**: `max_tokens` is checked against each turn's usage, which Codex reports only when the turn ends, and `codex exec` is one turn: the run finishes before it can go over, then ends `budget_exhausted` and the run loop blocks the ticket (`budget used up: 18,323 of 1,000 weighted tokens` in a real run), so `budget_per_ticket.tokens` stops further attempts but not the first one. `max_turns` and `max_usd` have no Codex option and aren't enforced; `timeout_s` and `cancel` work as for Claude Code (same process handling, `process.py`; a real 8 s timeout ended a `sleep 60` run `timed_out` after 8.5 s with nothing left running).
 - **Cost**: `cost_micro_usd` is always `None`; Codex reports none.
 
 ### Environment, detection and endpoints
@@ -323,7 +329,7 @@ backend 'codex-cli' can't enforce denied reads; choose another backend for the i
 
 The adapter itself is tested end to end with `daemon/tests/services/agents/fake_claude.py`, a stand-in `claude` binary that records its argv, environment and stdin and prints a scenario.
 
-**The contract suite** (`tests/services/agents/test_contract.py`) is one parametrised file every adapter must pass: a run that creates a file, a denied command reported and logged, a usage-limit pause with its reset time, a timeout, a cancel, and usage reported and weighted (cache reads count a tenth toward `max_tokens`). It runs over a list of `AdapterCase`s: the Claude Code adapter through the fake binary and the recorded transcripts, the Codex CLI adapter through the same binary as `codex` and the transcripts in `daemon/tests/fixtures/agents/codex/` (hand-built from the documented event format; its denial is reported as `command_execution` and its usage limit has no reset time), and `FakeRunner` (whose `stall_s` makes it hang like a stuck agent, so timeout and cancel apply). A new adapter adds one entry. `tests/services/runloop/test_model.py` also runs a ticket end to end through the run loop with Codex as implementer and reviewer.
+**The contract suite** (`tests/services/agents/test_contract.py`) is one parametrised file every adapter must pass: a run that creates a file, a denied command reported and logged, a usage-limit pause with its reset time, a timeout, a cancel, and usage reported and weighted (cache reads count a tenth toward `max_tokens`). It runs over a list of `AdapterCase`s: the Claude Code adapter through the fake binary and the recorded transcripts, the Codex CLI adapter through the same binary as `codex` and the transcripts in `daemon/tests/fixtures/agents/codex/` (hand-built from the documented event format and checked against real 0.166.0 output, which `recorded/` holds; its denial is reported as `command_execution` and its usage limit has no reset time), and `FakeRunner` (whose `stall_s` makes it hang like a stuck agent, so timeout and cancel apply). A new adapter adds one entry. `tests/services/runloop/test_model.py` also runs a ticket end to end through the run loop with Codex as implementer and reviewer.
 
 **The real run** (`tests/services/agents/test_real_run.py`, marker `real_agent`) uses the installed `claude` and your subscription. It is skipped unless `SPOOLHQ_REAL_AGENT=1` and `claude auth status` says you are logged in:
 
@@ -337,6 +343,8 @@ The Codex real run (`tests/services/agents/test_codex_real_run.py`) uses the ins
 ```sh
 SPOOLHQ_REAL_BACKENDS=codex uv run --directory daemon pytest -m real_agent
 ```
+
+On 2026-10-31 with Codex 0.166.0 and a ChatGPT login it passed in about 6 s: one turn, 35,872 input tokens (23,424 cached) and 246 output, 15,036 weighted.
 
 ## `spool agents`
 

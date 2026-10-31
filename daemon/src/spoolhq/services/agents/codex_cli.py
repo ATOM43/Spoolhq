@@ -249,7 +249,7 @@ class CodexCliRunner:
         if refused is not None:
             raise BackendUnavailableError(refused)
         env = self._env()
-        policy = with_codex_home(policy, env)
+        policy = with_codex_home(policy, env, home=self._home, codex_exe=cmd[0])
         check_worktree(policy, self._home)
         model = model or self.model
         argv = build_argv(cmd, policy, model=model, base_url=self.base_url)

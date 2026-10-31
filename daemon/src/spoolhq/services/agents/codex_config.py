@@ -8,11 +8,13 @@ to it. Checked against the Codex CLI 0.166.0 docs; see ``docs/agents.md`` and DE
 
 import dataclasses
 import json
+import os
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 from spoolhq.core.agent_policy import allowed_env
 from spoolhq.services.agents.endpoint import token_var
-from spoolhq.services.agents.model import AgentPolicy
+from spoolhq.services.agents.model import AgentPolicy, denials_except
 
 BACKEND_NAME = "codex-cli"
 PROFILE = "spoolhq"
@@ -26,6 +28,18 @@ ENV_SET = {
     # the deps come from the gates' install.
     "npm_config_verify_deps_before_run": "false",
 }
+EXTRA_FEATURES_OFF = (
+    "view_image",
+    "browser_use",
+    "browser_use_external",
+    "browser_use_full_cdp_access",
+    "computer_use",
+    "in_app_browser",
+    "remote_plugin",
+    "skill_mcp_dependency_install",
+    "tool_suggest",
+)
+"""Features found on in real Codex 0.166.0 (``codex features list``) that the run must not use."""
 CODEX_PATHS = ("~/.codex",)
 """Codex's own login and state: the agent's commands may not read them."""
 
@@ -77,10 +91,29 @@ def refusal(policy: AgentPolicy, parts: Mapping[str, Mapping[str, bool]]) -> str
     return None
 
 
-def with_codex_home(policy: AgentPolicy, env: Mapping[str, str]) -> AgentPolicy:
-    """``policy`` that also denies Codex's own folder (``~/.codex`` and ``CODEX_HOME``)."""
-    extra = [*CODEX_PATHS, *filter(None, [env.get("CODEX_HOME")])]
-    denied = [path for path in extra if path not in policy.denied_read_paths]
+def install_dir(codex_exe: str) -> Path:
+    """The folder Codex's binary ships in: the parent of its ``bin/`` (a standalone
+    release, ``~/.codex/packages/standalone/releases/<version>``), else its own folder."""
+    exe = Path(os.path.realpath(codex_exe))
+    return exe.parent.parent if exe.parent.name == "bin" else exe.parent
+
+
+def with_codex_home(
+    policy: AgentPolicy, env: Mapping[str, str], *, home: Path, codex_exe: str
+) -> AgentPolicy:
+    """``policy`` that also denies Codex's own folder (``~/.codex`` and ``CODEX_HOME``).
+
+    The standalone installer puts Codex itself under ``~/.codex/packages``, and Codex
+    runs its own binary again inside the sandbox, so then everything in the folder is
+    denied except the path down to the installed release (binaries only, no secrets).
+    """
+    install = install_dir(codex_exe)
+    extra: list[str] = []
+    for raw in [*CODEX_PATHS, *filter(None, [env.get("CODEX_HOME")])]:
+        folder = (home / raw[2:] if raw.startswith("~/") else Path(raw)).resolve()
+        inside = install.is_relative_to(folder) and install != folder
+        extra += denials_except(folder, install) if inside else [raw]
+    denied = [path for path in dict.fromkeys(extra) if path not in policy.denied_read_paths]
     return dataclasses.replace(policy, denied_read_paths=(*policy.denied_read_paths, *denied))
 
 
@@ -89,18 +122,21 @@ def _toml(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def permission_profile(policy: AgentPolicy) -> str:
+def permission_profile(policy: AgentPolicy, install: Path | None = None) -> str:
     """The profile as a TOML inline table, for ``-c permissions.spoolhq=…``.
 
     Writing: Codex's ``:workspace`` (writes to the workspace roots and temp folders, the
     worktree's ``.git`` read-only). Read-only: no writes, and reads only in the worktree
     and Codex's ``:minimal`` runtime paths. Both: every denied path ``deny`` (no reads,
-    no writes) and no network for the agent's commands.
+    no writes) and no network for the agent's commands. ``install`` is Codex's own
+    folder, readable in a read-only profile so Codex can start its sandbox helper.
     """
     entries = [f'{_toml(path)}="deny"' for path in policy.denied_read_paths]
     head = ""
     if policy.read_only:
         confined = ['":root"="deny"', '":minimal"="read"', '":workspace_roots"={"."="read"}']
+        if install is not None:
+            confined.append(f'{_toml(str(install))}="read"')
         entries = [*confined, *entries]
     else:
         head = 'extends=":workspace",'
@@ -115,17 +151,20 @@ def build_argv(
     base_url: str | None = None,
 ) -> list[str]:
     """The full ``codex exec`` command line; the prompt comes from stdin (``-``)."""
+    install = install_dir(codex_cmd[0]) if codex_cmd and Path(codex_cmd[0]).is_absolute() else None
     overrides = [
         'approval_policy="never"',
         f"default_permissions={_toml(PROFILE)}",
-        f"permissions.{PROFILE}={permission_profile(policy)}",
+        f"permissions.{PROFILE}={permission_profile(policy, install)}",
         'web_search="disabled"',
         "features.apps=false",
         "features.plugins=false",
         "features.hooks=false",
         "features.multi_agent=false",
         "features.memories=false",
-        "tools.view_image=false",
+        # On by default in 0.166.0 and reaching outside the profile: browser, computer use,
+        # plugin and dependency installs.
+        *(f"features.{name}=false" for name in EXTRA_FEATURES_OFF),
         "allow_login_shell=false",
         # Drop variables named like KEY, SECRET or TOKEN from the agent's commands.
         "shell_environment_policy.ignore_default_excludes=false",
@@ -145,6 +184,8 @@ def build_argv(
         "--ephemeral",
         "--ignore-user-config",
         "--ignore-rules",
+        # An override this Codex doesn't know stops the run instead of being ignored.
+        "--strict-config",
         "--cd",
         str(policy.worktree),
     ]

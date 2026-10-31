@@ -6,6 +6,7 @@ The process tests run ``fake_claude.py`` as the ``codex`` binary, with
 
 import json
 import os
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -211,7 +212,9 @@ def test_run_end_to_end(tmp_path: Path, policy: AgentPolicy, worktree: Path) -> 
     assert isinstance(events[0], Started)
     assert (result.outcome, result.files_changed) == (Outcome.COMPLETED, ("hello.txt",))
     record = read_record(tmp_path)
-    expected = build_argv([], with_codex_home(policy, child_env(os.environ, platform="linux")))
+    env = child_env(os.environ, platform="linux")
+    home = tmp_path / "user-home"
+    expected = build_argv([], with_codex_home(policy, env, home=home, codex_exe=sys.executable))
     assert record["argv"] == expected
     assert record["stdin"] == AGENT_PROMPT  # on stdin, never in argv
     assert AGENT_PROMPT not in record["argv"]

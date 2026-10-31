@@ -75,13 +75,26 @@ def home_denials(home: Path, worktree: Path) -> tuple[str, ...]:
     home, worktree = home.resolve(), worktree.resolve()
     if not worktree.is_relative_to(home):
         return (str(home),)
-    denied = [str(token_path(home))]
-    current = home
-    for part in worktree.relative_to(home).parts:
+    return tuple(dict.fromkeys((str(token_path(home)), *denials_except(home, worktree))))
+
+
+def denials_except(folder: Path, keep: Path) -> tuple[str, ...]:
+    """Everything in ``folder`` except the folders on the way down to ``keep`` (which
+    must be inside it), so a sandbox can deny the rest while ``keep`` stays reachable.
+
+    shortcut: entries created after the run starts aren't denied; fine while the
+    folders it is used on only gain files the agent may see, revisit otherwise.
+    """
+    denied: list[str] = []
+    current = folder
+    for part in keep.relative_to(folder).parts:
         if current.is_dir():
-            for entry in sorted(current.iterdir()):
-                if entry.name != part and str(entry) not in denied:
-                    denied.append(str(entry))
+            # bwrap can't mount over a symlink; its target is denied (or not) on its own.
+            denied += [
+                str(entry)
+                for entry in sorted(current.iterdir())
+                if entry.name != part and not entry.is_symlink()
+            ]
         current = current / part
     return tuple(denied)
 

@@ -11,6 +11,7 @@ from spoolhq.services.agents.codex_config import (
     ALLOWLIST,
     APPROVALS,
     DENIED_READS,
+    EXTRA_FEATURES_OFF,
     NETWORK,
     READ_ONLY,
     WRITES,
@@ -47,12 +48,16 @@ OVERRIDES = [
     "features.hooks=false",
     "features.multi_agent=false",
     "features.memories=false",
-    "tools.view_image=false",
+    *(f"features.{name}=false" for name in EXTRA_FEATURES_OFF),
     "allow_login_shell=false",
     "shell_environment_policy.ignore_default_excludes=false",
     'history.persistence="none"',
     "check_for_update_on_startup=false",
 ]
+
+
+ELSEWHERE: dict[str, Any] = {"home": Path("/nonexistent-home"), "codex_exe": "/usr/bin/codex"}
+"""``with_codex_home`` arguments for a Codex installed outside its own folder."""
 
 
 def profile_of(argv: list[str]) -> dict[str, Any]:
@@ -64,7 +69,7 @@ def profile_of(argv: list[str]) -> dict[str, Any]:
 
 def expected(policy: AgentPolicy, *extra: str) -> list[str]:
     head = ["codex", "exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules"]
-    argv = [*head, "--cd", str(policy.worktree), *extra]
+    argv = [*head, "--strict-config", "--cd", str(policy.worktree), *extra]
     for override in OVERRIDES:
         if override == "<profile>":
             override = f"permissions.spoolhq={permission_profile(policy)}"
@@ -128,16 +133,55 @@ def test_paths_are_quoted_for_toml(tmp_path: Path) -> None:
     worktree = tmp_path / "tree with spaces"
     worktree.mkdir()
     policy = AgentPolicy.for_worktree(worktree, {}, tmp_path / "spool-home")
-    odd = with_codex_home(policy, {"CODEX_HOME": 'C:\\Users\\me\\"codex"'})
+    odd = with_codex_home(policy, {"CODEX_HOME": 'C:\\Users\\me\\"codex"'}, **ELSEWHERE)
     profile = profile_of(build_argv(["codex"], odd))
     assert profile["filesystem"]['C:\\Users\\me\\"codex"'] == "deny"
 
 
 def test_codex_home_is_denied(policy: AgentPolicy) -> None:
-    assert with_codex_home(policy, {}).denied_read_paths == (*policy.denied_read_paths, "~/.codex")
-    custom = with_codex_home(policy, {"CODEX_HOME": "/srv/codex"})
+    denied = with_codex_home(policy, {}, **ELSEWHERE).denied_read_paths
+    assert denied == (*policy.denied_read_paths, "~/.codex")
+    custom = with_codex_home(policy, {"CODEX_HOME": "/srv/codex"}, **ELSEWHERE)
     assert custom.denied_read_paths[-2:] == ("~/.codex", "/srv/codex")
-    assert with_codex_home(custom, {"CODEX_HOME": "/srv/codex"}) == custom
+    assert with_codex_home(custom, {"CODEX_HOME": "/srv/codex"}, **ELSEWHERE) == custom
+
+
+def standalone_install(user_home: Path) -> Path:
+    """The standalone installer's layout, as real Codex 0.166.0 leaves it."""
+    codex = user_home / ".codex"
+    release = codex / "packages" / "standalone" / "releases" / "0.166.0-x86_64"
+    (release / "bin").mkdir(parents=True)
+    (release / "bin" / "codex").write_text("", encoding="utf-8")
+    (release / "codex-path").mkdir()
+    (codex / "packages" / "standalone" / "current").symlink_to(release)
+    (codex / "auth.json").write_text("{}", encoding="utf-8")
+    (codex / "sessions").mkdir()
+    return release
+
+
+def test_codex_installed_in_its_own_folder_stays_runnable(
+    policy: AgentPolicy, tmp_path: Path
+) -> None:
+    # Regression: denying all of ~/.codex hid the binary Codex runs inside bwrap.
+    user_home = tmp_path / "me"
+    release = standalone_install(user_home)
+    codex = (user_home / ".codex").resolve()
+    exe = str(codex / "packages" / "standalone" / "current" / "bin" / "codex")
+    denied = with_codex_home(policy, {}, home=user_home, codex_exe=exe).denied_read_paths
+    added = denied[len(policy.denied_read_paths) :]
+    assert added == (str(codex / "auth.json"), str(codex / "sessions"))
+    assert str(codex / "packages" / "standalone" / "current") not in added  # a symlink
+    assert not any(release.resolve().is_relative_to(path) for path in added)
+
+
+def test_a_read_only_profile_can_read_codex_itself(worktree: Path, home: Path) -> None:
+    policy = AgentPolicy.read_only_for(worktree, home)
+    profile = profile_of(build_argv(["/opt/codex/release/bin/codex"], policy))
+    assert profile["filesystem"]["/opt/codex/release"] == "read"
+    writing = profile_of(
+        build_argv(["/opt/codex/release/bin/codex"], AgentPolicy.for_worktree(worktree, {}, home))
+    )
+    assert "/opt/codex/release" not in writing["filesystem"]
 
 
 def test_child_env_is_an_allowlist() -> None:

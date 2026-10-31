@@ -249,3 +249,10 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - `AgentPolicy.role`; `BackendInfo.policy_parts`; `spool agents` shows Codex's parts per role and `codex login`.
 - Tests: Codex in the contract suite, a run-loop ticket end to end on Codex, argv/profile/environment/refusal/stream tests, the opt-in real run (`SPOOLHQ_REAL_BACKENDS=codex`, not run: Codex isn't installed here).
 - Docs: `agents.md` (custom endpoints, the Codex CLI section), `project-yaml.md`, `architecture.md`; DECISIONS 261–272.
+
+## Chore · Real Codex check
+
+- Checked against real Codex CLI 0.166.0 (ChatGPT login, Fedora, bubblewrap 0.12.0). The opt-in real test passes (one turn, 15,036 weighted tokens, ~6 s); a scratch ticket merged with Codex as implementer and Claude Code as reviewer (one attempt, gates passed, approved).
+- Fixes: Codex's own install under `~/.codex/packages` stays runnable while the rest of `~/.codex` is denied (`denials_except`), and read-only profiles can read it; `--strict-config`; browser, computer use, remote plugins and other default-on features off; network failures count as denials. A Codex reviewer or planner gets a read-only shell warning in `spool agents` and at run start.
+- Found, documented: filesystem denials don't appear in Codex's `--json` (enforced, not logged); `files_changed` is best effort; the token budget applies only after Codex's single turn; Codex may write anywhere in `/tmp`.
+- `task.md`: OpenAI terms for a ChatGPT login driven by a third-party tool is a v0.1.0 release blocker (DECISIONS 272 stays unclear). DECISIONS 273–274; a redacted real stream in `tests/fixtures/agents/codex/recorded/`.

@@ -119,6 +119,20 @@ def test_a_sandbox_denial_is_reported_and_logged(
     assert any("python3" in record.getMessage() for record in caplog.records)
 
 
+def test_a_blocked_network_call_is_a_denial(worktree: Path) -> None:
+    # Real Codex 0.166.0 output for curl with the profile's network off.
+    curl = item(
+        type="command_execution",
+        command="/bin/bash -c 'curl -sS --max-time 10 https://example.com'",
+        aggregated_output="curl: (6) Could not resolve host: example.com\n",
+        exit_code=6,
+        status="failed",
+    )
+    _, result = feed(worktree, [START, curl, done()])
+    [denied] = result.denials
+    assert denied.reason == "sandbox: curl: (6) Could not resolve host: example.com"
+
+
 def test_a_failing_command_is_not_a_denial(worktree: Path) -> None:
     started = item(
         "item.started", type="command_execution", command="just test", status="in_progress"
@@ -204,3 +218,19 @@ def test_finish_can_override_the_outcome(worktree: Path) -> None:
     assert not parser.has_result
     result = parser.finish(Outcome.TIMED_OUT)
     assert (result.outcome, result.error) == (Outcome.TIMED_OUT, None)
+
+
+def test_a_real_codex_stream(worktree: Path) -> None:
+    # Recorded from Codex 0.166.0 (redacted): a sandbox probe ticket. The denied home
+    # write and ~/.ssh read never appear in --json; the blocked curl does.
+    path = CODEX_FIXTURES / "recorded" / "real_sandbox_probe.jsonl"
+    text = path.read_text(encoding="utf-8").replace("{worktree}", worktree.as_posix())
+    events, result = feed(worktree, [json.loads(line) for line in text.splitlines()])
+    assert result.outcome is Outcome.COMPLETED
+    assert result.files_changed == ("probe.md",)
+    assert [d.reason for d in result.denials] == [
+        "sandbox: curl: (6) Could not resolve host: example.com"
+    ]
+    assert result.debug == {"unknown_events": 0}
+    assert (result.input_tokens, result.output_tokens) > (0, 0)
+    assert "<progress>" in result.summary

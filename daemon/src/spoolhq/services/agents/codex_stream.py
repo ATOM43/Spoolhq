@@ -49,9 +49,12 @@ KNOWN_TYPES = frozenset(
 QUIET_ITEMS = frozenset({"reasoning", "todo_list", "error"})
 # Turned off on the command line; one showing up means the configuration didn't hold.
 FORBIDDEN_ITEMS = frozenset({"mcp_tool_call", "web_search"})
-# Codex reports no denial as such: a failed command whose output says the OS refused it.
+# Codex reports no denial as such: a failed command whose output says the OS refused it,
+# or (network off, as real Codex 0.166.0 shows it) that no host could be reached.
 SANDBOX_DENIAL_RE = re.compile(
-    r"operation not permitted|permission denied|read-only file system|sandbox", re.IGNORECASE
+    r"operation not permitted|permission denied|read-only file system|sandbox"
+    r"|could not resolve host|temporary failure in name resolution|network is unreachable",
+    re.IGNORECASE,
 )
 USAGE_LIMIT_RE = re.compile(r"usage limit", re.IGNORECASE)
 
