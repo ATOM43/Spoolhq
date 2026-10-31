@@ -516,3 +516,45 @@ def test_resume_skips_an_interrupted_plan_run(
 
     assert loop.resume("demo").id == run_id
     loop.wait("demo")
+
+
+# --- warnings at run start ---------------------------------------------------------------
+
+
+def test_a_codex_reviewer_or_planner_is_warned_about_at_run_start(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    projects_dir: Path,
+    project: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    settings = load_project("demo", projects_dir=projects_dir)
+    settings.agents.reviewer = "codex-cli"
+    settings.agents.planner = "codex-cli"
+    save_project(settings, projects_dir=projects_dir)
+    loop, _ = make_loop([transcripts.implement()], [transcripts.review("approve")])
+
+    with caplog.at_level("WARNING", logger="spoolhq.services.runloop.loop"):
+        loop.start("demo")
+        loop.wait("demo")
+
+    warnings = [r.getMessage() for r in caplog.records if "read-only shell" in r.getMessage()]
+    assert warnings == [
+        "warning: the planner uses codex-cli, which can run read-only shell commands "
+        "(Claude Code's has no shell)",
+        "warning: the reviewer uses codex-cli, which can run read-only shell commands "
+        "(Claude Code's has no shell)",
+    ]
+
+
+def test_no_warning_for_claude_code_roles(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    project: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    loop, _ = make_loop([transcripts.implement()], [transcripts.review("approve")])
+    with caplog.at_level("WARNING", logger="spoolhq.services.runloop.loop"):
+        loop.start("demo")
+        loop.wait("demo")
+    assert "read-only shell" not in caplog.text

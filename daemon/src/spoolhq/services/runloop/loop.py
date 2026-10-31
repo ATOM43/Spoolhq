@@ -281,6 +281,8 @@ class RunLoop:
             except BaseException:
                 lock.release()
                 raise
+            for warning in settings.agents.shell_warnings():
+                logger.warning(warning, extra={"project": project, "run_id": ctx.run.id})
             active = Active(ticket.id, ctx.run.id, Flags(), lock=lock)
             self._active[project] = active
             self._spawn(active, ctx, AttemptKind.INITIAL, mode == "all")

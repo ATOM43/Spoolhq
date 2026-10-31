@@ -22,6 +22,11 @@ BACKENDS: dict[str, BackendFactory] = {
 }
 
 
+READ_ONLY_SHELL = frozenset({CODEX_NAME})
+"""Backends whose read-only agent (reviewer, planner) can still run read-only shell
+commands; Claude Code's has no shell at all (DECISIONS 265)."""
+
+
 def backend_names() -> tuple[str, ...]:
     """The registered backend names, in registration order."""
     return tuple(BACKENDS)

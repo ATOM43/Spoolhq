@@ -67,6 +67,7 @@ def test_codex_shows_what_it_enforces_per_role(
         "network off yes, denied reads no, the shell allowlist no",
         "  reviewer     read-only yes, approvals never asked yes, network off yes, "
         "denied reads no, the shell allowlist no",
+        "  warning    as reviewer or planner it can run read-only shell commands",
     ]
 
 
@@ -142,6 +143,19 @@ def test_project_shows_each_roles_backend_model_and_endpoint(
         "planner      claude-code-cli  model: qwen3-coder  endpoint: http://localhost:11434",
         "implementer  claude-code-cli  model: qwen3-coder  endpoint: http://localhost:11434",
         "reviewer     fake-reviewer  model: default  endpoint: default",
+    ]
+
+
+def test_project_warns_about_a_codex_reviewer(workspace: Path, projects_dir: Path) -> None:
+    settings = load_project("demo", projects_dir=projects_dir)
+    agents = settings.agents.model_copy(update={"reviewer": "codex-cli"})
+    save_project(settings.model_copy(update={"agents": agents}), projects_dir=projects_dir)
+    result = runner.invoke(app, ["agents", "--project", "demo"])
+    assert result.exit_code == 0, result.output
+    assert result.stdout.splitlines()[2].startswith("reviewer     codex-cli")
+    assert result.stderr.splitlines() == [
+        "warning: the reviewer uses codex-cli, which can run read-only shell commands "
+        "(Claude Code's has no shell)"
     ]
 
 

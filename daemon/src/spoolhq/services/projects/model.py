@@ -18,7 +18,7 @@ from pydantic import (
     field_validator,
 )
 
-from spoolhq.services.agents import AgentRunner, backend_names, make_runner
+from spoolhq.services.agents import READ_ONLY_SHELL, AgentRunner, backend_names, make_runner
 from spoolhq.services.gates import DEFAULT_TIMEOUTS, check_gate_command
 from spoolhq.services.git import (
     GitError,
@@ -29,6 +29,7 @@ from spoolhq.services.git import (
 )
 
 Role = Literal["planner", "implementer", "reviewer"]
+READ_ONLY_ROLES: tuple[Role, ...] = ("planner", "reviewer")
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 SLUG_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
@@ -169,6 +170,15 @@ class Agents(_Strict):
         name = self.backend_for(role)
         backend = self.backends.get(name, BackendSettings())
         return make_runner(name, base_url=backend.base_url, model=backend.model)
+
+    def shell_warnings(self) -> list[str]:
+        """A warning for each read-only role on a backend whose agent has a shell."""
+        return [
+            f"warning: the {role} uses {name}, which can run read-only shell commands "
+            "(Claude Code's has no shell)"
+            for role in READ_ONLY_ROLES
+            if (name := self.backend_for(role)) in READ_ONLY_SHELL
+        ]
 
 
 class Limits(_Strict):

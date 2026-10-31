@@ -266,6 +266,14 @@ The deny list is the [credential deny list](#the-credential-deny-list) plus Code
 
 **Why the sandbox stands in for the allowlist.** For Claude Code the allowlist isn't the boundary either: the implementer may run `just test`, which runs whatever tests the agent wrote, so the OS sandbox is what keeps it in ([the sandbox is required](#the-sandbox-is-required)). Codex's sandbox gives the same boundary: writes only to the worktree and temp folders, no network, the credential files unreadable; installs, lint and tests still run in the gates, outside the agent, before anything merges. The difference: a Codex implementer can run any command in that sandbox, not only the stack commands, and a Codex reviewer or planner can run read-only commands where Claude Code's has no shell at all. Neither can write outside the worktree, reach the network or read the denied files.
 
+**A warning for a Codex reviewer or planner.** Because of that difference, `spool agents` prints a `warning` line under `codex-cli`, `spool agents --project <name>` prints one on stderr for each read-only role set to `codex-cli`, and each run logs it as a warning when it starts:
+
+```text
+warning: the reviewer uses codex-cli, which can run read-only shell commands (Claude Code's has no shell)
+```
+
+It is a warning only; nothing is refused for it.
+
 ### Refusals
 
 `run()` checks the parts for the policy's role before starting anything, and `spool agents` shows them. A part Codex can't enforce here is refused with BackendUnavailableError, never weakened:

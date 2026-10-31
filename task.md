@@ -271,4 +271,5 @@ Planned as later phases, with v1 interfaces designed so they slot in:
 - Default merge policy: merge directly unless a rule triggers, or open a PR unless a ticket is marked trivial?
 - Default reviewer backend: same as the implementer, or a different model by default to reduce shared blind spots?
 - Do each vendor's terms allow driving its CLI from a third-party tool with a subscription login? To check before release.
+- **Release blocker:** Confirm OpenAI's terms allow driving Codex with a ChatGPT login from a third-party tool, before v0.1.0 (DECISIONS 272: unclear).
 - Licence: Apache-2.0 assumed; AGPL would keep forks open but may slow adoption.

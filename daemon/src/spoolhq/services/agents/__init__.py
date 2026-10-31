@@ -11,6 +11,7 @@ and a scrubbed environment) and verified from its stream. ``CodexCliRunner`` dri
 
 from spoolhq.core.agent_policy import READ_ONLY_GIT
 from spoolhq.services.agents.backends import (
+    READ_ONLY_SHELL,
     available_runners,
     backend_names,
     make_runner,
@@ -41,6 +42,7 @@ from spoolhq.services.agents.runner import AgentRunner, BackendUnavailableError
 __all__ = [
     "MIN_VERSION",
     "READ_ONLY_GIT",
+    "READ_ONLY_SHELL",
     "AgentEvent",
     "AgentPolicy",
     "AgentRunner",

@@ -10,7 +10,7 @@ from typing import Annotated
 import typer
 
 from spoolhq.cli.common import fail, settings
-from spoolhq.services.agents import BackendInfo, available_runners
+from spoolhq.services.agents import READ_ONLY_SHELL, BackendInfo, available_runners
 from spoolhq.services.projects import Agents, ProjectError, Role, load_project
 
 ROLES: tuple[Role, ...] = ("planner", "implementer", "reviewer")
@@ -38,6 +38,8 @@ def describe(info: BackendInfo) -> list[str]:
     for role, parts in info.policy_parts.items():
         enforced = ", ".join(f"{part} {'yes' if ok else 'no'}" for part, ok in parts.items())
         lines.append(f"  {role:<12} {enforced}")
+    if info.name in READ_ONLY_SHELL:
+        lines.append("  warning    as reviewer or planner it can run read-only shell commands")
     return lines
 
 
@@ -66,6 +68,8 @@ def agents_command(
             fail(f"error: {exc}")
         for line in describe_roles(agents):
             typer.echo(line)
+        for line in agents.shell_warnings():
+            typer.echo(line, err=True)
         return
     for index, runner in enumerate(available_runners()):
         if index:
