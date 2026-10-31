@@ -217,7 +217,7 @@ class ClaudeStreamParser:
         if subtype == "permission_denied":
             tool_use_id = str(message.get("tool_use_id", ""))
             reason = message.get("decision_reason") or message.get("message") or "denied"
-            return self._deny(str(message.get("tool_name", "")), tool_use_id, None, str(reason))
+            return self.deny(str(message.get("tool_name", "")), tool_use_id, None, str(reason))
         if subtype == "api_retry" and message.get("error") == "rate_limit":
             return [RateLimit(status="retrying", reset_at=None)]
         return []
@@ -328,7 +328,8 @@ class ClaudeStreamParser:
                 events.append(FileEdit(path=relative))
         return events
 
-    def _deny(self, tool: str, tool_use_id: str, tool_input: Any, reason: str) -> list[AgentEvent]:
+    def deny(self, tool: str, tool_use_id: str, tool_input: Any, reason: str) -> list[AgentEvent]:
+        """Record a refused tool call (once per id): a PermissionDenied event and a warning."""
         if tool_use_id and tool_use_id in self._denied_ids:
             return []
         self._denied_ids.add(tool_use_id)
@@ -352,7 +353,7 @@ class ClaudeStreamParser:
         denials = message.get("permission_denials")
         for denial in denials if isinstance(denials, list) else []:
             if isinstance(denial, Mapping):
-                events += self._deny(
+                events += self.deny(
                     str(denial.get("tool_name", "")),
                     str(denial.get("tool_use_id", "")),
                     denial.get("tool_input"),

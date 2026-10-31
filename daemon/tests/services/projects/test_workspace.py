@@ -19,7 +19,7 @@ from spoolhq.services.projects import (
 from spoolhq.services.projects import workspace as workspace_module
 from tests.conftest import AGENT_FIXTURES, FakeBackend
 
-KNOWN_BACKENDS = "expected one of: claude-code-cli, codex-cli"
+KNOWN_BACKENDS = "expected one of: claude-code-cli, codex-cli, claude-agent-sdk"
 
 
 def valid_data(repo: Path) -> dict[str, Any]:

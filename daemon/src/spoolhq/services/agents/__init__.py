@@ -5,11 +5,14 @@ returns a ``RunResult``. ``ClaudeCliRunner`` drives the user's own ``claude`` CL
 the policy is enforced by Claude Code (restricted mode, an allowlist, the OS sandbox
 and a scrubbed environment) and verified from its stream. ``CodexCliRunner`` drives
 ``codex exec`` under a per-run permission profile and refuses what Codex can't enforce.
-``FakeRunner`` replays recorded transcripts for tests. This package imports no other service. See
+``AgentSdkRunner`` runs the Claude Agent SDK with an API key, the same policy layers
+and a ``PreToolUse`` hook. ``FakeRunner`` replays recorded transcripts for tests. This
+package imports no other service. See
 ``docs/agents.md``.
 """
 
 from spoolhq.core.agent_policy import READ_ONLY_GIT
+from spoolhq.services.agents.agent_sdk import AgentSdkRunner
 from spoolhq.services.agents.backends import (
     READ_ONLY_SHELL,
     available_runners,
@@ -46,6 +49,7 @@ __all__ = [
     "READ_ONLY_SHELL",
     "AgentEvent",
     "AgentPolicy",
+    "AgentSdkRunner",
     "AgentRunner",
     "BackendInfo",
     "BackendUnavailableError",

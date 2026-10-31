@@ -19,7 +19,7 @@ commands:
   lint: just lint
   test: just test
 agents:
-  default: claude-code-cli        # or codex-cli
+  default: claude-code-cli        # or codex-cli, claude-agent-sdk
   reviewer: codex-cli             # optional per-role override
   backends:                       # optional: a custom endpoint and model per backend
     claude-code-cli: { base_url: http://localhost:11434, model: qwen3-coder }
@@ -63,7 +63,7 @@ run:
 | `commands.install` | yes | | Non-empty command the gates run to install dependencies. It runs without a shell ([gates](gates.md#no-shell)): no `&&`, `\|\|`, `\|`, `;`, `>`, `<`, `` ` `` or `$(`; put anything longer in a justfile recipe. |
 | `commands.lint` | yes | | Non-empty lint command; same rules. |
 | `commands.test` | yes | | Non-empty test command; same rules. The planner ends every ticket's "Done when" with `` `<test command>` passes ``. |
-| `agents.default` | no | `claude-code-cli` | A known backend: `claude-code-cli` or `codex-cli` ([agents](agents.md#roles-and-backends)). |
+| `agents.default` | no | `claude-code-cli` | A known backend: `claude-code-cli`, `codex-cli` or `claude-agent-sdk` ([agents](agents.md#roles-and-backends)). |
 | `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override; same values as `agents.default`. `agents.planner` is the backend of the [planner](planner.md). `spool agents --project <name>` shows what each role uses. |
 | `agents.backends.<backend>.base_url` | no | | Custom endpoint for that backend, e.g. a local [Ollama](agents.md#local-models-with-ollama). http or https; plain http only for `localhost`, `127.0.0.1` and `::1`; no username or password. A remote one needs its own token ([agents](agents.md#a-custom-endpoint-never-gets-your-login)). |
 | `agents.backends.<backend>.model` | no | | Model name for that backend; without it, the backend's own default. |
@@ -102,7 +102,7 @@ Every problem is reported at once, one line each, as `project.yaml: <dotted.path
 | Branch missing | `project.yaml: default_branch: branch 'develop' not found in /home/me/code/app` |
 | git not installed | `project.yaml: repo: git was not found on PATH` |
 | Bad remote | `project.yaml: git.remote: not a GitHub URL` |
-| Unknown backend | `project.yaml: agents.default: unknown backend 'copilot'; expected one of: claude-code-cli, codex-cli` |
+| Unknown backend | `project.yaml: agents.default: unknown backend 'copilot'; expected one of: claude-code-cli, codex-cli, claude-agent-sdk` |
 | Plain http to another host | `project.yaml: agents.backends.claude-code-cli.base_url: 'http://example.com': plain http is allowed only for localhost; use https` |
 | Credentials in the URL | `project.yaml: agents.backends.claude-code-cli.base_url: must not contain a username or password` |
 | Budget not positive | `project.yaml: agents.budget_per_ticket.usd: must be greater than 0` |

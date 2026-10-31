@@ -82,6 +82,42 @@ def parse_version(text: str) -> tuple[int, int, int] | None:
     return int(major), int(minor), int(patch)
 
 
+def probe(argv: Sequence[str], env: Mapping[str, str]) -> tuple[int, str] | None:
+    """``argv``'s exit code and stdout, in a throwaway folder; None if it can't run."""
+    # In a throwaway folder: `claude auth status` leaves scrub stubs in its cwd.
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix="spoolhq-claude-", ignore_cleanup_errors=True
+        ) as cwd:
+            completed = subprocess.run(  # noqa: S603 - fixed argument list, no shell
+                list(argv),
+                cwd=cwd,
+                env=dict(env),
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=DETECT_TIMEOUT_S,
+                check=False,
+            )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return completed.returncode, completed.stdout
+
+
+def platform_reason(platform: str, which: Which) -> str | None:
+    """Why Claude Code's Bash sandbox can't run on ``platform``, or None."""
+    if platform == "win32":
+        return WINDOWS_REASON
+    if platform.startswith("linux"):
+        if which("bwrap") is None or which("socat") is None:
+            return LINUX_PACKAGES_REASON
+        return None
+    if platform == "darwin":
+        return None
+    return f"Claude Code's Bash sandbox is not available on {platform}"
+
+
 def billing_for(auth_method: str | None) -> Billing:
     if auth_method in SUBSCRIPTION_METHODS:
         return "subscription"
@@ -129,25 +165,7 @@ class ClaudeCliRunner:
         return (found,) if found else None
 
     def _probe(self, argv: Sequence[str], env: Mapping[str, str]) -> tuple[int, str] | None:
-        # In a throwaway folder: `claude auth status` leaves scrub stubs in its cwd.
-        try:
-            with tempfile.TemporaryDirectory(
-                prefix="spoolhq-claude-", ignore_cleanup_errors=True
-            ) as cwd:
-                completed = subprocess.run(  # noqa: S603 - fixed argument list, no shell
-                    list(argv),
-                    cwd=cwd,
-                    env=dict(env),
-                    stdin=subprocess.DEVNULL,
-                    capture_output=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=DETECT_TIMEOUT_S,
-                    check=False,
-                )
-        except (OSError, subprocess.SubprocessError):
-            return None
-        return completed.returncode, completed.stdout
+        return probe(argv, env)
 
     def _auth_status(self, cmd: Sequence[str], env: Mapping[str, str]) -> tuple[bool, str | None]:
         probed = self._probe([*cmd, "auth", "status"], env)
@@ -164,17 +182,6 @@ class ClaudeCliRunner:
         method = method if isinstance(method, str) else None
         logged_in = returncode == 0 and data.get("loggedIn", True) is not False
         return logged_in and method != "none", method
-
-    def _platform_reason(self) -> str | None:
-        if self._platform == "win32":
-            return WINDOWS_REASON
-        if self._platform.startswith("linux"):
-            if self._which("bwrap") is None or self._which("socat") is None:
-                return LINUX_PACKAGES_REASON
-            return None
-        if self._platform == "darwin":
-            return None
-        return f"Claude Code's Bash sandbox is not available on {self._platform}"
 
     def detect(self) -> BackendInfo:
         """Whether ``claude`` is installed, logged in and can enforce the policy."""
@@ -218,7 +225,7 @@ class ClaudeCliRunner:
                 f"{format_version(MIN_VERSION)} or newer (run: claude update)"
             )
         else:
-            reason = self._platform_reason()
+            reason = platform_reason(self._platform, self._which)
         enforceable = reason is None
         if reason is None and not logged_in:
             reason = login_hint

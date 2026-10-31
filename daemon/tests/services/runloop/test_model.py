@@ -4,18 +4,28 @@ import itertools
 import json
 from pathlib import Path
 
+import keyring
 import pytest
 
-from spoolhq.services.agents import ClaudeCliRunner, CodexCliRunner, FakeRunner, backends
+from spoolhq.services.agents import (
+    AgentSdkRunner,
+    ClaudeCliRunner,
+    CodexCliRunner,
+    FakeRunner,
+    backends,
+)
 from spoolhq.services.projects import load_project, save_project
 from spoolhq.services.runloop import Agents, PlanJobs, RunLoop
 from spoolhq.services.runs import AttemptKind, RunRegistry, RunStatus
 from tests.conftest import (
+    AGENT_FIXTURES,
     CODEX_FIXTURES,
     DASHBOARD_PLAN,
+    TEST_API_KEY,
     FakeBackend,
     fake_claude_cmd,
     fake_codex_cmd,
+    fake_sdk_cmd,
     sandbox_which,
 )
 from tests.services.runloop.conftest import PASSING, FakeGates, ManualClock, Merging, Transcripts
@@ -172,4 +182,63 @@ def test_a_ticket_runs_end_to_end_on_codex(
     review = json.loads((tmp_path / "review.json").read_text(encoding="utf-8"))
     assert 'extends=":workspace"' in " ".join(impl["argv"])
     assert 'extends=":workspace"' not in " ".join(review["argv"])  # read-only reviewer
+    assert "T01" in impl["stdin"]
+
+
+@pytest.mark.integration
+def test_a_ticket_runs_end_to_end_on_the_agent_sdk(
+    monkeypatch: pytest.MonkeyPatch,
+    transcripts: Transcripts,
+    registry: RunRegistry,
+    projects_dir: Path,
+    worktrees: Path,
+    home: Path,
+    clock: ManualClock,
+    tmp_path: Path,
+) -> None:
+    """The shared ticket fixture through the run loop, both roles on the Agent SDK backend
+    (the real SDK client, the fake CLI writing ``hello.txt`` when the hook allows it)."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    keyring.set_password("spoolhq", "anthropic", TEST_API_KEY)
+
+    def sdk(scenario: Path, record: str) -> AgentSdkRunner:
+        return AgentSdkRunner(
+            cli_cmd=fake_sdk_cmd(scenario, tmp_path / record),
+            platform="linux",
+            which=sandbox_which,
+            home=tmp_path / "user-home",
+        )
+
+    implementer = sdk(AGENT_FIXTURES / "success_writes_file.jsonl", "impl.json")
+    reviewer = sdk(transcripts.review("approve"), "review.json")
+    # Agents.for_project builds the implementer, the reviewer, then the planner.
+    roles = itertools.cycle([implementer, reviewer, implementer])
+    monkeypatch.setitem(backends.BACKENDS, "claude-agent-sdk", lambda base_url, model: next(roles))
+    set_roles(projects_dir, default="claude-agent-sdk")
+
+    loop = RunLoop(
+        registry,
+        projects_dir=projects_dir,
+        worktrees_dir=worktrees,
+        home=home,
+        integrator=(merging := Merging()),
+        clock=clock,
+        gates=FakeGates([PASSING]),
+        poll_s=3600,
+    )
+    try:
+        run = loop.start("demo", "T01")
+        loop.wait("demo")
+    finally:
+        loop.close()
+
+    log = registry.get("demo").run_log
+    assert log.get_run(run.id).status is RunStatus.DONE
+    [attempt] = log.list_attempts(run.id)
+    assert (attempt.kind, attempt.backend) == (AttemptKind.INITIAL, "claude-agent-sdk")
+    assert merging.calls == ["T01"]
+    impl = json.loads((tmp_path / "impl.json").read_text(encoding="utf-8"))
+    review = json.loads((tmp_path / "review.json").read_text(encoding="utf-8"))
+    assert [hook["tool"] for hook in impl["hooks"]] == ["Write"]
+    assert review["argv"][review["argv"].index("--tools") + 1] == "Read,Glob,Grep"
     assert "T01" in impl["stdin"]

@@ -1,10 +1,12 @@
 """The state machine end to end: fake runners, fake gates, a real git repo and run log."""
 
+from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from spoolhq.services.agents import AgentPolicy, Budget, FakeRunner
+from spoolhq.services.agents import AgentPolicy, Budget, FakeRunner, RunResult
 from spoolhq.services.agents.claude_config import build_argv
 from spoolhq.services.projects import Budget as ProjectBudget
 from spoolhq.services.projects import load_project, save_project
@@ -291,6 +293,27 @@ def test_budget_used_up_blocks_before_the_next_attempt(
         "budget used up: 2,500 of 2,000 weighted tokens",
     )
     assert len(log.list_attempts(run.id)) == 2
+
+
+def test_the_usd_budget_left_reaches_the_implementer(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    registry: RunRegistry,
+    projects_dir: Path,
+) -> None:
+    settings = load_project("demo", projects_dir=projects_dir)
+    settings.agents.budget_per_ticket = ProjectBudget(usd=0.5)
+    save_project(settings, projects_dir=projects_dir)
+    budgets: list[Budget] = []
+
+    class Spy(Hooked):
+        def run(self, prompt: str, policy: AgentPolicy, budget: Budget, **kwargs: Any) -> RunResult:
+            budgets.append(budget)
+            return super().run(prompt, policy, budget, **kwargs)
+
+    run_once(make_loop(Spy(FakeRunner([transcripts.implement()]), lambda policy: None))[0])
+
+    assert [budget.max_usd for budget in budgets] == [Decimal("0.5000")]
 
 
 def test_budget_counts_cache_reads_at_a_tenth(

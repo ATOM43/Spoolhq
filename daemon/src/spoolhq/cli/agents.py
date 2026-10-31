@@ -23,7 +23,7 @@ from spoolhq.services.projects import Agents, ProjectError, Role, load_project
 ROLES: tuple[Role, ...] = ("planner", "implementer", "reviewer")
 
 NONE = "-"
-LOGIN_COMMANDS = {"codex-cli": "codex login"}
+LOGIN_COMMANDS = {"codex-cli": "codex login", "claude-agent-sdk": "spool secrets set anthropic"}
 
 
 def describe(info: BackendInfo) -> list[str]:

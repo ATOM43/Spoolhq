@@ -1,10 +1,10 @@
 # Agents
 
-A coding agent implements one ticket in its own worktree. SpoolHQ talks to agents through one interface, `AgentRunner`, so the run loop ([run-loop.md](run-loop.md)) does not care which backend is behind it. The first backend, `claude-code-cli`, drives the user's own installed `claude` CLI, so a Claude subscription is enough; there is no API key to manage. The second, `codex-cli`, drives the user's own `codex` the same way ([Codex CLI](#codex-cli-codex-cli)).
+A coding agent implements one ticket in its own worktree. SpoolHQ talks to agents through one interface, `AgentRunner`, so the run loop ([run-loop.md](run-loop.md)) does not care which backend is behind it. The first backend, `claude-code-cli`, drives the user's own installed `claude` CLI, so a Claude subscription is enough; there is no API key to manage. The second, `codex-cli`, drives the user's own `codex` the same way ([Codex CLI](#codex-cli-codex-cli)). The third, `claude-agent-sdk`, is for users with an Anthropic API key instead of a subscription ([Claude Agent SDK](#claude-agent-sdk-claude-agent-sdk)).
 
 This is the security core of SpoolHQ: the agent must not be able to touch anything outside its worktree. SpoolHQ does not enforce that itself. Claude Code does, in four layers that SpoolHQ configures and then checks took effect; for Codex, its OS sandbox does, under a permission profile SpoolHQ writes for each run, and SpoolHQ refuses any part of the policy Codex can't enforce.
 
-The code is `services/agents/`: the policy, budget, events and result in `model.py`, the interface in `runner.py`, the stream parser in `claude_stream.py`, the Claude Code adapter in `claude_cli.py`, with its command line, settings and environment in `claude_config.py`, the process handling both CLI adapters share in `process.py`, the Codex CLI adapter in `codex_cli.py`, `codex_config.py` and `codex_stream.py`, the custom-endpoint token in `endpoint.py`, the fake runner in `fake.py` and the backend registry in `backends.py`. It imports no other service package (an import-linter contract checks this); callers pass plain values in.
+The code is `services/agents/`: the policy, budget, events and result in `model.py`, the interface in `runner.py`, the stream parser in `claude_stream.py`, the Claude Code adapter in `claude_cli.py`, with its command line, settings and environment in `claude_config.py`, the process handling both CLI adapters share in `process.py`, the Codex CLI adapter in `codex_cli.py`, `codex_config.py` and `codex_stream.py`, the Agent SDK adapter in `agent_sdk.py` (key, policy hook, runner) and `agent_sdk_stream.py` (its transport and run loop), the custom-endpoint token in `endpoint.py`, the fake runner in `fake.py` and the backend registry in `backends.py`. It imports no other service package (an import-linter contract checks this); callers pass plain values in.
 
 ## The interface
 
@@ -51,7 +51,7 @@ All are frozen dataclasses with a `kind`:
 
 ## Roles and backends
 
-`project.yaml` picks a backend per role: `agents.planner`, `agents.implementer` and `agents.reviewer`, each falling back to `agents.default` ([project.yaml](project-yaml.md)). `backends.py` holds the registry from backend name to adapter factory; it knows `claude-code-cli` and `codex-cli` (tests add fakes). An unknown name is refused when `project.yaml` loads, naming the field.
+`project.yaml` picks a backend per role: `agents.planner`, `agents.implementer` and `agents.reviewer`, each falling back to `agents.default` ([project.yaml](project-yaml.md)). `backends.py` holds the registry from backend name to adapter factory; it knows `claude-code-cli`, `codex-cli` and `claude-agent-sdk` (tests add fakes). An unknown name is refused when `project.yaml` loads, naming the field.
 
 The daemon builds each role's runner per project for every run (`Agents.for_project`), and the planner's when a plan starts; `spool plan generate` and `spool review` use the project's `agents.planner` and `agents.reviewer`.
 
@@ -330,6 +330,56 @@ backend 'codex-cli' can't enforce denied reads; choose another backend for the i
 - **The token budget can't stop a turn.** Codex reports usage only when its turn ends, and `codex exec` runs one turn, so `budget_per_ticket.tokens` stops further attempts (the ticket is blocked) but not the current one. The timeout (`timeout_s`) and cancel are what stop a run mid-way.
 - **Only the standalone install was checked.** The real check used Codex from the standalone installer (`~/.codex/packages/…`). A Codex installed with npm runs a native binary from another package folder; whether a read-only profile can start it is unchecked.
 
+## Claude Agent SDK (`claude-agent-sdk`)
+
+`AgentSdkRunner` runs the [Claude Agent SDK for Python](https://code.claude.com/docs/en/agent-sdk/python) with an Anthropic API key, for users without a Claude subscription. It returns the same events and `RunResult` and passes the contract suite. Checked on 2026-10-31 against `claude-agent-sdk` **0.2.176** (MIT, pinned in `daemon/pyproject.toml`), which bundles Claude Code **2.1.316**, and the docs at https://code.claude.com/docs/en/agent-sdk/python, https://code.claude.com/docs/en/agent-sdk/overview, https://code.claude.com/docs/en/headless and https://code.claude.com/docs/en/authentication.
+
+**It needs the Claude Code binary, and brings its own.** The SDK is a library that runs the Claude Code CLI; the wheel ships it in `claude_agent_sdk/_bundled/`. SpoolHQ uses that one (or `claude` on `PATH` if it is missing), and `spool agents` shows both versions.
+
+**The same process as the Claude Code adapter.** The SDK's own transport starts the CLI with the daemon's whole environment (`ClaudeAgentOptions.env` is merged on top of it), so SpoolHQ hands `query()` its own `Transport` (a public SDK interface) that starts the CLI with the [Claude Code command line](#the-command-line) and the [scrubbed environment](#the-environment-allowlist), plus `--setting-sources=` (the SDK's `setting_sources=[]`) and `--input-format stream-json`. The four policy layers are therefore the same, and so is the `init` check. The SDK still runs its control protocol over that transport: the prompt goes to the CLI's stdin as a stream-json message (never argv), and the `PreToolUse` hook below is called for every tool use. Every stdout message is tapped before the SDK parses it, so `ClaudeStreamParser` sees exactly what it sees for the CLI adapter, and `on_raw` gets it for the transcript.
+
+### The API key, and never a subscription login
+
+- The key comes from `ANTHROPIC_API_KEY` in the daemon's environment, else the OS keychain (`spool secrets set anthropic`: hidden prompt, service `spoolhq`, key `anthropic`). It is never read from a file or argv and is put only into the environment of that run's CLI process; `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` keeps it from the agent's commands.
+- Without one, nothing starts:
+
+  ```text
+  backend 'claude-agent-sdk' needs an API key; run spool secrets set anthropic
+  ```
+
+- **A stored claude.ai login is never used.** Each run gets a fresh, empty `CLAUDE_CONFIG_DIR` (removed afterwards, and denied to the agent's commands). Claude Code keeps its login under that folder (`.credentials.json` on Linux and Windows, and the macOS Keychain entry is keyed to it), so there is no login to find; it also means none of the user's settings, hooks, MCP servers or memory load and nothing is written to `~/.claude`. The key outranks any login anyway ("In non-interactive mode (`-p`), the key is always used when present"), and `init` must report `apiKeySource: "ANTHROPIC_API_KEY"`, or the run stops with `policy not enforced: init reports key source …`. Checked on this machine with Claude Code 2.1.316 and a stored claude.ai login: with the empty config folder and no key it answers `Not logged in · Please run /login`.
+- `--bare` would also skip the login, but real 2.1.316 under `--bare` offered only Bash, Edit and Read (no Write, Glob or Grep) and never called the SDK's hook, so it is not used.
+- A custom `base_url` gets the [endpoint token](#a-custom-endpoint-never-gets-your-login) as `ANTHROPIC_AUTH_TOKEN` (the dummy for localhost, `SPOOLHQ_ENDPOINT_TOKEN_CLAUDE_AGENT_SDK` or `spool secrets set endpoint:claude-agent-sdk` otherwise), never the API key; billing is then `unknown`. `model` becomes `--model`.
+
+### The policy per role
+
+Every part is enforced by Claude Code's own options (as for `claude-code-cli`) and again by the hook. All of them need the OS sandbox, so the backend is refused where Claude Code's sandbox can't run (native Windows, Linux without `bwrap` and `socat`), with T30's message: `backend 'claude-agent-sdk' can't enforce …; choose another backend for the <role> role`.
+
+| Role | Tools (`--tools`, exact in `init`) | Writes | Bash |
+| --- | --- | --- | --- |
+| implementer | Read, Edit, Write, Glob, Grep, Bash | inside the worktree only | the stack commands except `install`, and `git status/diff/log/show`, with arguments |
+| reviewer, planner | Read, Glob, Grep | none | none |
+
+**The hook** (`check_tool`, registered for every tool with `HookMatcher(matcher=None)`) returns `permissionDecision: "deny"` with a reason, or nothing, in which case Claude Code's own rules still decide (it never returns `allow`). It denies:
+
+- any tool outside the role's list (web fetch and search, MCP tools, subagents);
+- a file tool whose path (absolute, `~/…` or relative to the worktree, symlinks resolved) is under a denied path (`~/.ssh`, the credential folders, `~/.claude*`, the SpoolHQ home: reads too) or outside the worktree; a `Glob` pattern that is absolute or has `..`;
+- a Bash command with any of `; & | < > $ ` ( ) * ? [ ] { } \` or a newline (so `just test; curl x` is denied), one that `shlex` can't split, or whose argument list doesn't start with an allowed command's (`just test -k x` passes, `just tests` doesn't); `git … --output…`; and any call asking for `dangerouslyDisableSandbox`.
+
+If the check itself raises, the call is denied. Each denial goes through the parser: a `PermissionDenied` event with the hook's reason, a warning in the log, and an entry in `denials` (Claude Code then also lists it in the result's `permission_denials`, counted once). Checked against real 2.1.316 with a local stand-in API that scripted the model's calls: `just test; curl x`, `cat ~/.ssh/known_hosts` and a `Read` of `/etc/hostname` were denied by the hook, the `Write` of `hello.txt` and `just test` ran, and a reviewer's `init` listed exactly Glob, Grep and Read. That stream is `daemon/tests/fixtures/agents/claude/recorded/agent_sdk_run.jsonl`.
+
+### Usage, budget and errors
+
+- Tokens and `total_cost_usd` come from the same stream as for Claude Code; billing is `api`, so `cost_micro_usd` is recorded.
+- `budget_per_ticket.usd` becomes `--max-budget-usd`: Claude Code stops the run (`error_max_budget_usd` → `budget_exhausted`) once its cost estimate passes it, checked after each turn (a real 2.1.316 run stopped after its first turn). The estimate can overshoot by up to one turn. `max_turns` is `--max-turns`; `max_tokens`, the timeout and cancel are enforced by the runner as for the other adapters.
+- Rate-limit and overload errors are retried by Claude Code itself (`api_retry` events, reported as `RateLimit(status="retrying")`), as the SDK documents. A billing or quota error (`billing_error`, "credit balance", "usage limits", "quota") is outcome `error`, never a pause, since an API key has no reset time: `the Anthropic API refused the key for billing or quota (…); add credit or raise the limit at https://platform.claude.com, then retry the ticket`.
+
+### Agent SDK: testing and known limits
+
+- Tests drive the real SDK client against `daemon/tests/services/agents/fake_sdk_cli.py`, a stand-in CLI that speaks the SDK's control protocol: it answers `initialize`, asks the hook before each recorded tool call (turning a denial into the error Claude Code returns), writes allowed `Write`s, and records argv, environment names, the key's SHA-256 and the prompt. The contract suite and a run-loop ticket (`tests/services/runloop/test_model.py`) run through it.
+- The opt-in real run uses your API key and costs a few cents: `SPOOLHQ_REAL_BACKENDS=agent-sdk uv run --directory daemon pytest -m real_agent`. It is skipped, saying why, without the variable or a key. It has not been run yet (no key on the machine this was written on).
+- The custom transport relies on the SDK's `Transport` class, which the SDK says may change in any release; the version is pinned.
+
 ## The fake runner
 
 `FakeRunner(transcript, *, name="fake", stall_s=0)` replays a recorded stream-json file through the same `ClaudeStreamParser` and calls the same callbacks (with the same tool check, read-only included), so tests can drive agent runs without a model or network. For a `Write` inside the worktree it writes the given content, so file effects can be tested. Given a list of transcripts, each `run()` replays the next one and a run past the end raises, so retries can be tested; `calls` holds each run's prompt and policy. Its `detect()` reports installed, logged in, `subscription`, enforceable. Transcripts live in `daemon/tests/fixtures/agents/claude/`; `recorded/real_run.jsonl` is an anonymised recording of the opt-in real run below.
@@ -371,6 +421,20 @@ codex-cli
   implementer  writes confined to the worktree yes, approvals never asked yes, network off yes, denied reads yes, the shell allowlist yes
   reviewer     read-only yes, approvals never asked yes, network off yes, denied reads yes, the shell allowlist yes
 ```
+
+For the Agent SDK it shows the SDK and Claude Code versions, whether a key is set (never the key) and the parts per role:
+
+```text
+claude-agent-sdk
+  installed  yes (0.2.176, bundled Claude Code 2.1.316)
+  login      yes (api key from keychain, api)
+  policy     yes (enforceable)
+  planner      read-only yes, approvals never asked yes, network off yes, denied reads yes, the shell allowlist yes
+  implementer  writes confined to the worktree yes, approvals never asked yes, network off yes, denied reads yes, the shell allowlist yes
+  reviewer     read-only yes, approvals never asked yes, network off yes, denied reads yes, the shell allowlist yes
+```
+
+Without a key the login line reads `no (run: spool secrets set anthropic)`.
 
 It exits 0 even when nothing is installed; the output then says how to install each CLI and log in (`claude auth login`, `codex login`).
 

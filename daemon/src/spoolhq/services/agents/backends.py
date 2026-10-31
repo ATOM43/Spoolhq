@@ -6,6 +6,8 @@ the optional custom endpoint (``base_url``) and ``model`` from ``agents.backends
 
 from collections.abc import Callable
 
+from spoolhq.services.agents.agent_sdk import BACKEND_NAME as SDK_NAME
+from spoolhq.services.agents.agent_sdk import AgentSdkRunner
 from spoolhq.services.agents.claude_cli import ClaudeCliRunner
 from spoolhq.services.agents.claude_stream import BACKEND_NAME
 from spoolhq.services.agents.codex_cli import CodexCliRunner
@@ -19,6 +21,7 @@ BACKENDS: dict[str, BackendFactory] = {
     # Tests add fakes here (the ``fake_backend`` fixture).
     BACKEND_NAME: lambda base_url, model: ClaudeCliRunner(base_url=base_url, model=model),
     CODEX_NAME: lambda base_url, model: CodexCliRunner(base_url=base_url, model=model),
+    SDK_NAME: lambda base_url, model: AgentSdkRunner(base_url=base_url, model=model),
 }
 
 
@@ -42,4 +45,4 @@ def make_runner(name: str, *, base_url: str | None = None, model: str | None = N
 
 def available_runners() -> list[AgentRunner]:
     """One runner per supported backend, for detection."""
-    return [ClaudeCliRunner(), CodexCliRunner()]
+    return [ClaudeCliRunner(), CodexCliRunner(), AgentSdkRunner()]

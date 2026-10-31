@@ -9,6 +9,7 @@ never counts. See ``docs/run-loop.md``.
 import dataclasses
 import json
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -276,9 +277,16 @@ def implement(ctx: RunContext, attempt: Attempt) -> tuple[RunResult, str]:
         ctx.worktree.path, ctx.project.commands.for_implementer(), ctx.home
     )
     budget = ctx.project.agents.budget_per_ticket
-    left = None
+    usage = ctx.run_log.run_usage(ctx.run.id)
+    left = usd_left = None
     if budget is not None and budget.tokens is not None:
-        left = max(budget.tokens - ctx.run_log.run_usage(ctx.run.id).weighted_tokens, 1)
+        left = max(budget.tokens - usage.weighted_tokens, 1)
+    if budget is not None and budget.usd is not None:
+        # API-billed backends stop mid-run at what is left (over_budget checks between steps).
+        spent = Decimal(usage.cost_micro_usd or 0) / 1_000_000
+        usd_left = max(Decimal(str(budget.usd)) - spent, Decimal("0.01")).quantize(
+            Decimal("0.0001")
+        )
     final: list[str] = []
 
     def on_raw(message: dict[str, Any]) -> None:
@@ -290,7 +298,7 @@ def implement(ctx: RunContext, attempt: Attempt) -> tuple[RunResult, str]:
     result = ctx.agents.implementer.run(
         prompt,
         policy,
-        Budget(max_turns=IMPLEMENTER_MAX_TURNS, max_usd=None, max_tokens=left),
+        Budget(max_turns=IMPLEMENTER_MAX_TURNS, max_usd=usd_left, max_tokens=left),
         on_event=lambda _event: None,
         on_raw=on_raw,
         cancel=ctx.flags.cancel,

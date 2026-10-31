@@ -80,13 +80,15 @@ def policy_parts(*, sandbox: bool, denied_reads: bool) -> dict[str, dict[str, bo
     }
 
 
-def refusal(policy: AgentPolicy, parts: Mapping[str, Mapping[str, bool]]) -> str | None:
-    """Why ``policy`` can't run on Codex here, naming the first part it can't enforce."""
+def refusal(
+    policy: AgentPolicy, parts: Mapping[str, Mapping[str, bool]], backend: str = BACKEND_NAME
+) -> str | None:
+    """Why ``policy`` can't run on ``backend`` here, naming the first part it can't enforce."""
     enforced = parts.get(policy.role, {})
     for part in required_parts(policy.read_only):
         if not enforced.get(part, False):
             return (
-                f"backend '{BACKEND_NAME}' can't enforce {part}; "
+                f"backend '{backend}' can't enforce {part}; "
                 f"choose another backend for the {policy.role} role"
             )
     return None

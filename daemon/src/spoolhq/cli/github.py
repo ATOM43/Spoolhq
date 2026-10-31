@@ -1,8 +1,8 @@
-"""`spool secrets set github|endpoint:<backend>` and `spool github sync`.
+"""`spool secrets set github|anthropic|endpoint:<backend>` and `spool github sync`.
 
 A token is read from a hidden prompt, never from argv, and stored in the OS keychain;
-`SPOOLHQ_GITHUB_TOKEN` (or `SPOOLHQ_ENDPOINT_TOKEN_<BACKEND>`) in the daemon's
-environment wins over it. `github sync` asks
+`SPOOLHQ_GITHUB_TOKEN` (or `ANTHROPIC_API_KEY`, `SPOOLHQ_ENDPOINT_TOKEN_<BACKEND>`) in the
+daemon's environment wins over it. `github sync` asks
 the daemon to check the project's open pull requests now.
 """
 
@@ -17,6 +17,7 @@ from keyring.errors import KeyringError
 from spoolhq.cli.client import ApiClient, ApiError
 from spoolhq.cli.common import fail, settings
 from spoolhq.services.agents import backend_names
+from spoolhq.services.agents.agent_sdk import store_api_key
 from spoolhq.services.agents.endpoint import keyring_key, store_endpoint_token, token_var
 from spoolhq.services.github import store_github_token
 
@@ -37,7 +38,9 @@ def _client() -> ApiClient:
 def set_command(
     name: Annotated[
         str,
-        typer.Argument(metavar="NAME", help="The secret to set: github or endpoint:<backend>."),
+        typer.Argument(
+            metavar="NAME", help="The secret to set: github, anthropic or endpoint:<backend>."
+        ),
     ],
 ) -> None:
     """Store a secret, read from a hidden prompt (never from the command line)."""
@@ -46,12 +49,16 @@ def set_command(
     if name == "github":
         label, key, env_var = "GitHub token", "github", "SPOOLHQ_GITHUB_TOKEN"
         store = store_github_token
+    elif name == "anthropic":
+        label, key, env_var = "Anthropic API key", "anthropic", "ANTHROPIC_API_KEY"
+        store = store_api_key
     elif name in endpoints:
         backend = endpoints[name]
         label, key, env_var = f"token for {backend}'s custom endpoint", name, token_var(backend)
         store = partial(store_endpoint_token, backend)
     else:
-        fail(f"error: unknown secret {name!r}; expected one of: github, {', '.join(endpoints)}")
+        known = ", ".join(["github", "anthropic", *endpoints])
+        fail(f"error: unknown secret {name!r}; expected one of: {known}")
     token = getpass.getpass(f"{label[0].upper()}{label[1:]} (input hidden): ")
     try:
         store(token)

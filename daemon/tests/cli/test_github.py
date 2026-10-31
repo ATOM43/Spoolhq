@@ -66,7 +66,22 @@ def test_secrets_set_endpoint_token(
     assert "endpoint-secret" not in result.output
     unknown = runner.invoke(app, ["secrets", "set", "endpoint:nope"])
     assert unknown.exit_code == 1
-    assert "expected one of: github, endpoint:claude-code-cli" in unknown.output
+    assert "expected one of: github, anthropic, endpoint:claude-code-cli" in unknown.output
+
+
+def test_secrets_set_anthropic(keychain: MemoryKeyring, monkeypatch: pytest.MonkeyPatch) -> None:
+    prompts: list[str] = []
+
+    def fake_getpass(prompt: str) -> str:
+        prompts.append(prompt)
+        return "sk-ant-secret"
+
+    monkeypatch.setattr(getpass, "getpass", fake_getpass)
+    result = runner.invoke(app, ["secrets", "set", "anthropic"])
+    assert result.exit_code == 0, result.output
+    assert prompts == ["Anthropic API key (input hidden): "]
+    assert keychain.passwords == {("spoolhq", "anthropic"): "sk-ant-secret"}
+    assert "sk-ant-secret" not in result.output
 
 
 def test_secrets_set_without_a_keychain(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -23,8 +23,12 @@ def daemon(run_client: TestClient, token: str, monkeypatch: pytest.MonkeyPatch) 
     """Point `spool run` at the in-process app (with fake agents), polling fast."""
 
     def forward(request: httpx.Request) -> httpx.Response:
-        return run_client.request(
+        response = run_client.request(
             request.method, request.url.path, content=request.content, headers=request.headers
+        )
+        # TestClient answers with httpx2 when it is installed (mcp, via the Agent SDK).
+        return httpx.Response(
+            response.status_code, headers=response.headers, content=response.content
         )
 
     monkeypatch.setattr(

@@ -210,6 +210,23 @@ def fake_claude_cmd(scenario: Path, record: Path, *options: str) -> list[str]:
     ]
 
 
+FAKE_SDK_CLI = TESTS_DIR / "services" / "agents" / "fake_sdk_cli.py"
+TEST_API_KEY = "sk-ant-test-0123456789abcdef"  # noqa: S105 - a fake key the tests look for
+
+
+def fake_sdk_cmd(scenario: Path, record: Path, *options: str) -> list[str]:
+    """``cli_cmd`` for ``AgentSdkRunner`` that runs ``fake_sdk_cli.py`` with ``scenario``."""
+    return [
+        sys.executable,
+        str(FAKE_SDK_CLI),
+        "--scenario",
+        str(scenario),
+        "--record",
+        str(record),
+        *options,
+    ]
+
+
 CODEX_FIXTURES = FIXTURES_DIR / "agents" / "codex"
 """Codex ``exec --json`` transcripts, hand-built from the documented event format."""
 CODEX_VERSION = "0.166.0"

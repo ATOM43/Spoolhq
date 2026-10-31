@@ -2,8 +2,9 @@
 
 Each case builds a runner that plays a recorded scenario: the Claude Code adapter
 through the fake ``claude`` binary, the Codex CLI adapter through the same binary as
-``codex``, and the fake runner directly. Adding an adapter means adding one
-``AdapterCase``; its scenarios are the recorded transcripts in
+``codex``, the Agent SDK adapter through the real SDK client and a fake CLI that
+speaks its control protocol (``fake_sdk_cli.py``), and the fake runner directly.
+Adding an adapter means adding one ``AdapterCase``; its scenarios are the recorded transcripts in
 ``tests/fixtures/agents/claude/``, or its own recordings of the same runs
 (``tests/fixtures/agents/codex/``).
 """
@@ -15,12 +16,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import keyring
 import pytest
 
 from spoolhq.services.agents import (
     AgentEvent,
     AgentPolicy,
     AgentRunner,
+    AgentSdkRunner,
     Budget,
     ClaudeCliRunner,
     CodexCliRunner,
@@ -36,8 +39,10 @@ from tests.conftest import (
     AGENT_FIXTURES,
     AGENT_PROMPT,
     CODEX_FIXTURES,
+    TEST_API_KEY,
     fake_claude_cmd,
     fake_codex_cmd,
+    fake_sdk_cmd,
     sandbox_which,
 )
 from tests.services.agents.test_claude_stream import RESET
@@ -110,6 +115,17 @@ def codex_cli(tmp_path: Path, scenario: Path, hang: bool) -> AgentRunner:
     )
 
 
+def agent_sdk(tmp_path: Path, scenario: Path, hang: bool) -> AgentRunner:
+    keyring.set_password("spoolhq", "anthropic", TEST_API_KEY)  # the per-test keychain
+    options = ("--sleep", "60") if hang else ()
+    return AgentSdkRunner(
+        cli_cmd=fake_sdk_cmd(scenario, tmp_path / "record.json", *options),
+        platform="linux",
+        which=sandbox_which,
+        home=tmp_path / "user-home",
+    )
+
+
 def fake(tmp_path: Path, scenario: Path, hang: bool) -> AgentRunner:
     return FakeRunner(scenario, stall_s=60 if hang else 0)
 
@@ -125,6 +141,7 @@ CODEX = AdapterCase(
 ADAPTERS = [
     pytest.param(AdapterCase("claude-code-cli", claude_cli), marks=pytest.mark.integration),
     pytest.param(CODEX, marks=pytest.mark.integration),
+    pytest.param(AdapterCase("claude-agent-sdk", agent_sdk), marks=pytest.mark.integration),
     pytest.param(AdapterCase("fake", fake)),
 ]
 

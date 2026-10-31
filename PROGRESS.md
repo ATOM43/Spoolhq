@@ -261,3 +261,12 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 
 - `CodexCliRunner.run()` refuses a worktree inside `/tmp`, `/var/tmp`, `$TMPDIR` or `tempfile.gettempdir()` (symlinks resolved) before anything starts; `spool agents` shows a `worktrees` line for `worktrees_dir`. Tests opt out with the `allow_temp_worktree` constructor argument, which `make_runner` never sets.
 - `docs/agents.md` "Codex: known limits": unreported filesystem denials, the token budget acting only after the turn, the npm install unchecked. DECISIONS 275.
+
+## T31 · Claude Agent SDK backend
+
+- Step 0: `Plan.md` and `task.md` drop Gemini (replaced by Google's closed-source Antigravity CLI, now listed under Later phases); T31 is the Agent SDK only (2 h); the ticket table is fixed and sums to 76 h over 30 tickets.
+- `services/agents/agent_sdk.py` and `agent_sdk_stream.py` (new): `claude-agent-sdk` (SDK 0.2.176, bundled Claude Code 2.1.316, MIT) runs through SpoolHQ's own SDK `Transport` with the Claude Code adapter's command line and scrubbed environment, an empty per-run `CLAUDE_CONFIG_DIR` (no stored login, no user settings or hooks) and a `PreToolUse` hook that checks every tool call on its parsed arguments. API key from `ANTHROPIC_API_KEY` or `spool secrets set anthropic`; refused without one.
+- The run loop now passes what is left of `budget_per_ticket.usd` as the implementer's `max_usd` (`--max-budget-usd` for API-billed runs). Billing and quota errors block instead of pausing.
+- `spool agents` shows the SDK and CLI versions, whether a key is set and the policy parts per role.
+- Tests: the contract suite and a run-loop ticket on the backend (real SDK client, `fake_sdk_cli.py`), hook rules, key handling and leak checks, cost, budget, billing, endpoints, refusals, a recorded stream from real 2.1.316; the opt-in real run (`SPOOLHQ_REAL_BACKENDS=agent-sdk`) is skipped here (no API key).
+- Docs: `agents.md` (Claude Agent SDK section, `spool agents`), `project-yaml.md`, `architecture.md`; DECISIONS 276–283.

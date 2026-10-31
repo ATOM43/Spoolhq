@@ -7,14 +7,22 @@ from typer.testing import CliRunner
 
 from spoolhq.cli import agents as agents_cli
 from spoolhq.cli import app
-from spoolhq.services.agents import AgentRunner, BackendInfo, ClaudeCliRunner, CodexCliRunner
+from spoolhq.services.agents import (
+    AgentRunner,
+    AgentSdkRunner,
+    BackendInfo,
+    ClaudeCliRunner,
+    CodexCliRunner,
+)
 from spoolhq.services.projects import BackendSettings, load_project, save_project
 from tests.conftest import (
     AGENT_FIXTURES,
     CODEX_FIXTURES,
+    TEST_API_KEY,
     FakeBackend,
     fake_claude_cmd,
     fake_codex_cmd,
+    fake_sdk_cmd,
     sandbox_which,
 )
 
@@ -80,6 +88,28 @@ def test_codex_worktrees_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert agents_cli.describe_worktrees(tmp_path) == f"  worktrees  ok ({tmp_path})"
     monkeypatch.setattr(agents_cli, "temp_worktree_refusal", lambda path, env: "refused")
     assert agents_cli.describe_worktrees(tmp_path) == "  worktrees  no: refused"
+
+
+@pytest.mark.integration
+def test_the_agent_sdk_shows_its_versions_the_key_and_the_parts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    cmd = fake_sdk_cmd(AGENT_FIXTURES / "success_writes_file.jsonl", tmp_path / "rec.json")
+    use(monkeypatch, AgentSdkRunner(cli_cmd=cmd, platform="linux", which=sandbox_which))
+    lines = runner.invoke(app, ["agents"]).output.splitlines()
+    assert lines[:4] == [
+        "claude-agent-sdk",
+        "  installed  yes (0.2.176, PATH Claude Code 2.1.316)",
+        "  login      no (run: spool secrets set anthropic)",
+        "  policy     yes (enforceable)",
+    ]
+    assert lines[5].startswith("  implementer  writes confined to the worktree yes")
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", TEST_API_KEY)
+    output = runner.invoke(app, ["agents"]).output
+    assert "  login      yes (api key from environment, api)" in output
+    assert TEST_API_KEY not in output
 
 
 def test_codex_not_logged_in_says_codex_login() -> None:
