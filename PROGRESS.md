@@ -256,3 +256,8 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - Fixes: Codex's own install under `~/.codex/packages` stays runnable while the rest of `~/.codex` is denied (`denials_except`), and read-only profiles can read it; `--strict-config`; browser, computer use, remote plugins and other default-on features off; network failures count as denials. A Codex reviewer or planner gets a read-only shell warning in `spool agents` and at run start.
 - Found, documented: filesystem denials don't appear in Codex's `--json` (enforced, not logged); `files_changed` is best effort; the token budget applies only after Codex's single turn; Codex may write anywhere in `/tmp`.
 - `task.md`: OpenAI terms for a ChatGPT login driven by a third-party tool is a v0.1.0 release blocker (DECISIONS 272 stays unclear). DECISIONS 273–274; a redacted real stream in `tests/fixtures/agents/codex/recorded/`.
+
+## Chore · Codex worktree guard and known limits
+
+- `CodexCliRunner.run()` refuses a worktree inside `/tmp`, `/var/tmp`, `$TMPDIR` or `tempfile.gettempdir()` (symlinks resolved) before anything starts; `spool agents` shows a `worktrees` line for `worktrees_dir`. Tests opt out with the `allow_temp_worktree` constructor argument, which `make_runner` never sets.
+- `docs/agents.md` "Codex: known limits": unreported filesystem denials, the token budget acting only after the turn, the npm install unchecked. DECISIONS 275.

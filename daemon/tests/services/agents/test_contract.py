@@ -106,6 +106,7 @@ def codex_cli(tmp_path: Path, scenario: Path, hang: bool) -> AgentRunner:
         which=sandbox_which,
         home=tmp_path / "user-home",
         system_config=tmp_path / "no-system-config.toml",
+        allow_temp_worktree=True,  # pytest's tmp_path is a temp folder
     )
 
 

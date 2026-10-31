@@ -9,6 +9,7 @@ to it. Checked against the Codex CLI 0.166.0 docs; see ``docs/agents.md`` and DE
 import dataclasses
 import json
 import os
+import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -87,6 +88,31 @@ def refusal(policy: AgentPolicy, parts: Mapping[str, Mapping[str, bool]]) -> str
             return (
                 f"backend '{BACKEND_NAME}' can't enforce {part}; "
                 f"choose another backend for the {policy.role} role"
+            )
+    return None
+
+
+SHARED_TEMP = ("/tmp", "/var/tmp")  # noqa: S108 - folders to refuse, never written to
+
+
+def temp_folders(env: Mapping[str, str]) -> list[str]:
+    """The shared temp folders Codex's ``:workspace`` profile lets the agent write in."""
+    found = [*SHARED_TEMP, *filter(None, [env.get("TMPDIR")]), tempfile.gettempdir()]
+    return list(dict.fromkeys(found))
+
+
+def temp_worktree_refusal(worktree: Path, env: Mapping[str, str]) -> str | None:
+    """Why Codex can't run in ``worktree`` (inside a shared temp folder), or None.
+
+    Both sides are resolved, so a symlink into a temp folder (or macOS's ``/tmp`` →
+    ``/private/tmp``) counts.
+    """
+    real = worktree.resolve()
+    for folder in temp_folders(env):
+        if real.is_relative_to(Path(folder).resolve()):
+            return (
+                f"backend '{BACKEND_NAME}' can't run in a worktree under {folder}: its sandbox "
+                "can write anywhere there; set worktrees_dir outside temp folders"
             )
     return None
 

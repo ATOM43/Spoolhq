@@ -5,12 +5,19 @@ Exits 0 even when nothing is installed; the output says what to do instead. With
 ``--project``, it shows the backend, model and endpoint each of that project's roles uses.
 """
 
+import os
+from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from spoolhq.cli.common import fail, settings
-from spoolhq.services.agents import READ_ONLY_SHELL, BackendInfo, available_runners
+from spoolhq.services.agents import (
+    READ_ONLY_SHELL,
+    BackendInfo,
+    available_runners,
+    temp_worktree_refusal,
+)
 from spoolhq.services.projects import Agents, ProjectError, Role, load_project
 
 ROLES: tuple[Role, ...] = ("planner", "implementer", "reviewer")
@@ -41,6 +48,12 @@ def describe(info: BackendInfo) -> list[str]:
     if info.name in READ_ONLY_SHELL:
         lines.append("  warning    as reviewer or planner it can run read-only shell commands")
     return lines
+
+
+def describe_worktrees(worktrees_dir: Path) -> str:
+    """Codex's line for the configured worktrees folder: refused under a temp folder."""
+    refused = temp_worktree_refusal(worktrees_dir, os.environ)
+    return f"  worktrees  no: {refused}" if refused else f"  worktrees  ok ({worktrees_dir})"
 
 
 def describe_roles(agents: Agents) -> list[str]:
@@ -74,5 +87,9 @@ def agents_command(
     for index, runner in enumerate(available_runners()):
         if index:
             typer.echo("")
-        for line in describe(runner.detect()):
+        info = runner.detect()
+        lines = describe(info)
+        if info.name == "codex-cli" and info.installed:
+            lines.append(describe_worktrees(settings().worktrees_dir))
+        for line in lines:
             typer.echo(line)

@@ -22,6 +22,7 @@ from spoolhq.services.agents import (
     Outcome,
     RunResult,
     Started,
+    codex_config,
 )
 from spoolhq.services.agents.codex_cli import INSTALL_HINT, LINUX_PACKAGES_REASON, LOGIN_HINT
 from spoolhq.services.agents.codex_config import build_argv, child_env, with_codex_home
@@ -70,7 +71,7 @@ def runner(
         which=which,
         home=tmp_path / "user-home",
         system_config=system_config or tmp_path / "no-system-config.toml",
-        **kwargs,
+        **{"allow_temp_worktree": True, **kwargs},  # pytest's tmp_path is a temp folder
     )
 
 
@@ -343,3 +344,68 @@ def test_worktree_overlapping_codex_home_is_refused(
     policy = AgentPolicy.for_worktree(worktree, {}, home)
     with pytest.raises(ValueError, match="overlaps"):
         run(runner(tmp_path), policy)
+
+
+# --- worktrees in temp folders ---------------------------------------------------------
+
+
+@pytest.fixture
+def temps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    """Fake temp folders: a /tmp-style one, TMPDIR and tempfile.gettempdir()."""
+    folders = {name: tmp_path / name for name in ("shared-tmp", "tmpdir", "gettempdir")}
+    for folder in folders.values():
+        folder.mkdir()
+    monkeypatch.setattr(codex_config, "SHARED_TEMP", (str(folders["shared-tmp"]),))
+    monkeypatch.setenv("TMPDIR", str(folders["tmpdir"]))
+    monkeypatch.setattr(codex_config.tempfile, "gettempdir", lambda: str(folders["gettempdir"]))
+    return folders
+
+
+def refused_message(folder: Path) -> str:
+    return (
+        f"backend 'codex-cli' can't run in a worktree under {folder}: its sandbox can write "
+        "anywhere there; set worktrees_dir outside temp folders"
+    )
+
+
+@pytest.mark.parametrize("where", ["shared-tmp", "tmpdir", "gettempdir"])
+def test_a_worktree_in_a_temp_folder_is_refused(
+    tmp_path: Path, home: Path, temps: dict[str, Path], where: str
+) -> None:
+    worktree = temps[where] / "wt"
+    worktree.mkdir()
+    agent = runner(tmp_path, allow_temp_worktree=False)
+    with pytest.raises(BackendUnavailableError) as raised:
+        run(agent, AgentPolicy.for_worktree(worktree, {}, home))
+    assert str(raised.value) == refused_message(temps[where])
+    assert not (tmp_path / "record.json").exists()  # no codex process started
+
+
+def test_a_symlink_into_a_temp_folder_is_refused(
+    tmp_path: Path, home: Path, temps: dict[str, Path]
+) -> None:
+    target = temps["tmpdir"] / "wt"
+    target.mkdir()
+    link = tmp_path / "normal" / "wt"
+    link.parent.mkdir()
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks need privileges here")
+    with pytest.raises(BackendUnavailableError) as raised:
+        run(runner(tmp_path, allow_temp_worktree=False), AgentPolicy.for_worktree(link, {}, home))
+    assert str(raised.value) == refused_message(temps["tmpdir"])
+    assert not (tmp_path / "record.json").exists()
+
+
+@pytest.mark.integration
+def test_a_worktree_outside_temp_folders_runs(
+    tmp_path: Path, home: Path, temps: dict[str, Path]
+) -> None:
+    worktree = tmp_path / "normal" / "wt"
+    worktree.mkdir(parents=True)
+    result, _ = run(
+        runner(tmp_path, allow_temp_worktree=False), AgentPolicy.for_worktree(worktree, {}, home)
+    )
+    assert result.outcome is Outcome.COMPLETED
+    assert read_record(tmp_path)["argv"]

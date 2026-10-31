@@ -60,7 +60,7 @@ def test_codex_shows_what_it_enforces_per_role(
         "  login      yes (chatgpt, subscription)",
     ]
     assert lines[3].startswith("  policy     no: Codex's deny rules for credential files")
-    assert lines[4:] == [
+    assert lines[4:8] == [
         "  planner      read-only yes, approvals never asked yes, network off yes, "
         "denied reads no, the shell allowlist no",
         "  implementer  writes confined to the worktree yes, approvals never asked yes, "
@@ -69,6 +69,17 @@ def test_codex_shows_what_it_enforces_per_role(
         "denied reads no, the shell allowlist no",
         "  warning    as reviewer or planner it can run read-only shell commands",
     ]
+    # The test home is under pytest's temp folder.
+    assert lines[8].startswith(
+        "  worktrees  no: backend 'codex-cli' can't run in a worktree under "
+    )
+
+
+def test_codex_worktrees_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(agents_cli, "temp_worktree_refusal", lambda path, env: None)
+    assert agents_cli.describe_worktrees(tmp_path) == f"  worktrees  ok ({tmp_path})"
+    monkeypatch.setattr(agents_cli, "temp_worktree_refusal", lambda path, env: "refused")
+    assert agents_cli.describe_worktrees(tmp_path) == "  worktrees  no: refused"
 
 
 def test_codex_not_logged_in_says_codex_login() -> None:

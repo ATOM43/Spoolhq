@@ -261,7 +261,7 @@ Codex runs its own binary again inside bubblewrap, and the standalone installer 
 
 | Part | Roles | How Codex enforces it |
 | --- | --- | --- |
-| Writes confined to the worktree | implementer | The `:workspace` profile: commands and file edits write only in the workspace root (the worktree) and the temp folders (all of `/tmp` on Linux: a real run wrote to a folder under `/tmp` outside its worktree, so keep `worktrees_dir` out of `/tmp`); its `.git`, `.agents` and `.codex` stay read-only. Bubblewrap and seccomp on Linux, Seatbelt on macOS; Codex refuses a command it can't sandbox. |
+| Writes confined to the worktree | implementer | The `:workspace` profile: commands and file edits write only in the workspace root (the worktree) and the temp folders (all of `/tmp` on Linux: a real run wrote to a folder under `/tmp` outside its worktree, so a worktree in a temp folder is [refused](#refusals)); its `.git`, `.agents` and `.codex` stay read-only. Bubblewrap and seccomp on Linux, Seatbelt on macOS; Codex refuses a command it can't sandbox. |
 | Read-only | reviewer, planner | A profile with no `write` entry, reads confined to the worktree and `:minimal`. A file change by a read-only run stops it (`policy not enforced: …`). |
 | Approvals never asked | all | `approval_policy="never"`: nothing waits for a person and no command is escalated outside the sandbox. |
 | Network off | all | `network={enabled=false}` for the agent's commands, `web_search="disabled"`, apps (connectors), plugins and multi-agent off; MCP servers come only from the config files SpoolHQ doesn't load, and an `mcp_tool_call` or `web_search` item stops the run. |
@@ -292,6 +292,7 @@ backend 'codex-cli' can't enforce denied reads; choose another backend for the i
 | `/etc/codex/config.toml` sets `sandbox_mode` or `[sandbox_workspace_write]` (Codex then ignores permission profiles), or can't be read | the same |
 | Native Windows: the deny rules depend on a Windows sandbox setup SpoolHQ can't check; run inside WSL2 | denied reads, the shell allowlist |
 | Any other OS | the sandbox parts |
+| The worktree (symlinks resolved) is inside `/tmp`, `/var/tmp`, `$TMPDIR` or Python's `tempfile.gettempdir()`, where the sandbox lets the agent write anywhere | the whole run: `backend 'codex-cli' can't run in a worktree under /tmp: its sandbox can write anywhere there; set worktrees_dir outside temp folders`; `spool agents` checks `worktrees_dir` the same way (`worktrees  ok (…)` or `worktrees  no: …`) |
 | Codex older than 0.166.0 | refused as too old: `Codex CLI 0.150.2 is too old; SpoolHQ needs 0.166.0 or newer (run: codex update)` |
 
 ### Events
@@ -322,6 +323,12 @@ backend 'codex-cli' can't enforce denied reads; choose another backend for the i
 - The `codex` process gets the [environment allowlist](#the-environment-allowlist) plus the variables Codex documents: `CODEX_HOME` (where its login lives) and `CODEX_CA_CERTIFICATE`, and `npm_config_verify_deps_before_run=false`. `OPENAI_API_KEY` and `CODEX_API_KEY` are never passed; log in with `codex login --with-api-key` instead. `shell_environment_policy.ignore_default_excludes=false` removes variables named like `KEY`, `SECRET` or `TOKEN` from the agent's commands.
 - `detect()` runs `codex --version` and `codex login status` (exit 0 when logged in; `ChatGPT` means `subscription`, `API key` means `api`) as argument lists in a temp folder, with a 15 s timeout and the same environment.
 - A custom `base_url` becomes the per-run model provider `spoolhq` with `env_key="SPOOLHQ_ENDPOINT_TOKEN_CODEX_CLI"`; `requires_openai_auth` stays false, so the ChatGPT login isn't sent there, and the token follows the [custom-endpoint rule](#a-custom-endpoint-never-gets-your-login). Codex speaks only the Responses API (`wire_api = "responses"`); for Ollama use `base_url: http://localhost:11434/v1`. `model` becomes `--model`.
+
+### Codex: known limits
+
+- **Not every sandbox denial is reported.** Codex 0.166.0 leaves commands the sandbox stopped on the file system (a write outside the worktree, a `~/.ssh` read) out of `--json` entirely, so SpoolHQ can only log the denials that show up in the output, such as a blocked network call. The sandbox still blocks the rest; they just aren't in the run log.
+- **The token budget can't stop a turn.** Codex reports usage only when its turn ends, and `codex exec` runs one turn, so `budget_per_ticket.tokens` stops further attempts (the ticket is blocked) but not the current one. The timeout (`timeout_s`) and cancel are what stop a run mid-way.
+- **Only the standalone install was checked.** The real check used Codex from the standalone installer (`~/.codex/packages/…`). A Codex installed with npm runs a native binary from another package folder; whether a read-only profile can start it is unchecked.
 
 ## The fake runner
 

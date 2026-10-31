@@ -49,7 +49,8 @@ pytestmark = [
 def test_real_codex_run_creates_a_file_and_cannot_read_ssh(git_repo: Path, home: Path) -> None:
     policy = AgentPolicy.for_worktree(git_repo, {"test": "true"}, home)
     events: list[AgentEvent] = []
-    result = CodexCliRunner().run(
+    # git_repo is under pytest's temp folder; the sandbox itself is what's under test.
+    result = CodexCliRunner(allow_temp_worktree=True).run(
         PROMPT,
         policy,
         Budget(max_turns=10, max_usd=None, max_tokens=None, timeout_s=600),

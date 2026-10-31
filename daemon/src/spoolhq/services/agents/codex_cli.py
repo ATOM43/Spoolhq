@@ -25,6 +25,7 @@ from spoolhq.services.agents.codex_config import (
     child_env,
     policy_parts,
     refusal,
+    temp_worktree_refusal,
     with_codex_home,
 )
 from spoolhq.services.agents.codex_stream import CodexStreamParser
@@ -102,7 +103,9 @@ class CodexCliRunner:
 
     ``base_url`` and ``model`` come from ``agents.backends`` in ``project.yaml``: a custom
     endpoint becomes a per-run model provider with SpoolHQ's own token. ``codex_cmd``,
-    ``platform``, ``which``, ``home`` and ``system_config`` are injectable for tests only.
+    ``platform``, ``which``, ``home`` and ``system_config`` are injectable for tests only,
+    and so is ``allow_temp_worktree`` (tests' worktrees live in temp folders), which
+    ``make_runner`` never sets: a worktree under a shared temp folder is refused.
     """
 
     name = BACKEND_NAME
@@ -117,8 +120,10 @@ class CodexCliRunner:
         *,
         base_url: str | None = None,
         model: str | None = None,
+        allow_temp_worktree: bool = False,
     ) -> None:
         self.base_url = base_url
+        self._allow_temp_worktree = allow_temp_worktree
         self.model = model
         self._codex_cmd = tuple(codex_cmd) if codex_cmd is not None else None
         self._platform = platform
@@ -249,6 +254,9 @@ class CodexCliRunner:
         if refused is not None:
             raise BackendUnavailableError(refused)
         env = self._env()
+        in_temp = temp_worktree_refusal(policy.worktree, env)
+        if in_temp is not None and not self._allow_temp_worktree:
+            raise BackendUnavailableError(in_temp)
         policy = with_codex_home(policy, env, home=self._home, codex_exe=cmd[0])
         check_worktree(policy, self._home)
         model = model or self.model

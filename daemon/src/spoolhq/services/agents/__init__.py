@@ -19,6 +19,7 @@ from spoolhq.services.agents.backends import (
 from spoolhq.services.agents.claude_cli import MIN_VERSION, ClaudeCliRunner
 from spoolhq.services.agents.claude_stream import ClaudeStreamParser, PolicyViolation
 from spoolhq.services.agents.codex_cli import CodexCliRunner
+from spoolhq.services.agents.codex_config import temp_worktree_refusal
 from spoolhq.services.agents.codex_stream import CodexStreamParser
 from spoolhq.services.agents.fake import FakeRunner
 from spoolhq.services.agents.model import (
@@ -65,6 +66,7 @@ __all__ = [
     "Started",
     "ToolCall",
     "Usage",
+    "temp_worktree_refusal",
     "available_runners",
     "backend_names",
     "make_runner",
