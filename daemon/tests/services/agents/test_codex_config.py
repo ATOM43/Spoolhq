@@ -17,6 +17,7 @@ from spoolhq.services.agents.codex_config import (
     WRITES,
     build_argv,
     child_env,
+    install_dir,
     permission_profile,
     policy_parts,
     refusal,
@@ -174,14 +175,15 @@ def test_codex_installed_in_its_own_folder_stays_runnable(
     assert not any(release.resolve().is_relative_to(path) for path in added)
 
 
-def test_a_read_only_profile_can_read_codex_itself(worktree: Path, home: Path) -> None:
-    policy = AgentPolicy.read_only_for(worktree, home)
-    profile = profile_of(build_argv(["/opt/codex/release/bin/codex"], policy))
-    assert profile["filesystem"]["/opt/codex/release"] == "read"
-    writing = profile_of(
-        build_argv(["/opt/codex/release/bin/codex"], AgentPolicy.for_worktree(worktree, {}, home))
-    )
-    assert "/opt/codex/release" not in writing["filesystem"]
+def test_a_read_only_profile_can_read_codex_itself(
+    worktree: Path, home: Path, tmp_path: Path
+) -> None:
+    exe = str(tmp_path / "release" / "bin" / "codex")  # absolute on every OS
+    release = str(install_dir(exe))
+    profile = profile_of(build_argv([exe], AgentPolicy.read_only_for(worktree, home)))
+    assert profile["filesystem"][release] == "read"
+    writing = profile_of(build_argv([exe], AgentPolicy.for_worktree(worktree, {}, home)))
+    assert release not in writing["filesystem"]
 
 
 def test_child_env_is_an_allowlist() -> None:
