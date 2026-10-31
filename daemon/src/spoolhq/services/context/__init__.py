@@ -8,6 +8,7 @@ other service package; callers pass plain values in. See ``docs/context.md``.
 """
 
 from spoolhq.core.agent_policy import READ_ONLY_GIT
+from spoolhq.services.context.budget import Trimmed, keep_connected
 from spoolhq.services.context.errors import (
     ContextBudgetError,
     ContextError,
@@ -15,6 +16,7 @@ from spoolhq.services.context.errors import (
 )
 from spoolhq.services.context.model import (
     ATTEMPT_KINDS,
+    DEFAULT_CODE_MAP_CHARS,
     DEFAULT_MAX_CHARS,
     ContextInputs,
     DependencyView,
@@ -35,6 +37,7 @@ from spoolhq.services.context.render import (
 
 __all__ = [
     "ATTEMPT_KINDS",
+    "DEFAULT_CODE_MAP_CHARS",
     "DEFAULT_MAX_CHARS",
     "IMPLEMENTER_TEMPLATE",
     "READ_ONLY_GIT",
@@ -49,9 +52,11 @@ __all__ = [
     "RepoDocs",
     "ReviewNote",
     "TicketView",
+    "Trimmed",
     "build_implementer_prompt",
     "escape_closing_tag",
     "extract_progress_note",
     "format_progress_entry",
+    "keep_connected",
     "render_template",
 ]

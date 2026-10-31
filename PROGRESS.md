@@ -270,3 +270,12 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - `spool agents` shows the SDK and CLI versions, whether a key is set and the policy parts per role.
 - Tests: the contract suite and a run-loop ticket on the backend (real SDK client, `fake_sdk_cli.py`), hook rules, key handling and leak checks, cost, budget, billing, endpoints, refusals, a recorded stream from real 2.1.316; the opt-in real run (`SPOOLHQ_REAL_BACKENDS=agent-sdk`) is skipped here (no API key).
 - Docs: `agents.md` (Claude Agent SDK section, `spool agents`), `project-yaml.md`, `architecture.md`; DECISIONS 276–283.
+
+## T28 · Code graph with Graphify
+
+- Step 0: the code graph ticket is T28 in `Plan.md` (two tickets were numbered T27); still 30 tickets and 76 h. The flaky Agent SDK run-loop test was a fixture race (assistant lines without `model`): fixed in the transcript helpers, with a regression test.
+- `services/codegraph/` (new): finds Graphify (tested 0.9.92, optional), runs it offline (`GRAPHIFY_BACKEND=none`, code-only, allowlisted environment, 120 s) and keeps one cache per project in `<workspace>/.spoolhq/codegraph/`: a full build first, then incremental updates, saved atomically behind a pointer, locked, rebuilt when an update fails or the version changes.
+- The implementer's and planner's prompts get a "Code map" block (the report's summary, escaped, in the context budget, capped by `context.code_map_chars`, default 8,000, least connected communities cut first); the reviewer doesn't. Built in the worktree before the first attempt and again before a retry only if the code changed. `implementer_prompt` moved to `runloop/prompting.py`.
+- `graphify-out/` is build junk for the integrator; `spool agents` shows Graphify; the fastapi-react template's `CLAUDE.md` mentions the map.
+- Real run: on SpoolHQ's repo a full build takes 5.6 s and an update 3.3 s. In the hello ticket, 6 calls and 18,265 weighted tokens with the map against 8 and 21,035 without it (one run each).
+- Docs: `codegraph.md` (new), `context.md`, `run-loop.md`, `planner.md`, `agents.md`, `integration.md`, `project-yaml.md`, `architecture.md`; DECISIONS 284–290.

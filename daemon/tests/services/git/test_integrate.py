@@ -88,6 +88,8 @@ def test_control_characters_are_removed() -> None:
         "web/.pnpm-store/v11/index.json",
         ".yarn/cache/left-pad.zip",
         ".npm/_cacache/index",
+        "graphify-out/graph.json",
+        "graphify-out/cache/ast/v0.9.92/x.json",
     ],
 )
 def test_build_junk(path: str) -> None:

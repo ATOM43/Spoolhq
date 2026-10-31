@@ -20,6 +20,7 @@ from tests.conftest import (
     CODEX_FIXTURES,
     TEST_API_KEY,
     FakeBackend,
+    FakeGraphify,
     fake_claude_cmd,
     fake_codex_cmd,
     fake_sdk_cmd,
@@ -44,7 +45,27 @@ def test_lists_the_installed_backend(tmp_path: Path, monkeypatch: pytest.MonkeyP
         "  installed  yes (2.1.302)\n"
         "  login      yes (claude.ai, subscription)\n"
         "  policy     yes (enforceable)\n"
+        "\n"
+        "graphify\n"
+        "  installed  no: runs carry on without a code map\n"
     )
+
+
+@pytest.mark.integration
+def test_graphify_found_with_its_version(
+    monkeypatch: pytest.MonkeyPatch, fake_graphify: FakeGraphify
+) -> None:
+    use(monkeypatch, ClaudeCliRunner(which=lambda name: None))
+    result = runner.invoke(app, ["agents"])
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[-2:] == ["graphify", "  installed  yes (0.9.92)"]
+
+    fake_graphify.configure(version="0.9.50")
+    result = runner.invoke(app, ["agents"])
+    assert result.output.splitlines()[-2:] == [
+        "  installed  yes (0.9.50)",
+        "  warning    untested version; SpoolHQ is tested with 0.9.92",
+    ]
 
 
 @pytest.mark.integration

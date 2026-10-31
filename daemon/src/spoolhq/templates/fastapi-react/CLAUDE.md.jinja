@@ -7,6 +7,7 @@ Conventions for coding agents (and humans). The structure is described in [READM
 - **Never commit secrets** (`.env` is ignored; document new settings in `.env.example`).
 - Keep each change inside its ticket; note anything else you find instead of doing it.
 - Record notable choices in `DECISIONS.md`. Add a `PROGRESS.md` entry for each finished ticket, **except when running under SpoolHQ**: then don't edit `PROGRESS.md` by hand; SpoolHQ adds the entry from your `<progress>` block.
+- SpoolHQ may put a **code map** in your prompt (a Graphify summary of the most connected symbols and how they group). It is a starting point for finding files, not a substitute for reading the files it names, and it can be out of date.
 - Source files stay under 500 lines (`scripts/check_line_limit.py`, run by `just lint`); tests are exempt.
 
 ## Backend (`backend/`, Python, uv)

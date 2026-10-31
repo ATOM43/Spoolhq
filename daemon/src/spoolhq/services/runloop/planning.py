@@ -21,8 +21,9 @@ from spoolhq.services.planner import (
     load_existing,
     read_spec,
 )
-from spoolhq.services.projects import load_project, project_dir
+from spoolhq.services.projects import Project, load_project, project_dir
 from spoolhq.services.runloop.model import NotFoundError, RunActiveError, RunLoopError, user_errors
+from spoolhq.services.runloop.prompting import planner_code_map
 from spoolhq.services.runs import (
     Attempt,
     AttemptKind,
@@ -94,7 +95,7 @@ class PlanJobs:
             cancel = threading.Event()
             thread = threading.Thread(
                 target=self._work,
-                args=(project, runner, run_log, attempt, template_description, cancel),
+                args=(project, settings, runner, run_log, attempt, template_description, cancel),
                 name=f"plan-{project}",
                 daemon=True,
             )
@@ -105,6 +106,7 @@ class PlanJobs:
     def _work(
         self,
         project: str,
+        settings: Project,
         runner: AgentRunner,
         run_log: RunLog,
         attempt: Attempt,
@@ -117,6 +119,7 @@ class PlanJobs:
             append_transcript(attempt, message)
 
         try:
+            code_map = planner_code_map(settings, project_dir(project, self.projects_dir))
             result = generate_plan(
                 project,
                 runner,
@@ -125,6 +128,7 @@ class PlanJobs:
                 template_description=template_description,
                 on_raw=on_raw,
                 cancel=cancel,
+                code_map=code_map,
             )
             error = result.error
         except Exception as exc:

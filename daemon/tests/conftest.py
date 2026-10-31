@@ -18,6 +18,7 @@ from keyring.backend import KeyringBackend
 from spoolhq.api import create_app
 from spoolhq.core.config import load_settings
 from spoolhq.services.agents import AgentRunner, backends
+from spoolhq.services.codegraph import tool as graphify_tool
 from spoolhq.services.projects import init_project
 
 TESTS_DIR = Path(__file__).parent
@@ -72,6 +73,46 @@ def projects_dir(home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     path = tmp_path / "projects"
     monkeypatch.setenv("SPOOLHQ_PROJECTS_DIR", str(path))
     return path
+
+
+@pytest.fixture(autouse=True)
+def no_graphify(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Graphify is not found unless a test installs ``fake_graphify``."""
+    monkeypatch.setattr(graphify_tool, "find_command", lambda which=None: None)
+
+
+FAKE_GRAPHIFY = TESTS_DIR / "services" / "codegraph" / "fake_graphify.py"
+GRAPH_REPORT = FIXTURES_DIR / "codegraph" / "GRAPH_REPORT.md"
+
+
+class FakeGraphify:
+    """``fake_graphify.py`` as the ``graphify`` SpoolHQ finds; see its docstring."""
+
+    def __init__(self, state: Path) -> None:
+        self.state = state
+        self.configure()
+
+    def configure(self, **behaviour: Any) -> None:
+        behaviour.setdefault("report", str(GRAPH_REPORT))
+        (self.state / "behaviour.json").write_text(json.dumps(behaviour), encoding="utf-8")
+
+    def calls(self) -> list[dict[str, Any]]:
+        path = self.state / "calls.jsonl"
+        lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+        return [json.loads(line) for line in lines]
+
+    def commands(self) -> list[str]:
+        """The builds and cluster runs, without the version probes."""
+        return [call["command"] for call in self.calls() if call["command"] != "version"]
+
+
+@pytest.fixture
+def fake_graphify(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeGraphify:
+    state = tmp_path / "fake-graphify"
+    state.mkdir()
+    command = [sys.executable, str(FAKE_GRAPHIFY), "--state", str(state)]
+    monkeypatch.setattr(graphify_tool, "find_command", lambda which=None: command)
+    return FakeGraphify(state)
 
 
 def run_git(repo: Path, *args: str) -> str:

@@ -20,6 +20,8 @@ For each run:
 
 Before each attempt the loop checks `agents.budget_per_ticket` (tokens and/or USD) against the run's total usage (tokens weighted, cache reads at a tenth); when it is used up the run is blocked: `budget used up: 2,104,331 of 2,000,000 weighted tokens` (or `budget used up: $2.10 of $2.00`).
 
+Before an implementer attempt, the loop gets the code map ([code graph](codegraph.md)). It builds it in the worktree before the first attempt and updates it before a retry only if the worktree's `HEAD` moved or it has uncommitted changes. A retry with the same code reuses it. If Graphify is missing, fails or times out, the run carries on without a map and doesn't try again until the next run. The reviewer never gets the map.
+
 Each phase change is a `run.phase` event whose `text` is the line `spool run` prints:
 
 ```text

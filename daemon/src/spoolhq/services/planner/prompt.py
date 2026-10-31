@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from spoolhq.services.context import escape_closing_tag, render_template
+from spoolhq.services.context import escape_closing_tag, keep_connected, render_template
 from spoolhq.services.planner.store import Existing
 from spoolhq.services.planner.validate import next_id
 from spoolhq.services.tickets import Ticket
@@ -42,8 +42,15 @@ def render_planner_prompt(
     template_description: str | None = None,
     previous_errors: Sequence[str] | None = None,
     override_dir: Path | None = None,
+    code_map: str | None = None,
+    code_map_chars: int = 0,
 ) -> str:
-    """The planner's prompt; ``override_dir`` is the workspace's ``prompts/`` folder."""
+    """The planner's prompt; ``override_dir`` is the workspace's ``prompts/`` folder.
+    ``code_map`` (untrusted) is cut to ``code_map_chars``, least connected parts first."""
+    trimmed = None
+    if code_map and code_map_chars:
+        text = escape_closing_tag(code_map, "code_map")
+        trimmed = keep_connected(text, code_map_chars, cap=code_map_chars)
     variables: dict[str, Any] = {
         "spec": escape_closing_tag(spec, "spec"),
         "template": (
@@ -54,6 +61,11 @@ def render_planner_prompt(
         "next_id": next_id(existing),
         "test_item": f"`{test_command}` passes",
         "previous_errors": list(previous_errors) if previous_errors else None,
+        "code_map": (
+            {"text": trimmed.text, "note": trimmed.note}
+            if trimmed is not None and trimmed.text.strip()
+            else None
+        ),
     }
     text, _ = render_template(PLANNER_TEMPLATE, variables, override_dir=override_dir)
     return text

@@ -18,6 +18,7 @@ from spoolhq.services.agents import (
     available_runners,
     temp_worktree_refusal,
 )
+from spoolhq.services.codegraph import TESTED_VERSION, Graphify, probe
 from spoolhq.services.projects import Agents, ProjectError, Role, load_project
 
 ROLES: tuple[Role, ...] = ("planner", "implementer", "reviewer")
@@ -50,6 +51,16 @@ def describe(info: BackendInfo) -> list[str]:
     return lines
 
 
+def describe_graphify(graphify: Graphify | None) -> list[str]:
+    """Graphify, which builds the code map in prompts; optional."""
+    if graphify is None:
+        return ["graphify", "  installed  no: runs carry on without a code map"]
+    lines = ["graphify", f"  installed  yes ({graphify.version})"]
+    if not graphify.tested:
+        lines.append(f"  warning    untested version; SpoolHQ is tested with {TESTED_VERSION}")
+    return lines
+
+
 def describe_worktrees(worktrees_dir: Path) -> str:
     """Codex's line for the configured worktrees folder: refused under a temp folder."""
     refused = temp_worktree_refusal(worktrees_dir, os.environ)
@@ -73,7 +84,8 @@ def agents_command(
         str | None, typer.Option(help="Show which backend each of this project's roles uses.")
     ] = None,
 ) -> None:
-    """List the agent backends: installed, version, login and whether the policy holds."""
+    """List the agent backends (installed, version, login, whether the policy holds) and
+    whether Graphify, for the code map, is found."""
     if project is not None:
         try:
             agents = load_project(project, projects_dir=settings().projects_dir).agents
@@ -93,3 +105,6 @@ def agents_command(
             lines.append(describe_worktrees(settings().worktrees_dir))
         for line in lines:
             typer.echo(line)
+    typer.echo("")
+    for line in describe_graphify(probe()):
+        typer.echo(line)

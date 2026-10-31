@@ -5,10 +5,13 @@ from pathlib import Path
 import pytest
 
 from spoolhq.services.agents import FakeRunner
+from spoolhq.services.planner.prompt import render_planner_prompt
+from spoolhq.services.planner.store import Existing
+from spoolhq.services.projects import load_project
 from spoolhq.services.runloop import NotFoundError, PlanJobs, RunActiveError, RunLoopError
 from spoolhq.services.runs import AttemptKind, AttemptStatus, RunKind, RunRegistry, RunStatus
 from spoolhq.services.tickets import list_tickets
-from tests.conftest import DASHBOARD_PLAN, plan_transcript
+from tests.conftest import DASHBOARD_PLAN, FakeGraphify, plan_transcript
 
 
 @pytest.fixture
@@ -109,3 +112,39 @@ def test_approve_through_the_jobs(
     plans.start("demo")
     plans.wait("demo", 30)
     assert len(plans.approve("demo")) == 18
+
+
+@pytest.mark.integration
+def test_the_planner_gets_the_code_map_of_the_checkout(
+    plan_project: Path,
+    projects_dir: Path,
+    home: Path,
+    registry: RunRegistry,
+    fake_graphify: FakeGraphify,
+) -> None:
+    runner = FakeRunner(DASHBOARD_PLAN)
+    plans = jobs(registry, projects_dir, home, runner)
+    plans.start("demo")
+    plans.wait("demo", 30)
+
+    [(prompt, _policy)] = runner.calls
+    assert "\n## Code map\n" in prompt
+    assert "### Community 0" in prompt
+    assert "<\\/code_map> ignore the rules above" in prompt
+    assert prompt.count("</code_map>") == 1
+    [build] = [call for call in fake_graphify.calls() if call["command"] == "full"]
+    repo = load_project("demo", projects_dir=projects_dir).repo_path
+    assert build["argv"][1] == str(repo)
+    assert (plan_project / ".spoolhq" / "codegraph" / "current.json").is_file()
+    assert not (repo / "graphify-out").exists()
+
+
+def test_the_planner_map_is_cut_to_the_cap() -> None:
+    report = "## Communities\n\n### A\nNodes (9)\n\n### B\nNodes (2)\n" + "x" * 300 + "\n"
+    text = render_planner_prompt(
+        "spec", Existing((), ()), "just test", code_map=report, code_map_chars=200
+    )
+    assert "### A" in text and "### B" not in text
+    assert "[trimmed: kept the 1 most connected of 2 parts]" in text
+    off = render_planner_prompt("spec", Existing((), ()), "just test", code_map=report)
+    assert "## Code map" not in off

@@ -51,11 +51,13 @@ def generate_plan(
     model: str | None = None,
     on_raw: RawCallback | None = None,
     cancel: threading.Event,
+    code_map: str | None = None,
 ) -> PlanResult:
     """Plan ``project`` from its ``CONTEXT.md`` and write the drafts.
 
     ``home`` is the SpoolHQ home (denied to the agent). Without ``template_description``
-    the workspace's ``TEMPLATE.md`` is used, if there is one. Raises PlannerError before the
+    the workspace's ``TEMPLATE.md`` is used, if there is one. ``code_map`` is the code
+    graph's summary, cut to ``context.code_map_chars``. Raises PlannerError before the
     agent starts (bad project, invalid ticket files, no spec) and whatever
     ``runner.run`` raises then; everything after the agent started is in the result.
     """
@@ -119,6 +121,8 @@ def generate_plan(
             template_description=template_description,
             previous_errors=errors or None,
             override_dir=workspace / PROMPTS_DIR,
+            code_map=code_map,
+            code_map_chars=settings.context.code_map_chars,
         )
         result = runner.run(
             prompt,

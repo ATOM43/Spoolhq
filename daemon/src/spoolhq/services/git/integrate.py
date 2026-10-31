@@ -34,6 +34,7 @@ JUNK_DIRS = (
     "*.egg-info",
     ".pnpm-store",
     ".npm",
+    "graphify-out",  # a Graphify code graph; SpoolHQ keeps its own outside the repo
 )
 JUNK_PATHS = (".yarn/cache/",)
 JUNK_FILES = ("*.pyc", ".DS_Store")

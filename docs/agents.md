@@ -80,7 +80,7 @@ Without its own credential, an agent CLI pointed at a custom `base_url` would se
 
 For Claude Code the token becomes `ANTHROPIC_AUTH_TOKEN`, which outranks the saved claude.ai login; Claude Code keeps that login on the machine but doesn't send it ([authentication precedence](https://code.claude.com/docs/en/authentication#authentication-precedence), [subscriptions and gateways](https://code.claude.com/docs/en/llm-gateway#subscriptions-and-gateways)). `ANTHROPIC_API_KEY` is never passed with a custom endpoint, and `claude auth status` isn't consulted: the login line of `detect()` reads `endpoint token` and billing is `unknown`. `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` keeps the token out of the agent's commands.
 
-`spool agents --project <name>` prints the backend, model and endpoint of each role:
+`spool agents` ends with a `graphify` block: whether Graphify, which builds the code map, is installed and its version, with a warning for a version other than the tested 0.9.92 ([code graph](codegraph.md)). `spool agents --project <name>` prints the backend, model and endpoint of each role:
 
 ```text
 planner      claude-code-cli  model: qwen3-coder  endpoint: http://localhost:11434

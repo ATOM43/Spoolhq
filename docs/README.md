@@ -11,6 +11,7 @@ User and developer documentation will live here: architecture, the daemon API, t
 - [runs.md](runs.md): the run log and event bus
 - [git.md](git.md): worktrees, branches and git recovery
 - [agents.md](agents.md): the agent runner, the Claude Code backend and its policy
+- [codegraph.md](codegraph.md): the Graphify code map in the prompt and its per-project cache
 - [gates.md](gates.md): the install, lint and test gates
 - [review.md](review.md): the reviewer agent and its verdict
 - [run-loop.md](run-loop.md): the run loop: retries, pause, resume, cancel and the integration seam

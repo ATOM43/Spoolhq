@@ -11,10 +11,11 @@ The code is `services/planner/`: the plan schema in `model.py`, parsing and chec
 | The spec | `<workspace>/CONTEXT.md`; missing is an error: `no CONTEXT.md in …: write the spec there first` | no |
 | A template description | `--template-description FILE` (the API's `template_description`); without one, the workspace's `TEMPLATE.md`, written by `spool init --template` ([templates](templates.md)); otherwise none | no |
 | The kept tickets | Every ticket the plan must not touch (see [re-planning](#re-planning)), with its body | no |
+| A code map | The Graphify summary of the project's checkout, built through the daemon's plan jobs when Graphify is installed and `context.code_map_chars` isn't 0, cut to that cap ([code graph](codegraph.md)); `spool plan generate` without the daemon has none | no |
 | The planning rules | The prompt template | yes |
 | The test command | `commands.test` in `project.yaml` | yes |
 
-Untrusted text is only ever a variable in the sandboxed template, never template source, and sits in its own tag block (`<spec>`, `<template>`, `<kept_tickets>`) with its closing tag escaped inside it, as for the implementer ([context](context.md#untrusted-text)). A spec containing `{{ 7*7 }}` or `</spec>` renders as plain text.
+Untrusted text is only ever a variable in the sandboxed template, never template source, and sits in its own tag block (`<spec>`, `<template>`, `<kept_tickets>`, `<code_map>`) with its closing tag escaped inside it, as for the implementer ([context](context.md#untrusted-text)). A spec containing `{{ 7*7 }}` or `</spec>` renders as plain text.
 
 Invalid ticket files stop the planner before it starts (`some ticket files are invalid; fix them first (spool plan check): …`), since it can't tell which tickets to keep.
 

@@ -34,6 +34,7 @@ from spoolhq.services.context.budget import (
     PROGRESS_CAP,
     Trimmed,
     cap_excerpt,
+    keep_connected,
     keep_head,
     keep_newest_entries,
     newest_entries,
@@ -257,6 +258,13 @@ _SLOTS: tuple[tuple[str, str, _Trimmer], ...] = (
 )
 
 
+def _slots(inputs: ContextInputs) -> tuple[tuple[str, str, _Trimmer], ...]:
+    """``_SLOTS``, then the code map, filled last, within ``code_map_chars``."""
+    cap = inputs.code_map_chars
+    code_map = ("code_map", "code map", lambda text, room, _: keep_connected(text, room, cap=cap))
+    return (*_SLOTS, code_map)
+
+
 def _slot_sources(inputs: ContextInputs) -> dict[str, str | None]:
     docs = inputs.repo_docs
     progress, decisions = docs.progress_md, docs.decisions_md
@@ -265,6 +273,7 @@ def _slot_sources(inputs: ContextInputs) -> dict[str, str | None]:
         "spec": inputs.spec,
         "progress_log": newest_entries(progress, inputs.progress_entries) if progress else progress,
         "decisions": newest_lines(decisions, inputs.decisions_lines) if decisions else decisions,
+        "code_map": inputs.code_map if inputs.code_map_chars else None,
     }
 
 
@@ -279,6 +288,7 @@ def build_implementer_prompt(
     PromptTemplateError for a broken override.
     """
     template = PromptTemplate(IMPLEMENTER_TEMPLATE, override_dir=override_dir)
+    slots = _slots(inputs)
     variables: dict[str, Any] = {
         "ticket": _ticket_vars(inputs),
         "previous": _previous_vars(inputs.previous),
@@ -287,7 +297,7 @@ def build_implementer_prompt(
             for name, command in inputs.commands.items()
         ],
         "read_only_git": list(READ_ONLY_GIT),
-        **{name: None for name, _, _ in _SLOTS},
+        **{name: None for name, _, _ in slots},
     }
     current = len(template.render(variables))
     if inputs.max_chars - current < MIN_CONTEXT_ROOM:
@@ -299,7 +309,7 @@ def build_implementer_prompt(
     ticket_words = words(f"{inputs.ticket.title}\n{inputs.ticket.body}")
     sources = _slot_sources(inputs)
     cuts: list[str] = []
-    for name, label, trim in _SLOTS:
+    for name, label, trim in slots:
         raw = sources[name]
         if raw is None:
             continue

@@ -537,13 +537,16 @@ Done when:
 
 A map of the codebase that stays current, so the agent finds the right files without re-reading the repo. *Depends on: T14, T16 · 2.5 h*
 
-- Graphify builds the graph when a project is created, and SpoolHQ refreshes it as plain code after each merged ticket. A failed refresh never blocks a merge.
-- The agent gets the graph report in its context and read-only access to query the graph. Graphify's own Claude Code hooks are never installed.
+- Graphify is optional and external (tested with 0.9.92). Without it, or when it fails or passes 120 s, runs carry on without a map; `spool agents` shows whether it is found.
+- In the run's worktree, before the first attempt and before a retry only if the code changed, Graphify builds or incrementally updates the graph, offline and code-only. The cache is kept once per project in `<workspace>/.spoolhq/codegraph/`, saved atomically, rebuilt when an update fails or Graphify's version changes, and locked. It is never inside the repository and never committed by SpoolHQ.
+- The report's summary goes into the implementer's and planner's prompts as a "Code map" block, escaped, counted against the context budget, capped by `context.code_map_chars` (0 turns it off) and trimmed least connected first. The reviewer doesn't get it. Graphify's own hooks are never installed, and AI labels are left for later.
 
 Done when:
 
-- [ ] A new project starts with its graph, and the graph updates after each merged ticket
-- [ ] The implementer's prompt contains the graph report
+- [ ] The implementer and planner get a trimmed code map when Graphify is installed
+- [ ] The per-project cache is updated incrementally, saved atomically and rebuilt when broken
+- [ ] Runs work unchanged when Graphify is missing, fails or times out
+- [ ] Nothing from the graph is committed by SpoolHQ
 
 ## Later phases
 

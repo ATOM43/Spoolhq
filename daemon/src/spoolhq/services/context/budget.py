@@ -20,6 +20,8 @@ MIN_CONTEXT_ROOM = 2_000
 NOTE_RESERVE = 100
 
 _ENTRY_HEADING = "## "
+_PART_HEADING = "### "
+_NODES_RE = re.compile(r"^Nodes \((\d+)\)", re.MULTILINE)
 _OUTLINE_RE = re.compile(r"#{1,2}\s")
 _WORD_RE = re.compile(r"[a-z0-9]+")
 _MIN_WORD = 4
@@ -178,3 +180,29 @@ def select_spec(text: str, room: int, *, ticket_words: set[str]) -> Trimmed:
         kept.extend(section if index in selected else outline(section))
     note = f"[trimmed: kept the outline and {len(selected):,} of {len(sections):,} sections]"
     return Trimmed("".join(kept), note)
+
+
+def keep_connected(text: str, room: int, *, cap: int) -> Trimmed:
+    """Drop the least connected ``### `` parts (fewest ``Nodes (N)``, later first on a tie)
+    until the text fits; if the rest still doesn't, keep the beginning."""
+    if len(text) <= min(cap, room):
+        return Trimmed(text)
+    avail = min(cap, room - NOTE_RESERVE)
+    lines = _lines(text)
+    starts = [i for i, line in enumerate(lines) if line.startswith(_PART_HEADING)]
+    head = "".join(lines[: starts[0]]) if starts else text
+    if len(head) > avail:
+        return keep_head(text, room, cap=cap)
+    bounds = [*starts, len(lines)]
+    parts = ["".join(lines[a:b]) for a, b in zip(bounds, bounds[1:], strict=False)]
+    ranks = [int(m[1]) if (m := _NODES_RE.search(part)) else 0 for part in parts]
+    kept = set(range(len(parts)))
+    size = len(head) + _total(parts)
+    for index in sorted(kept, key=lambda i: (ranks[i], -i)):
+        if size <= avail:
+            break
+        kept.discard(index)
+        size -= len(parts[index])
+    body = head + "".join(part for i, part in enumerate(parts) if i in kept)
+    note = f"[trimmed: kept the {len(kept):,} most connected of {len(parts):,} parts]"
+    return Trimmed(body, note)

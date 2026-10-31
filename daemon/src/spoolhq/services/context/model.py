@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 DEFAULT_MAX_CHARS = 120_000
 DEFAULT_PROGRESS_ENTRIES = 3
 DEFAULT_DECISIONS_LINES = 20
+DEFAULT_CODE_MAP_CHARS = 8_000
 ATTEMPT_KINDS: tuple[str, ...] = ("gate_retry", "review_retry", "conflict_retry", "pr_changes")
 
 
@@ -96,12 +97,18 @@ class ContextInputs:
     """The newest ``PROGRESS.md`` entries to include, before the character budget."""
     decisions_lines: int = DEFAULT_DECISIONS_LINES
     """The newest non-blank ``DECISIONS.md`` lines to include, before the budget."""
+    code_map: str | None = None
+    """The code graph report's summary (``services/codegraph``); untrusted."""
+    code_map_chars: int = DEFAULT_CODE_MAP_CHARS
+    """The code map's cap; 0 leaves it out."""
 
     def __post_init__(self) -> None:
         if self.max_chars < 1:
             raise ValueError(f"max_chars must be positive, got {self.max_chars}")
         if self.progress_entries < 1 or self.decisions_lines < 1:
             raise ValueError("progress_entries and decisions_lines must be positive")
+        if self.code_map_chars < 0:
+            raise ValueError(f"code_map_chars must not be negative, got {self.code_map_chars}")
 
 
 @dataclass(frozen=True)

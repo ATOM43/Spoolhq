@@ -217,13 +217,16 @@ class GitSettings(_Strict):
 
 
 class ContextSettings(_Strict):
-    """The implementer prompt's size budget and history depth (see docs/context.md)."""
+    """The implementer prompt's size budget, history depth and code map (docs/context.md)."""
 
     max_chars: int = Field(default=120_000, ge=20_000, le=2_000_000)
     progress_entries: int = Field(default=3, ge=1, le=1_000)
     """How many of the newest ``PROGRESS.md`` entries the prompt includes."""
     decisions_lines: int = Field(default=20, ge=1, le=10_000)
     """How many of the newest non-blank ``DECISIONS.md`` lines the prompt includes."""
+    code_map_chars: int = Field(default=8_000, ge=0, le=100_000)
+    """The cap on the Graphify code map in the implementer's and planner's prompts;
+    0 leaves it out (see docs/codegraph.md)."""
 
 
 class GateTimeouts(_Strict):

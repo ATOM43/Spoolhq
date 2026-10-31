@@ -119,6 +119,27 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "services.codegraph imports no other service package"
+type = "forbidden"
+source_modules = ["spoolhq.services.codegraph"]
+forbidden_modules = [
+    "spoolhq.services.agents",
+    "spoolhq.services.context",
+    "spoolhq.services.gates",
+    "spoolhq.services.git",
+    "spoolhq.services.github",
+    "spoolhq.services.planner",
+    "spoolhq.services.projects",
+    "spoolhq.services.review",
+    "spoolhq.services.runloop",
+    "spoolhq.services.runs",
+    "spoolhq.services.scheduler",
+    "spoolhq.services.templates",
+    "spoolhq.services.tickets",
+    "spoolhq.services.tracker",
+]
+
+[[tool.importlinter.contracts]]
 name = "services.agents imports no other service package"
 type = "forbidden"
 source_modules = ["spoolhq.services.agents"]

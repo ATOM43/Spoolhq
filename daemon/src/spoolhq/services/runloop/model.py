@@ -113,6 +113,9 @@ class RunContext:
     integrator: "Integrator"
     gates: GatesFn
     flags: Flags
+    code_map: tuple[str | None, str | None] | None = None
+    """``(HEAD it was built at or None if the worktree was dirty, the map or None)``,
+    set by ``prompting.code_map``; None until the first attempt."""
 
     @property
     def ticket_id(self) -> str:
