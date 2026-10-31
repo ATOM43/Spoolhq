@@ -182,6 +182,14 @@ def start_squash(worktree: Path, main_sha: str) -> list[str]:
     return [path for path in out.split("\0") if path]
 
 
+def tracked_in(worktree: Path, ref: str, paths: Sequence[str]) -> set[str]:
+    """The ``paths`` that are files in ``ref``'s tree."""
+    if not paths:
+        return set()
+    out = _git(worktree, "ls-tree", "-r", "--name-only", "-z", ref)
+    return set(paths) & set(out.split("\0"))
+
+
 def unstage(worktree: Path, main_sha: str, paths: Sequence[str]) -> None:
     """Put ``paths`` back to main's version in the index (the files stay on disk)."""
     with tempfile.TemporaryDirectory() as tmp:

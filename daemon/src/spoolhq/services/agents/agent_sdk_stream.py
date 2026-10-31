@@ -10,6 +10,7 @@ adapter. See ``docs/agents.md``.
 """
 
 import json
+import logging
 import re
 import signal
 import sys
@@ -26,8 +27,12 @@ from anyio.abc import Process
 from anyio.streams.text import TextReceiveStream
 from claude_agent_sdk import ClaudeAgentOptions, Transport, query
 
+# Not exported by the SDK (0.2.176); the parser query() runs on every non-control line.
+from claude_agent_sdk._errors import MessageParseError
+from claude_agent_sdk._internal.message_parser import parse_message
+
 from spoolhq.services.agents.claude_stream import ClaudeStreamParser, PolicyViolation
-from spoolhq.services.agents.model import Budget, Outcome, RunResult
+from spoolhq.services.agents.model import Budget, Outcome, RunResult, StreamWarning
 from spoolhq.services.agents.process import (
     INTERRUPT_WAIT_S,
     POLL_S,
@@ -37,7 +42,11 @@ from spoolhq.services.agents.process import (
 )
 from spoolhq.services.agents.runner import EventCallback, RawCallback
 
+logger = logging.getLogger(__name__)
+
 Tap = Callable[[dict[str, Any]], None]
+Skip = Callable[[str, str], None]
+SKIPPED_LINE_CHARS = 500
 
 # The SDK's control protocol, not the agent's stream: never parsed or transcribed.
 CONTROL_TYPES = frozenset({"control_request", "control_response", "control_cancel_request"})
@@ -52,12 +61,19 @@ BILLING_HINT = (
 class CliTransport(Transport):
     """The ``claude`` process with SpoolHQ's argv and environment; stderr goes to a temp
     file (no reader to keep up), read once for the error text. ``SdkRun`` sets ``tap``,
-    which sees each message before the SDK does; a test double overrides the I/O."""
+    which sees each message before the SDK does; a test double overrides the I/O.
+
+    A line the SDK's parser rejects is withheld from the SDK, whose ``query()`` would
+    stop at its error, and reported to ``skip``; SpoolHQ's own parser (the tap) still
+    sees it. Checked here, in line order, so the outcome never depends on scheduling."""
 
     def __init__(self, argv: list[str], cwd: Path, env: dict[str, str]) -> None:
         self._argv, self._cwd, self._env = argv, cwd, env
         self.tap: Tap = lambda message: None
+        self.skip: Skip = lambda error, line: None
         self.invalid_lines = 0
+        self._line = 0
+        self._skipped_result = False
         self._proc: Process | None = None
         self._stderr = tempfile.TemporaryFile()  # read and closed by close()
         self.stderr: list[str] = []
@@ -84,14 +100,30 @@ class CliTransport(Transport):
         async for chunk in TextReceiveStream(self._proc.stdout, errors="replace"):
             *lines, buffer = (buffer + chunk).split("\n")
             for line in lines:
-                message = self._parse(line)
-                if message is not None:
-                    self.tap(message)
+                if (message := self._accept(line)) is not None:
                     yield message
-        message = self._parse(buffer)
-        if message is not None:
-            self.tap(message)
+                elif self._skipped_result:
+                    # The SDK closes stdin when it sees the result; it won't see this one.
+                    self._skipped_result = False
+                    await self.end_input()
+        if buffer and (message := self._accept(buffer)) is not None:
             yield message
+
+    def _accept(self, line: str) -> dict[str, Any] | None:
+        """The message on ``line`` for the SDK, after the tap; None to skip the line."""
+        self._line += 1
+        message = self._parse(line)
+        if message is None:
+            return None
+        self.tap(message)
+        if message.get("type") not in CONTROL_TYPES:
+            try:
+                parse_message(message)
+            except MessageParseError as exc:
+                self.skip(f"{exc} (line {self._line})", line.strip()[:SKIPPED_LINE_CHARS])
+                self._skipped_result = message.get("type") == "result"
+                return None
+        return message
 
     def _parse(self, line: str) -> dict[str, Any] | None:
         if not line.strip():
@@ -192,8 +224,10 @@ class SdkRun:
         self._stopped: tuple[Outcome, str | None] | None = None
         self._sdk_error: str | None = None
         self._billing: str | None = None
+        self._parse_error: str | None = None
         self._scope: anyio.CancelScope | None = None
         transport.tap = self.tap
+        transport.skip = self.skip
 
     def run(self, prompt: str, options: ClaudeAgentOptions) -> RunResult:
         anyio.run(self._main, prompt, options)
@@ -227,6 +261,12 @@ class SdkRun:
         limit = self._budget.max_tokens
         if limit is not None and self._parser.weighted_tokens > limit:
             self._stop(Outcome.BUDGET_EXHAUSTED)
+
+    def skip(self, error: str, line: str) -> None:
+        """A line the SDK can't parse: a warning; the run goes on to its result."""
+        self._parse_error = self._parse_error or error
+        logger.warning("skipped a Claude Code line the SDK can't parse: %s", error)
+        self._on_event(StreamWarning(f"skipped a line the SDK can't parse: {error}", line))
 
     def _stop(self, outcome: Outcome, error: str | None = None) -> None:
         if self._stopped is None:
@@ -272,7 +312,10 @@ class SdkRun:
                 error=BILLING_HINT.format(detail=self._billing),
             )
         elif result.outcome is Outcome.ERROR:
-            parts = [result.error or "the Agent SDK run failed"]
+            first = result.error or "the Agent SDK run failed"
+            if self._parse_error and not parser.has_result and not self._stopped:
+                first = f"Claude Code output could not be parsed: {self._parse_error}"
+            parts = [first]
             if self._sdk_error and not parser.has_result:
                 parts.append(self._sdk_error)
             parts += self._transport.stderr

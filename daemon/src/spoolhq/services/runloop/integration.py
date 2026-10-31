@@ -44,6 +44,7 @@ from spoolhq.services.git import (
     start_squash,
     tag_exists,
     too_large,
+    tracked_in,
     unstage,
 )
 from spoolhq.services.projects import Project
@@ -247,8 +248,21 @@ class LocalIntegrator:
                 return _result(IntegrationStatus.GATES_FAILED, first.command if first else "")
 
         changed = start_squash(path, main_sha)
-        junk = [p for p in changed if is_junk(p)]
-        kept = [p for p in changed if not is_junk(p)]
+        # A build-junk path that main already tracks is the project's own file: kept.
+        tracked = tracked_in(path, main_sha, [p for p in changed if is_junk(p)])
+        junk = [p for p in changed if is_junk(p) and p not in tracked]
+        kept = [p for p in changed if p not in junk]
+        if tracked:
+            ctx.run_log.append_event(
+                ctx.run.id,
+                EventKind.LOG,
+                {
+                    "level": "info",
+                    "message": "tracked files in build folders kept in the commit",
+                    "files": sorted(tracked)[:LISTED_FILES],
+                    "count": len(tracked),
+                },
+            )
         if junk:
             unstage(path, main_sha, junk)
             ctx.run_log.append_event(

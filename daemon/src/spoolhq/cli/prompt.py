@@ -30,6 +30,8 @@ prompt_app = typer.Typer(
 
 CONTEXT_FILE = "CONTEXT.md"
 PROMPTS_DIR = "prompts"
+# Graphify isn't run here (it builds a cache); the run loop adds the map (docs/codegraph.md).
+CODE_MAP_NOTE = "Code map: not included here (built only during runs)."
 
 
 def _read(path: Path) -> str | None:
@@ -99,3 +101,5 @@ def show_command(
     )
     for cut in prompt.cuts:
         typer.echo(cut, err=True)
+    if project_settings.context.code_map_chars:
+        typer.echo(CODE_MAP_NOTE, err=True)

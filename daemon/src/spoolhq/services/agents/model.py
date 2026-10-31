@@ -233,7 +233,19 @@ class RateLimit:
     kind: str = field(default="rate_limit", init=False)
 
 
-AgentEvent = Started | Message | ToolCall | FileEdit | Usage | PermissionDenied | RateLimit
+@dataclass(frozen=True)
+class StreamWarning:
+    """A line of the agent's output that was skipped, e.g. one the SDK can't parse."""
+
+    text: str
+    line: str
+    """The skipped line, cut to 500 characters."""
+    kind: str = field(default="warning", init=False)
+
+
+AgentEvent = (
+    Started | Message | ToolCall | FileEdit | Usage | PermissionDenied | RateLimit | StreamWarning
+)
 
 
 class Outcome(StrEnum):

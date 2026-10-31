@@ -279,3 +279,12 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - `graphify-out/` is build junk for the integrator; `spool agents` shows Graphify; the fastapi-react template's `CLAUDE.md` mentions the map.
 - Real run: on SpoolHQ's repo a full build takes 5.6 s and an update 3.3 s. In the hello ticket, 6 calls and 18,265 weighted tokens with the map against 8 and 21,035 without it (one run each).
 - Docs: `codegraph.md` (new), `context.md`, `run-loop.md`, `planner.md`, `agents.md`, `integration.md`, `project-yaml.md`, `architecture.md`; DECISIONS 284–290.
+
+## T28 follow-up
+
+- Agent SDK: a stdout line the SDK can't parse is withheld from it, still seen by SpoolHQ's parser, and reported as a `StreamWarning` event (line cut to 500 characters). The run reads on to its result, independent of timing (0 failures in 200 parallel runs). A skipped result line closes stdin itself. Without a result, the error names the parse error and line. Codex needed no change.
+- Integrator: files in junk folders that the default branch tracks (a committed `graphify-out/`) are committed and named in an info log event; untracked ones are still left out.
+- Windows env: already complete in the shared `allowed_env` (`TEMP`/`TMP` are common, `SYSTEMROOT` etc. Windows-only); tests added, no code change.
+- `spool prompt show` ends with `Code map: not included here (built only during runs).`
+- Docs: `agents.md`, `codegraph.md`, `integration.md`; DECISIONS 291–294.
+

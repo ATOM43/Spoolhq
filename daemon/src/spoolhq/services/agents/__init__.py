@@ -38,6 +38,7 @@ from spoolhq.services.agents.model import (
     RateLimit,
     RunResult,
     Started,
+    StreamWarning,
     ToolCall,
     Usage,
 )
@@ -66,6 +67,7 @@ __all__ = [
     "PolicyError",
     "PolicyViolation",
     "RateLimit",
+    "StreamWarning",
     "RunResult",
     "Started",
     "ToolCall",

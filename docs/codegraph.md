@@ -54,7 +54,9 @@ If an update fails, SpoolHQ deletes the cache and does one full build. If that f
 
 ## Never committed by SpoolHQ
 
-The cache lives in the workspace, never in the repository. Graphify runs from the cache folder with `--out` there, so it writes nothing into the worktree. If an agent creates `graphify-out/` anyway, the integrator's diff guard drops it as build junk ([integration](integration.md)). Projects that commit their own graph (SpoolHQ's own repository does) keep updating it by hand. SpoolHQ neither adds nor removes it.
+The cache lives in the workspace, never in the repository. Graphify runs from the cache folder with `--out` there, so it writes nothing into the worktree. If an agent creates an untracked `graphify-out/` anyway, the integrator's diff guard drops it as build junk ([integration](integration.md)). A project that commits its own graph (SpoolHQ's own repository does) keeps it: files under `graphify-out/` that the default branch already tracks are committed like any other change, and the run log names them. SpoolHQ never adds a graph a project doesn't track.
+
+`spool prompt show` doesn't run Graphify, since that would build the cache. It ends its stderr notes with `Code map: not included here (built only during runs).` (left out when `context.code_map_chars` is 0).
 
 ## In the prompt
 

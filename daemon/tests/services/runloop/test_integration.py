@@ -443,6 +443,63 @@ def test_build_junk_is_left_out_and_listed(
     assert not (repo / "node_modules").exists()
 
 
+def test_untracked_graphify_out_is_left_out(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    registry: RunRegistry,
+    repo: Path,
+    local: LocalIntegrator,
+) -> None:
+    files = {"hello.py": "x = 1\n", "graphify-out/graph.json": "{}"}
+    loop, _ = make_loop(
+        [transcripts.implement(files)], [transcripts.review("approve")], integrator=local
+    )
+
+    run_id = run(loop)
+
+    assert log_of(registry).get_run(run_id).status is RunStatus.DONE
+    committed = git(repo, "show", "--name-only", "--format=", "main").split()
+    assert sorted(committed) == ["PROGRESS.md", "hello.py"]
+
+
+def test_a_tracked_file_in_a_build_folder_is_committed_and_logged(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    registry: RunRegistry,
+    repo: Path,
+    local: LocalIntegrator,
+) -> None:
+    """A project that commits its own graph (like SpoolHQ's) keeps getting its updates."""
+    (repo / "graphify-out").mkdir()
+    commit_file(repo, "graphify-out/x.json", '{"old": 1}\n', "track the graph")
+    files = {"hello.py": "x = 1\n", "graphify-out/x.json": '{"new": 2}\n', "node_modules/a.js": "j"}
+    loop, _ = make_loop(
+        [transcripts.implement(files)], [transcripts.review("approve")], integrator=local
+    )
+
+    run_id = run(loop)
+
+    log = log_of(registry)
+    assert log.get_run(run_id).status is RunStatus.DONE
+    committed = git(repo, "show", "--name-only", "--format=", "main").split()
+    assert sorted(committed) == ["PROGRESS.md", "graphify-out/x.json", "hello.py"]
+    assert git(repo, "show", "main:graphify-out/x.json").strip() == '{"new": 2}'
+    listed = [e.payload for e in log.events_since(0, run_id=run_id) if e.kind is EventKind.LOG]
+    assert listed == [
+        {
+            "level": "info",
+            "message": "tracked files in build folders kept in the commit",
+            "files": ["graphify-out/x.json"],
+            "count": 1,
+        },
+        {
+            "message": "build files left out of the commit",
+            "files": ["node_modules/a.js"],
+            "count": 1,
+        },
+    ]
+
+
 @pytest.mark.parametrize(
     ("files", "reason"),
     [

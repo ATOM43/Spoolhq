@@ -13,6 +13,7 @@ from spoolhq.services.context import (
     TicketView,
     build_implementer_prompt,
 )
+from spoolhq.services.projects import load_project, save_project
 from spoolhq.services.tickets import load_ticket
 from tests.conftest import FIXTURES_DIR
 
@@ -62,7 +63,10 @@ def test_show_prints_the_prompt(workspace: Path, git_repo: Path, projects_dir: P
         )
     )
     assert result.stdout == expected.text
-    assert result.stderr == f"template: default · {expected.chars:,} of 120,000 characters\n"
+    assert result.stderr == (
+        f"template: default · {expected.chars:,} of 120,000 characters\n"
+        "Code map: not included here (built only during runs).\n"
+    )
     assert str(git_repo) not in result.stdout
 
 
@@ -81,6 +85,19 @@ def test_show_reports_cuts_and_uses_an_override(workspace: Path, git_repo: Path)
     lines = result.stderr.splitlines()
     assert lines[0].startswith("template: prompts/implementer.md.j2 · ")
     assert lines[1] == "CLAUDE.md: [trimmed: kept the first 15,995 of 28,000 characters]"
+    assert lines[-1] == "Code map: not included here (built only during runs)."
+
+
+def test_no_code_map_note_when_the_map_is_off(workspace: Path, projects_dir: Path) -> None:
+    add_tickets(workspace)
+    settings = load_project("demo", projects_dir=projects_dir)
+    settings.context.code_map_chars = 0
+    save_project(settings, projects_dir=projects_dir)
+
+    result = runner.invoke(app, ["prompt", "show", "demo", "T04"])
+
+    assert result.exit_code == 0, result.stderr
+    assert "Code map" not in result.stderr
 
 
 def test_unknown_ticket(workspace: Path) -> None:

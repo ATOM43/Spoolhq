@@ -29,6 +29,7 @@ from spoolhq.services.git.integrate import (
     start_squash,
     tag_exists,
     too_large,
+    tracked_in,
     unresolved_files,
     unstage,
 )
@@ -109,6 +110,7 @@ __all__ = [
     "tag_exists",
     "too_large",
     "unresolved_files",
+    "tracked_in",
     "unstage",
     "BRANCH_PREFIX",
     "PushResult",

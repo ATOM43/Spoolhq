@@ -12,7 +12,8 @@ written into the cwd. ``init``'s ``apiKeySource`` is ``ANTHROPIC_API_KEY`` when 
 variable is set, else ``none`` (as the real CLI reports), or ``--key-source``. It records
 its argv, cwd, environment variable names, the values of ``RECORDED_VARS`` (the API key
 only as a SHA-256), the prompt and the hook's answers to ``--record``, then sleeps
-``--sleep`` seconds and exits with ``--exit-code``. ``--stderr`` prints a line there.
+``--sleep`` seconds and exits with ``--exit-code``; with ``--wait-eof 1`` it first waits
+for stdin to close, as the real CLI does. ``--stderr`` prints a line there.
 """
 
 import hashlib
@@ -31,6 +32,7 @@ OPTIONS = {
     "--exit-code",
     "--stderr",
     "--key-source",
+    "--wait-eof",
 }
 RECORDED_VARS = (
     "ANTHROPIC_AUTH_TOKEN",
@@ -169,6 +171,9 @@ def run(options: dict[str, str], rest: list[str]) -> int:
                     denied[block["id"]] = f"PreToolUse:{block['name']} hook error: {reason}"
             if block["name"] == "Write" and block["id"] not in denied:
                 write_file(block)
+    if options.get("--wait-eof") == "1":  # like the real CLI: wait until stdin closes
+        while sys.stdin.readline():
+            pass
     time.sleep(float(options.get("--sleep", "0")))
     return int(options.get("--exit-code", "0"))
 
