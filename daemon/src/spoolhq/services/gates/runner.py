@@ -3,8 +3,10 @@
 import os
 import re
 import sys
+import tempfile
 import time
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from pathlib import Path
 
 from spoolhq.services.gates.command import gate_env, resolve_program, split_command
@@ -22,6 +24,8 @@ from spoolhq.services.gates.process import OUTPUT_CAP_BYTES, run_process
 # Seconds; project.yaml's gates.timeouts defaults.
 DEFAULT_TIMEOUTS: dict[GateName, int] = {"install": 600, "lint": 300, "test": 900}
 # "`just test` passes": a backticked command followed by the word "passes".
+# A test run's output is only shown trimmed, so its log stays small.
+TRY_CAP_BYTES = 1_000_000
 _DONE_WHEN_RE = re.compile(r"`([^`]+)`\s+passes\b")
 
 
@@ -59,6 +63,29 @@ def run_gates(
             )
         )
     return GateRun(tuple(results))
+
+
+def try_command(name: GateName, command: str, cwd: Path, timeout_s: float) -> GateResult:
+    """Run one command as its gate would, once (the app's **Test** button).
+
+    The log goes to a temp folder that is removed afterwards, so ``log_path`` is
+    ``None``; ``excerpt`` is the trimmed output whether or not the command passed.
+    """
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
+        log_path = Path(folder) / f"{name}.log"
+        result = _run_gate(
+            name,
+            command,
+            worktree=cwd,
+            env=gate_env(os.environ, platform=sys.platform),
+            timeout_s=timeout_s,
+            log_path=log_path,
+            cap_bytes=TRY_CAP_BYTES,
+        )
+        if result.status is GateStatus.PASSED:
+            output = clean(log_path.read_bytes().decode("utf-8", errors="replace"))
+            result = replace(result, excerpt=build_excerpt(output))
+    return replace(result, log_path=None)
 
 
 def _not_run(name: GateName, command: str, status: GateStatus, message: str) -> GateResult:

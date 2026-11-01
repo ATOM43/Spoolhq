@@ -153,9 +153,11 @@ src/
   app/        # entry (main.tsx), providers (TanStack Query), router, global styles
   pages/      # one slice per route: home/, project-panel/
   widgets/    # self-contained screen blocks: top-bar/, daemon-down-panel/
-  features/   # user actions and behaviours: daemon-status/ (polling + retry), open-settings/
-  entities/   # domain models: daemon/; project/, ticket/, run/ (empty for now)
-  shared/     # no domain knowledge: api/ (typed client), ui/ (Button, Card, Tabs, ...),
+  features/   # user actions and behaviours: daemon-status/ (polling + retry), open-settings/,
+              # project-create/ (New project dialog)
+  entities/   # domain models and their query hooks: daemon/, project/, ticket/, run/, agent/
+  shared/     # no domain knowledge: api/ (typed client, event stream, query keys),
+              # ui/ (Button, Card, Dialog, Field, Input, ProgressLine, Tabs, ...),
               # lib/, config/, styles/ (design tokens)
 ```
 
@@ -184,4 +186,26 @@ Inside a slice, code is grouped by segment: `ui/` for components, `model/` for s
 | A constant or helper used everywhere | `shared/config/` or `shared/lib/` |
 | A provider or global setup | `app/` |
 
-The Rust side of the desktop app (`desktop/src-tauri/`) is small and not layered: `daemon.rs` holds the only HTTP the app does (`daemon_get` for the health check, `daemon_request` for every API call, both adding the token).
+The Rust side of the desktop app (`desktop/src-tauri/`) is small and not layered: `daemon.rs` holds the only HTTP the app does (`daemon_get` for the health check, `daemon_request` for every API call, both adding the token), and `events.rs` the only WebSocket.
+
+### Data and live events
+
+Daemon data lives in TanStack Query. Each entity has its query hooks (`useProjects`, `useTickets`, `useCurrentRun`, `useAgents`), keyed by `shared/api/keys.ts` so one place can invalidate another slice's data. Nothing polls except the daemon status check.
+
+Run events take this path, so the token never enters the webview and the CSP stays `ipc:` only:
+
+```text
+daemon  WS /api/projects/{name}/events?since=<seq>
+  │  auth message first, then one envelope per event
+Rust    events.rs: events_subscribe(project, since, channel) → id
+  │  tracks the last seq; on a drop or 4408 reconnects with since (0.5 s → 10 s);
+  │  4401 / 4404 / 1008 stop it; events_unsubscribe(id) or closing the window closes it
+  │  Tauri Channel (IPC)
+webview shared/api/events.ts: subscribeEvents({ project, since }, onEvent) → unsubscribe
+  │
+        entities/project useProjectEvents(names): run.*, integrate and policy events
+        invalidate ["projects"] and the project's tickets; run, attempt, gate and review
+        events its ["runs", name]; bursts are coalesced into one refetch per 250 ms
+```
+
+Home subscribes to every listed project. The hook remembers each project's last `seq`, so returning to Home resumes the stream instead of replaying it.

@@ -44,3 +44,9 @@ export const api = createClient<paths>({
   baseUrl: BASE_URL,
   fetch: daemonFetch,
 });
+
+/** The body of a 2xx answer (failures have already rejected with a DaemonError). */
+export async function body<T>(request: Promise<{ data?: T }>): Promise<T> {
+  const { data } = await request;
+  return data as T;
+}

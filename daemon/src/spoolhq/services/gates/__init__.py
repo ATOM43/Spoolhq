@@ -3,6 +3,7 @@
 ``run_gates`` runs them in order without a shell, in a scrubbed environment, with a
 timeout that stops the whole process tree, streams each one's output to a capped log
 and returns structured results with a trimmed excerpt and the failing test names.
+``try_command`` runs one command once, for the app's **Test** button.
 ``check_done_when`` maps "Done when" items naming a configured command to its gate.
 This package imports no other service. See ``docs/gates.md``.
 """
@@ -22,7 +23,12 @@ from spoolhq.services.gates.model import (
     GateRun,
     GateStatus,
 )
-from spoolhq.services.gates.runner import DEFAULT_TIMEOUTS, check_done_when, run_gates
+from spoolhq.services.gates.runner import (
+    DEFAULT_TIMEOUTS,
+    check_done_when,
+    run_gates,
+    try_command,
+)
 
 __all__ = [
     "DEFAULT_TIMEOUTS",
@@ -39,4 +45,5 @@ __all__ = [
     "gate_env",
     "run_gates",
     "split_command",
+    "try_command",
 ]

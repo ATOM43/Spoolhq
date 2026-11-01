@@ -1,5 +1,5 @@
-"""Project endpoints: list, read and create projects (``spool init``), and edit
-``project.yaml`` and ``CONTEXT.md`` with ETags (token required)."""
+"""Project endpoints: list, read and create projects (``spool init``), edit
+``project.yaml`` and ``CONTEXT.md`` with ETags, and try a stack command (token required)."""
 
 from pathlib import Path
 from typing import Any
@@ -9,6 +9,8 @@ from fastapi import APIRouter, Request, Response, Security, status
 from spoolhq.api.errors import ApiError, service_errors
 from spoolhq.api.params import IfMatch, ProjectName, require_if_match, settings, workspace
 from spoolhq.api.schemas.projects import (
+    CommandTest,
+    CommandTestResult,
     CreateProject,
     ProjectCreated,
     ProjectDetail,
@@ -17,6 +19,7 @@ from spoolhq.api.schemas.projects import (
     SpecFile,
 )
 from spoolhq.api.security import bearer_scheme
+from spoolhq.services.gates import try_command
 from spoolhq.services.projects import (
     CONTEXT_FILE,
     EditConflict,
@@ -36,6 +39,8 @@ from spoolhq.services.tickets import list_tickets
 
 router = APIRouter(prefix="/api/projects", dependencies=[Security(bearer_scheme)])
 NEEDS_YOU = ("awaiting_approval", "blocked")
+# Below the desktop app's 120 s request timeout; a run uses the project's own timeouts.
+COMMAND_TEST_TIMEOUT_S = 90.0
 
 
 def _summary(request: Request, name: str) -> tuple[ProjectSummary, int]:
@@ -177,6 +182,24 @@ def put_spec(
         current = SpecFile(content=exc.data.decode("utf-8", errors="replace"))
         raise _conflict(exc, current) from exc
     return body
+
+
+@router.post("/{name}/commands/test")
+def try_stack_command(name: ProjectName, body: CommandTest, request: Request) -> CommandTestResult:
+    """Run ``command`` once in the project's repository, without a shell, with the gates'
+    environment and a 90 s timeout. It may change the checkout, as the gate would."""
+    workspace(request, name)
+    with service_errors():
+        project = load_project(name, projects_dir=settings(request).projects_dir)
+    result = try_command(body.gate, body.command, Path(project.repo), COMMAND_TEST_TIMEOUT_S)
+    return CommandTestResult(
+        status=result.status.value,  # type: ignore[arg-type]  # never skipped here
+        exit_code=result.exit_code,
+        duration_s=round(result.duration_s, 3),
+        output=result.excerpt,
+        output_truncated=result.output_truncated,
+        timeout_s=COMMAND_TEST_TIMEOUT_S,
+    )
 
 
 def _conflict(exc: EditConflict, current: Any) -> ApiError:

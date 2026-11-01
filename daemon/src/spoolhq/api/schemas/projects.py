@@ -1,8 +1,10 @@
 """Request and response models of the project, settings and spec endpoints."""
 
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
+
+from spoolhq.services.gates import check_gate_command
 
 
 class ProjectSummary(BaseModel):
@@ -53,3 +55,24 @@ class SettingsFile(BaseModel):
 class SpecFile(BaseModel):
     content: str = Field(max_length=900_000)
     """``CONTEXT.md``, exactly as stored."""
+
+
+class CommandTest(BaseModel):
+    """A stack command to try in the project's repository, as its gate would run it."""
+
+    gate: Literal["install", "lint", "test"]
+    command: Annotated[
+        str, Field(min_length=1, max_length=4096), AfterValidator(check_gate_command)
+    ]
+    """An argument list as text (``just lint``); shell syntax is refused (422)."""
+
+
+class CommandTestResult(BaseModel):
+    status: Literal["passed", "failed", "timed_out", "error"]
+    """``error``: the program wasn't found or couldn't start."""
+    exit_code: int | None
+    duration_s: float
+    output: str
+    """The trimmed output (the error message for ``error``)."""
+    output_truncated: bool
+    timeout_s: float

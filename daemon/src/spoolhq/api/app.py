@@ -12,7 +12,17 @@ from fastapi.openapi.utils import get_openapi
 import spoolhq
 from spoolhq.api import errors
 from spoolhq.api.routers import agents as agents_router
-from spoolhq.api.routers import events, github, health, plan, projects, runs, tickets, version
+from spoolhq.api.routers import (
+    events,
+    github,
+    health,
+    plan,
+    projects,
+    runs,
+    templates,
+    tickets,
+    version,
+)
 from spoolhq.api.routers import settings as settings_router
 from spoolhq.api.schemas.events import EVENT_DATA_MODELS
 from spoolhq.api.security import LocalOnlyMiddleware
@@ -115,6 +125,7 @@ def create_app(
         github,
         agents_router,
         settings_router,
+        templates,
         events,
     ):
         app.include_router(module.router)

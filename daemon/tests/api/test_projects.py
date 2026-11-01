@@ -1,12 +1,15 @@
 """Project, settings and spec endpoints: listing, creating, and edits with ETags."""
 
 import hashlib
+import subprocess
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+from spoolhq.api.routers import projects as projects_router
 from spoolhq.services.projects import load_project, save_project
-from tests.conftest import run_git
+from tests.conftest import fake_tool_cmd, run_git
 
 
 def auth(token: str, **headers: str) -> dict[str, str]:
@@ -162,3 +165,76 @@ def test_settings_edit_with_etags(
     assert saved.status_code == 200
     assert saved.headers["ETag"] == etag(path)
     assert load_project("demo", projects_dir=projects_dir).default_branch == "release"
+
+
+def try_command(client: TestClient, token: str | None, command: str, gate: str = "lint") -> object:
+    headers = auth(token) if token else {}
+    body = {"gate": gate, "command": command}
+    return client.post("/api/projects/demo/commands/test", json=body, headers=headers)
+
+
+@pytest.mark.integration
+def test_try_a_passing_and_a_failing_command(run_client: TestClient, token: str) -> None:
+    passed = try_command(run_client, token, fake_tool_cmd("pass"))
+    assert passed.status_code == 200  # type: ignore[attr-defined]
+    body = passed.json()  # type: ignore[attr-defined]
+    assert (body["status"], body["exit_code"], body["timeout_s"]) == ("passed", 0, 90.0)
+    assert "3 passed" in body["output"]
+
+    failed = try_command(run_client, token, fake_tool_cmd("lint-error")).json()  # type: ignore[attr-defined]
+    assert (failed["status"], failed["exit_code"]) == ("failed", 1)
+    assert "Name 'x' is not defined" in failed["output"]
+
+    missing = try_command(run_client, token, "no-such-program-xyz --flag").json()  # type: ignore[attr-defined]
+    assert missing["status"] == "error"
+    assert "not found on PATH" in missing["output"]
+
+
+@pytest.mark.integration
+def test_try_a_command_that_times_out(
+    run_client: TestClient, token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(projects_router, "COMMAND_TEST_TIMEOUT_S", 0.5)
+    body = try_command(run_client, token, fake_tool_cmd("sleep")).json()  # type: ignore[attr-defined]
+    assert (body["status"], body["exit_code"]) == ("timed_out", None)
+
+
+@pytest.mark.integration
+def test_try_a_command_runs_in_the_repo_without_a_shell(
+    run_client: TestClient,
+    token: str,
+    git_repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[object, dict[str, object]]] = []
+    real_popen = subprocess.Popen
+
+    def recording_popen(args: object, **kwargs: object) -> object:
+        calls.append((args, kwargs))
+        return real_popen(args, **kwargs)  # type: ignore[call-overload]
+
+    monkeypatch.setattr(subprocess, "Popen", recording_popen)
+    marker = tmp_path / "marker"
+    refused = try_command(run_client, token, f"{fake_tool_cmd('pass')} && touch {marker}")
+    assert refused.status_code == 422  # type: ignore[attr-defined]
+    assert error(refused)["field"] == "command"
+    assert calls == []
+
+    ran = try_command(run_client, token, fake_tool_cmd("marker", "made.txt"), gate="install")
+    assert ran.json()["status"] == "passed"  # type: ignore[attr-defined]
+    (args, kwargs) = calls[0]
+    assert isinstance(args, list)
+    assert kwargs.get("shell", False) is False
+    assert Path(str(kwargs["cwd"])).resolve() == git_repo.resolve()
+    assert (git_repo / "made.txt").read_text(encoding="utf-8") == "ran"
+    assert not marker.exists()
+
+
+def test_try_a_command_needs_the_token_and_a_project(run_client: TestClient, token: str) -> None:
+    assert try_command(run_client, None, "just lint").status_code == 401  # type: ignore[attr-defined]
+    body = {"gate": "lint", "command": "just lint"}
+    missing = run_client.post("/api/projects/nope/commands/test", json=body, headers=auth(token))
+    assert missing.status_code == 404
+    bad_gate = try_command(run_client, token, "just lint", gate="deploy")
+    assert error(bad_gate)["field"] == "gate"

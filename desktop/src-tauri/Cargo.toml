@@ -18,12 +18,20 @@ tauri-build = { version = "=2.7.3", features = [] }
 
 [dependencies]
 dirs = "=6.0.0"
+# Sink/Stream traits for the WebSocket (already in the tree through Tauri).
+futures-util = { version = "=0.3.34", default-features = false, features = ["sink"] }
 # Plain HTTP to 127.0.0.1 only: no TLS, no proxy support, HTTP/1.1.
 reqwest = { version = "=0.13.5", default-features = false }
 serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
 tauri = { version = "=2.12.4", features = [] }
+# The New project dialog's folder picker; the capability allows only `open`.
+tauri-plugin-dialog = "=2.8.3"
+tokio = { version = "=1.53.3", features = ["macros", "sync", "time"] }
+# The daemon's event WebSocket, plain ws:// to 127.0.0.1 only: no TLS features.
+tokio-tungstenite = { version = "=0.30.0", default-features = false, features = ["connect"] }
 toml = "=1.1.8"
 
 [dev-dependencies]
-serde_json = "=1.0.154"
 tempfile = "=3.27.0"
+tokio = { version = "=1.53.3", features = ["net", "rt"] }

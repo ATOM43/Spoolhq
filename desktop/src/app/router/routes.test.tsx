@@ -33,7 +33,11 @@ function daemonRunning() {
     }
     const path = (args as { path: string }).path;
     const body =
-      path === "/api/health" ? '{"status":"ok"}' : '{"version":"0.0.0"}';
+      path === "/api/health"
+        ? '{"status":"ok"}'
+        : path === "/api/projects"
+          ? "[]"
+          : '{"version":"0.0.0"}';
     return Promise.resolve({ status: 200, body });
   });
 }

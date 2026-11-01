@@ -1,135 +1,112 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { subscribeEvents, type EventEnvelope } from "./events";
 
-class MockSocket {
-  static instances: MockSocket[] = [];
-  readonly url: string;
-  sent: string[] = [];
-  closed: number | null = null;
-  onopen: (() => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onclose: ((event: { code: number }) => void) | null = null;
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+  Channel: class {
+    onmessage: (message: unknown) => void = () => undefined;
+  },
+}));
 
-  constructor(url: string) {
-    this.url = url;
-    MockSocket.instances.push(this);
-  }
+const invokeMock = vi.mocked(invoke);
 
-  send(data: string): void {
-    this.sent.push(data);
-  }
-
-  close(code: number): void {
-    this.closed = code;
-  }
-
-  event(seq: number): void {
-    const envelope = { seq, run_id: 1, attempt: null, ticket: "T01" };
-    this.onmessage?.({
-      data: JSON.stringify({ ...envelope, type: "log", ts: "", data: {} }),
-    });
-  }
+interface FakeChannel {
+  onmessage: (message: unknown) => void;
 }
 
-const flush = () => vi.advanceTimersByTimeAsync(0);
-
-function socket(index: number): MockSocket {
-  const found = MockSocket.instances[index];
-  if (found === undefined) {
-    throw new Error(`no socket ${String(index)}`);
-  }
-  return found;
+function envelope(seq: number): EventEnvelope {
+  return {
+    seq,
+    run_id: 1,
+    attempt: null,
+    ticket: "T01",
+    type: "run.status",
+    ts: "",
+    data: {},
+  };
 }
 
-function start(onStop?: (reason: string) => void): EventEnvelope[] {
-  const received: EventEnvelope[] = [];
-  subscribeEvents(
-    {
-      port: 8765,
-      project: "demo",
-      getToken: () => Promise.resolve("secret-token"),
-      WebSocketImpl: MockSocket as unknown as typeof WebSocket,
-      ...(onStop ? { onStop } : {}),
-    },
-    (event) => received.push(event),
+/** The channel the last `events_subscribe` call handed to Rust. */
+function channel(): FakeChannel {
+  const subscribe = invokeMock.mock.calls.findLast(
+    ([command]) => command === "events_subscribe",
   );
-  return received;
+  return (subscribe?.[1] as { onEvent: FakeChannel }).onEvent;
 }
 
-describe("event stream", () => {
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe("event stream through Rust", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
-    MockSocket.instances = [];
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("authenticates first, then reconnects with since=<last seq> after 4408", async () => {
-    const received = start();
-    await flush();
-    const first = socket(0);
-    expect(first.url).toBe(
-      "ws://127.0.0.1:8765/api/projects/demo/events?since=0",
+    invokeMock.mockReset();
+    invokeMock.mockImplementation((command) =>
+      Promise.resolve(command === "events_subscribe" ? 7 : null),
     );
-    first.onopen?.();
-    expect(JSON.parse(first.sent[0] ?? "")).toEqual({
-      type: "auth",
-      token: "secret-token",
+  });
+
+  it("subscribes with the project and since, and forwards events", async () => {
+    const received: number[] = [];
+    subscribeEvents({ project: "demo", since: 12 }, (event) =>
+      received.push(event.seq),
+    );
+    await flush();
+    expect(invokeMock).toHaveBeenCalledWith("events_subscribe", {
+      project: "demo",
+      since: 12,
+      onEvent: channel(),
     });
-    first.event(3);
-    first.event(7);
-    first.onmessage?.({ data: '{"type":"ping"}' });
-    first.onclose?.({ code: 4408 });
-
-    await vi.advanceTimersByTimeAsync(499);
-    expect(MockSocket.instances).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(1);
-    const second = socket(1);
-    expect(second.url).toBe(
-      "ws://127.0.0.1:8765/api/projects/demo/events?since=7",
-    );
-    second.onopen?.();
-    second.event(7); // already seen
-    second.event(8);
-    expect(received.map((event) => event.seq)).toEqual([3, 7, 8]);
+    channel().onmessage({ kind: "event", event: envelope(13) });
+    channel().onmessage({ kind: "event", event: envelope(14) });
+    expect(received).toEqual([13, 14]);
   });
 
-  it("backs off from 0.5 s to 10 s while the daemon is gone", async () => {
-    start();
+  it("never passes a token or a daemon URL to the webview's calls", async () => {
+    subscribeEvents({ project: "demo" }, () => undefined);
     await flush();
-    const delays = [500, 1000, 2000, 4000, 8000, 10_000, 10_000];
-    for (const [index, delay] of delays.entries()) {
-      socket(index).onclose?.({ code: 1006 });
-      await vi.advanceTimersByTimeAsync(delay - 1);
-      expect(MockSocket.instances).toHaveLength(index + 1);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(MockSocket.instances).toHaveLength(index + 2);
-    }
+    const args = JSON.stringify(invokeMock.mock.calls);
+    expect(args).not.toMatch(/token|ws:\/\//);
   });
 
-  it("stops on 4401 and when unsubscribed", async () => {
+  it("reports a final stop and ignores events after unsubscribing", async () => {
     const onStop = vi.fn();
-    start(onStop);
+    const onEvent = vi.fn();
+    const unsubscribe = subscribeEvents({ project: "demo", onStop }, onEvent);
     await flush();
-    socket(0).onclose?.({ code: 4401 });
-    await vi.advanceTimersByTimeAsync(20_000);
-    expect(MockSocket.instances).toHaveLength(1);
-    expect(onStop).toHaveBeenCalledWith("the daemon rejected the token");
+    channel().onmessage({
+      kind: "stopped",
+      reason: "the daemon has no such project",
+    });
+    expect(onStop).toHaveBeenCalledWith("the daemon has no such project");
 
-    const unsubscribe = subscribeEvents(
-      {
-        port: 8765,
-        project: "demo",
-        getToken: () => Promise.resolve("t"),
-        WebSocketImpl: MockSocket as unknown as typeof WebSocket,
-      },
-      () => undefined,
-    );
-    await flush();
     unsubscribe();
-    expect(socket(1).closed).toBe(1000);
+    expect(invokeMock).toHaveBeenCalledWith("events_unsubscribe", { id: 7 });
+    channel().onmessage({ kind: "event", event: envelope(1) });
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
+  it("unsubscribes once Rust answers when stopped before that", async () => {
+    const unsubscribe = subscribeEvents({ project: "demo" }, () => undefined);
+    unsubscribe();
+    await flush();
+    expect(invokeMock).toHaveBeenCalledWith("events_unsubscribe", { id: 7 });
+  });
+
+  it("reports a refused subscription", async () => {
+    invokeMock.mockImplementation(() =>
+      // Tauri rejects with the serialised Rust error, a plain object.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      Promise.reject({
+        kind: "invalid_request",
+        message: "not a project name",
+      }),
+    );
+    const onStop = vi.fn();
+    subscribeEvents({ project: "Bad", onStop }, () => undefined);
+    await flush();
+    expect(onStop).toHaveBeenCalledWith(
+      expect.stringContaining("not a project name"),
+    );
   });
 });

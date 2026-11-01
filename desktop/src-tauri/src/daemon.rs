@@ -168,7 +168,7 @@ impl Default for Http {
     }
 }
 
-fn current_home() -> Result<PathBuf, DaemonError> {
+pub(crate) fn current_home() -> Result<PathBuf, DaemonError> {
     home_dir(std::env::var_os(HOME_ENV_VAR))
 }
 

@@ -431,6 +431,64 @@
         }
       }
     },
+    "/api/projects/{name}/commands/test": {
+      "post": {
+        "summary": "Try Stack Command",
+        "description": "Run ``command`` once in the project's repository, without a shell, with the gates'\nenvironment and a 90 s timeout. It may change the checkout, as the gate would.",
+        "operationId": "try_stack_command_api_projects__name__commands_test_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandTest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandTestResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{name}/tickets": {
       "get": {
         "summary": "Get Tickets",
@@ -1894,6 +1952,43 @@
           }
         }
       }
+    },
+    "/api/templates": {
+      "get": {
+        "summary": "List Templates",
+        "operationId": "list_templates_api_templates_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateView"
+                  },
+                  "type": "array",
+                  "title": "Response List Templates Api Templates Get"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -2098,6 +2193,83 @@
           "usable"
         ],
         "title": "BackendView"
+      },
+      "CommandTest": {
+        "properties": {
+          "gate": {
+            "type": "string",
+            "enum": [
+              "install",
+              "lint",
+              "test"
+            ],
+            "title": "Gate"
+          },
+          "command": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Command"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gate",
+          "command"
+        ],
+        "title": "CommandTest",
+        "description": "A stack command to try in the project's repository, as its gate would run it."
+      },
+      "CommandTestResult": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "timed_out",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "duration_s": {
+            "type": "number",
+            "title": "Duration S"
+          },
+          "output": {
+            "type": "string",
+            "title": "Output"
+          },
+          "output_truncated": {
+            "type": "boolean",
+            "title": "Output Truncated"
+          },
+          "timeout_s": {
+            "type": "number",
+            "title": "Timeout S"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "exit_code",
+          "duration_s",
+          "output",
+          "output_truncated",
+          "timeout_s"
+        ],
+        "title": "CommandTestResult"
       },
       "CreateProject": {
         "properties": {
@@ -3041,6 +3213,24 @@
           "content"
         ],
         "title": "SpecFile"
+      },
+      "TemplateView": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "TemplateView"
       },
       "TicketList": {
         "properties": {

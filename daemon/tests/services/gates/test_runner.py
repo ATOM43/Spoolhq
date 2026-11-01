@@ -13,6 +13,7 @@ from spoolhq.services.gates import (
     GateStatus,
     check_done_when,
     run_gates,
+    try_command,
 )
 from spoolhq.services.gates.output import EXCERPT_CHARS
 from tests.conftest import fake_tool_cmd
@@ -226,3 +227,18 @@ def test_done_when_with_just_test(tmp_path: Path) -> None:
 
     assert check_done_when(["`just test` passes"], commands, passing)[0].status == "passed"
     assert check_done_when(["`just test` passes"], commands, failing)[0].status == "failed"
+
+
+def test_try_command_keeps_the_output_of_a_pass_and_no_log(tmp_path: Path) -> None:
+    result = try_command("test", PASS, tmp_path, 30)
+    assert result.status is GateStatus.PASSED
+    assert "3 passed" in result.excerpt
+    assert result.log_path is None
+
+
+def test_try_command_reports_a_failure_and_a_timeout(tmp_path: Path) -> None:
+    failed = try_command("test", fake_tool_cmd("fail-test"), tmp_path, 30)
+    assert failed.status is GateStatus.FAILED
+    assert failed.failing_tests == ("tests/test_math.py::test_add", "tests/test_math.py::test_sub")
+    timed_out = try_command("lint", fake_tool_cmd("sleep"), tmp_path, 0.5)
+    assert (timed_out.status, timed_out.exit_code) == (GateStatus.TIMED_OUT, None)

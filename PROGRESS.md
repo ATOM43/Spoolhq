@@ -298,3 +298,13 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - TypeScript: `just gen-api` (schema dumped without a server, `openapi-typescript`), an `openapi-fetch` client through a new Rust command `daemon_request`, a WebSocket helper with `since` reconnects and backoff; drift checks for both generated files in `just lint`. New: `openapi-fetch` 0.17.0, `openapi-typescript` 7.13.0 (dev).
 - Tests: every endpoint with the token and without (401), conflicting edits for tickets, spec and settings, round-trip of every T05 fixture, 120-run paging with an insert between pages, artifacts, secrets leak scan, a fake run's full event stream in order, replay from the middle and at the live seam, a client that never reads, auth and origin; Vitest for the 4408 reconnect and the 412 error.
 - Docs: `api.md` (new), `architecture.md`, `run-loop.md`, `runs.md`, `planner.md`; DECISIONS 295–305.
+
+## T20 · Event bridge, Home and New project
+
+- Step 0: `Plan.md` splits T20 into T20 (this ticket, 2 h) and T32 (Settings, project panel and Spec tab, 2 h); T21 and T22 depend on T32. 31 tickets, 77 h, critical path 28.5 h.
+- Events through Rust: `events_subscribe` / `events_unsubscribe` hold the daemon WebSocket (auth first, `since` reconnects with 0.5 s → 10 s backoff, final on 4401/4404/1008) and forward envelopes over a Tauri channel; `subscribeEvents` keeps its name on top of them, without `getToken()`. CSP unchanged. New: `tokio-tungstenite` 0.30.0.
+- Query hooks in `entities/project`, `ticket`, `run`, `agent`; run events invalidate the project, ticket and run queries (coalesced, no polling).
+- Home: project list with a progress line and status as icon + label, "Needs you" (blocked, awaiting approval, paused runs), empty, loading, error and daemon-missing states; recovers by itself when the daemon is back.
+- New project dialog: name, repo (Tauri folder picker) or template from `GET /api/templates`; then the install, lint and test commands, each with **Test** (`POST …/commands/test`, gates code, no shell, 90 s), saved with the settings ETag. API field errors show next to their fields. New: `tauri-plugin-dialog` / `@tauri-apps/plugin-dialog` 2.8.3.
+- Tests: Rust (auth first, `since` after 4408 and after a drop, unsubscribe closes with 1000, 4401 stops), Vitest (Home in every state, "Needs you" once per kind, a run event updates progress with one refetch, New project field errors, Test pass/fail/timeout, created project appears, daemon down → back), daemon (command test pass, fail, timeout, missing program, shell syntax refused and never run, cwd is the repo, no token → 401; template list).
+- Docs: `architecture.md` (data and live events), `api.md`, `desktop/README.md`; DECISIONS 306–312.

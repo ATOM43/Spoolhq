@@ -12,7 +12,9 @@ export {
   type DaemonErrorDetail,
   type DaemonErrorKind,
 } from "./errors";
-export { api, daemonFetch, type Schemas } from "./http";
+export { api, body, daemonFetch, type Schemas } from "./http";
+export { pickFolder } from "./dialog";
+export { queryKeys } from "./keys";
 export {
   subscribeEvents,
   type EventEnvelope,

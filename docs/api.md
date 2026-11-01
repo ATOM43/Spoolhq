@@ -14,6 +14,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/version` | the daemon's version |
 | `GET /api/projects` | each project: `name`, `done`/`total` tickets, `run_state` (`running`, `paused` or `idle`), `needs_you` (tickets `awaiting_approval` or `blocked`) |
 | `POST /api/projects` | create a project like `spool init`: `{"name", "repo", "branch", "remote", "template", "template_ref"}` (201) |
+| `POST /api/projects/{name}/commands/test` | `{"gate", "command"}`: run one stack command once in the project's repository, [as its gate would](#trying-a-stack-command) |
 | `GET /api/projects/{name}` | the summary plus `repo`, `default_branch`, `remote`, `invalid_tickets` |
 | `GET`, `PUT /api/projects/{name}/settings` | `project.yaml` as `{"settings": {...}}`, validated by the project model; [ETag](#etags-and-edit-conflicts) |
 | `GET`, `PUT /api/projects/{name}/spec` | `CONTEXT.md` as `{"content": "..."}`; ETag |
@@ -29,6 +30,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/projects/{name}/runs/{run_id}` | one run with its `attempts` (number, kind, status — the verdict —, backend, tokens, times) |
 | `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/{artifact}` | an attempt's file as stored; `artifact` is `transcript`, `gates`, `diff` or `review` (422 for anything else) |
 | `POST /api/projects/{name}/github/sync` | check open pull requests now |
+| `GET /api/templates` | the built-in templates: `name` (what `POST /api/projects` takes as `template`) and `description` |
 | `GET /api/agents` | what `spool agents` shows: each backend (installed, version, login, policy parts) and Graphify |
 | `GET /api/settings` | the daemon's settings, and for each secret (`anthropic`, `github`, `clickup`) only `{"set", "source": "keychain" \| "env" \| null}` |
 | `PUT`, `DELETE /api/settings/secrets/{name}` | store `{"value"}` in the OS keychain, or remove it (204) |
@@ -37,6 +39,10 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 An artifact is read from the attempt folder the run log names, by a fixed file name per `artifact`; the folder must resolve inside the workspace's `runs/`, and the file must not be a symlink and must resolve inside the folder, else 404.
 
 A secret's value is write-only: it goes to the OS keychain (service `spoolhq`, through `keyring`) and is never returned, logged or written to a file. An environment variable (`ANTHROPIC_API_KEY`, `SPOOLHQ_GITHUB_TOKEN`, `SPOOLHQ_CLICKUP_TOKEN`) wins over the keychain, as it does where the secret is used. Without a usable keychain the answer is 409 `keychain_unavailable`.
+
+## Trying a stack command
+
+The New project dialog's **Test** button. The command is split with the gates' rules (`shlex`, no shell syntax: `&&`, `|`, `;`, redirects and `$(` are 422 with `field: "command"`), its program is looked up on the gates' scrubbed `PATH`, and it runs in the project's `repo` with the gates' environment (no secrets), stdin closed and a 90 s timeout that stops the whole process tree. It can change the checkout, as the gate would. The answer is `{"status": "passed" | "failed" | "timed_out" | "error", "exit_code", "duration_s", "output", "output_truncated", "timeout_s"}`; `output` is the trimmed excerpt the gates show (for `error`, why the program couldn't start). The 90 s stays below the desktop app's 120 s request timeout; a run still uses the project's own `gates.timeouts`.
 
 ## Errors
 
@@ -101,4 +107,4 @@ A ticket PUT goes through the ticket store, so only frontmatter keys whose value
 In `desktop/src/shared/api`:
 
 - `api` (`http.ts`): an `openapi-fetch` client over `paths`. Each request goes through the Rust command `daemon_request`, which adds the token, so the token stays out of the webview. A non-2xx answer or a missing daemon rejects with a `DaemonError`; an API error is kind `api` with `code`, `message`, `field` and, for 412, `etag` and `current`.
-- `subscribeEvents(options, onEvent)` (`events.ts`): sends the auth message, tracks the last `seq`, reconnects with `since` after a drop or a 4408 (backoff 0.5 s doubling to 10 s), stops on 4401 and 4404, and returns the function that unsubscribes. It asks `options.getToken()` for the token on every connect.
+- `subscribeEvents({ project, since, onStop }, onEvent)` (`events.ts`): the Rust command `events_subscribe` holds the socket. It sends the auth message, tracks the last `seq`, reconnects with `since` after a drop or a 4408 (backoff 0.5 s doubling to 10 s), stops on 4401, 4404 and 1008 (`onStop` gets the reason), and forwards each envelope over a Tauri channel. The returned function calls `events_unsubscribe`, which closes the socket with 1000. The token and the daemon URL never reach the webview.
