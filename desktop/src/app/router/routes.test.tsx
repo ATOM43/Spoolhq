@@ -8,7 +8,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { routes } from "./routes";
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+  Channel: class {
+    onmessage: unknown = null;
+  },
+}));
 
 const invokeMock = vi.mocked(invoke);
 
@@ -22,6 +27,70 @@ function renderAt(path: string) {
   );
 }
 
+const BODIES: Record<string, string> = {
+  "/api/health": '{"status":"ok"}',
+  "/api/projects": "[]",
+  "/api/agents": JSON.stringify({
+    backends: [
+      {
+        name: "claude-code-cli",
+        installed: true,
+        version: "2.1.0",
+        logged_in: true,
+        auth_method: "subscription",
+        billing: "subscription",
+        policy_enforceable: true,
+        reason: null,
+        policy_parts: {},
+        usable: true,
+      },
+    ],
+    graphify: { installed: false, version: null, tested: false },
+  }),
+  "/api/settings": JSON.stringify({
+    host: "127.0.0.1",
+    port: 8765,
+    log_level: "info",
+    projects_dir: "/p",
+    worktrees_dir: "/w",
+    allowed_origins: [],
+    secrets: {
+      anthropic: { set: false, source: null },
+      github: { set: false, source: null },
+      clickup: { set: false, source: null },
+    },
+  }),
+  "/api/projects/demo": JSON.stringify({
+    name: "demo",
+    done: 0,
+    total: 0,
+    run_state: "idle",
+    needs_you: 0,
+    latest_seq: 0,
+    repo: "/code/demo",
+    default_branch: "main",
+    remote: null,
+    invalid_tickets: 0,
+    next_ticket: null,
+    idle: null,
+    remaining_h: 0,
+  }),
+  "/api/projects/demo/runs/current": JSON.stringify({
+    project: "demo",
+    active: false,
+    working: false,
+    run: null,
+    attempts: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    cost_micro_usd: null,
+    phases: [],
+    last_merged: null,
+    latest_seq: 0,
+  }),
+  "/api/projects/demo/spec": '{"content":""}',
+};
+
 function daemonRunning() {
   invokeMock.mockImplementation((command, args) => {
     if (command === "daemon_info") {
@@ -32,13 +101,8 @@ function daemonRunning() {
       });
     }
     const path = (args as { path: string }).path;
-    const body =
-      path === "/api/health"
-        ? '{"status":"ok"}'
-        : path === "/api/projects"
-          ? "[]"
-          : '{"version":"0.0.0"}';
-    return Promise.resolve({ status: 200, body });
+    const body = BODIES[path] ?? '{"version":"0.0.0"}';
+    return Promise.resolve({ status: 200, body, etag: '"e1"' });
   });
 }
 
@@ -94,12 +158,14 @@ describe("app shell", () => {
     daemonRunning();
     renderAt("/p/demo");
     expect(
-      screen.getByRole("heading", { name: "Project demo" }),
+      await screen.findByRole("heading", { name: "demo" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("No spec yet")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("tab", { name: "Tickets" }));
-    expect(screen.getByText("No tickets yet")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("tab", { name: "Spec", selected: true }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Tickets (0)" }));
+    expect(screen.getByText("Coming in T21")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Run" }));
-    expect(screen.getByText("Nothing running")).toBeInTheDocument();
+    expect(screen.getByText("Coming in T22")).toBeInTheDocument();
   });
 });

@@ -1,17 +1,26 @@
 """Project endpoints: list, read and create projects (``spool init``), edit
 ``project.yaml`` and ``CONTEXT.md`` with ETags, and try a stack command (token required)."""
 
+import sqlite3
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request, Response, Security, status
 
 from spoolhq.api.errors import ApiError, service_errors
-from spoolhq.api.params import IfMatch, ProjectName, require_if_match, settings, workspace
+from spoolhq.api.params import (
+    IfMatch,
+    ProjectName,
+    require_if_match,
+    run_log,
+    settings,
+    workspace,
+)
 from spoolhq.api.schemas.projects import (
     CommandTest,
     CommandTestResult,
     CreateProject,
+    IdleView,
     ProjectCreated,
     ProjectDetail,
     ProjectSummary,
@@ -34,8 +43,10 @@ from spoolhq.services.projects import (
 )
 from spoolhq.services.projects.yaml_io import write_atomic
 from spoolhq.services.runloop import RunLoop, RunLoopError
+from spoolhq.services.runs import RunLogError
+from spoolhq.services.scheduler import PlanError, explain_idle, next_ready, remaining_hours
 from spoolhq.services.templates import TemplateError, init_from_template
-from spoolhq.services.tickets import list_tickets
+from spoolhq.services.tickets import TicketListing, list_tickets
 
 router = APIRouter(prefix="/api/projects", dependencies=[Security(bearer_scheme)])
 NEEDS_YOU = ("awaiting_approval", "blocked")
@@ -43,7 +54,12 @@ NEEDS_YOU = ("awaiting_approval", "blocked")
 COMMAND_TEST_TIMEOUT_S = 90.0
 
 
-def _summary(request: Request, name: str) -> tuple[ProjectSummary, int]:
+def _summary(request: Request, name: str) -> tuple[ProjectSummary, TicketListing]:
+    # Read first: an event written while the rest is read is then replayed after it.
+    try:
+        latest_seq = run_log(request, name).last_event_id()
+    except (RunLogError, sqlite3.Error):
+        latest_seq = 0
     with service_errors():
         listing = list_tickets(name, projects_dir=settings(request).projects_dir)
     statuses = [ticket.meta.status for ticket in listing.tickets]
@@ -59,8 +75,9 @@ def _summary(request: Request, name: str) -> tuple[ProjectSummary, int]:
         total=len(statuses),
         run_state=run_state,
         needs_you=sum(status in NEEDS_YOU for status in statuses),
+        latest_seq=latest_seq,
     )
-    return summary, len(listing.invalid)
+    return summary, listing
 
 
 @router.get("")
@@ -108,15 +125,30 @@ def create_project(body: CreateProject, request: Request) -> ProjectCreated:
 @router.get("/{name}")
 def get_project(name: ProjectName, request: Request) -> ProjectDetail:
     workspace(request, name)
-    summary, invalid = _summary(request, name)
+    summary, listing = _summary(request, name)
     with service_errors():
         project = load_project(name, projects_dir=settings(request).projects_dir)
+    tickets, next_ticket, idle, remaining = listing.tickets, None, None, 0.0
+    try:
+        if tickets:
+            ready, reason = next_ready(tickets), explain_idle(tickets)
+            next_ticket = ready.id if ready else None
+            if reason is not None:
+                idle = IdleView(
+                    code=reason.code, ticket_ids=list(reason.ticket_ids), message=reason.message
+                )
+            remaining = remaining_hours(tickets)
+    except PlanError as exc:
+        idle = IdleView(code="invalid_plan", ticket_ids=[], message=str(exc))
     return ProjectDetail(
         **summary.model_dump(),
         repo=str(project.repo),
         default_branch=project.default_branch,
         remote=project.git.remote,
-        invalid_tickets=invalid,
+        invalid_tickets=len(listing.invalid),
+        next_ticket=next_ticket,
+        idle=idle,
+        remaining_h=remaining,
     )
 
 

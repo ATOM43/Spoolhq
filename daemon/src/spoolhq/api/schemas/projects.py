@@ -17,6 +17,25 @@ class ProjectSummary(BaseModel):
     """The active run's status (``running``, ``paused``), else ``idle``."""
     needs_you: int
     """Tickets waiting for a person: ``awaiting_approval`` or ``blocked``."""
+    latest_seq: int = 0
+    """The newest stored event's ``seq`` (0 if none), read before the rest of this answer:
+    subscribe with ``since=latest_seq`` to get every later change without a replay."""
+
+
+class IdleView(BaseModel):
+    """Why no ticket can run now (``spool run next`` says the same)."""
+
+    code: Literal[
+        "all_done",
+        "running",
+        "awaiting_approval",
+        "blocked",
+        "waiting",
+        "plan_not_approved",
+        "invalid_plan",
+    ]
+    ticket_ids: list[str]
+    message: str
 
 
 class ProjectDetail(ProjectSummary):
@@ -25,6 +44,12 @@ class ProjectDetail(ProjectSummary):
     remote: str | None
     invalid_tickets: int
     """Ticket files that don't load (``spool plan check`` lists them)."""
+    next_ticket: str | None = None
+    """The ticket ``run/next`` would start; null when none can run (see ``idle``)."""
+    idle: IdleView | None = None
+    """Why nothing can run; null when ``next_ticket`` is set or there are no tickets."""
+    remaining_h: float = 0
+    """Estimated hours of the tickets not done (0 for an invalid plan)."""
 
 
 class CreateProject(BaseModel):

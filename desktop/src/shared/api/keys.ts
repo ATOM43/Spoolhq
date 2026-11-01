@@ -8,5 +8,9 @@ export const queryKeys = {
   tickets: (project: string) => ["tickets", project] as const,
   runs: (project: string) => ["runs", project] as const,
   agents: ["agents"] as const,
+  settings: ["settings"] as const,
+  version: ["version"] as const,
+  // Not under ["projects"], so run events don't refetch the spec while it is edited.
+  spec: (project: string) => ["spec", project] as const,
   templates: ["templates"] as const,
 };

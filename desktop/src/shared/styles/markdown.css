@@ -1,0 +1,36 @@
+/* Rendered markdown (the Markdown component): plain, readable, token colours only. */
+@layer components {
+  .markdown > * + * {
+    @apply mt-3;
+  }
+  .markdown h1 {
+    @apply text-xl font-semibold;
+  }
+  .markdown h2 {
+    @apply text-lg font-semibold;
+  }
+  .markdown h3 {
+    @apply font-semibold;
+  }
+  .markdown ul {
+    @apply list-disc pl-6;
+  }
+  .markdown ol {
+    @apply list-decimal pl-6;
+  }
+  .markdown a {
+    @apply text-accent underline;
+  }
+  .markdown code {
+    @apply rounded-sm bg-surface-sunken px-1 font-mono text-xs;
+  }
+  .markdown pre {
+    @apply overflow-x-auto rounded-md bg-surface-sunken p-3 font-mono text-xs;
+  }
+  .markdown pre code {
+    @apply bg-transparent p-0;
+  }
+  .markdown blockquote {
+    @apply border-l-2 pl-3 text-ink-muted;
+  }
+}

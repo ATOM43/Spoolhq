@@ -36,6 +36,22 @@ export default defineConfig(
       reactRefresh.configs.vite,
     ],
     languageOptions: { globals: globals.browser },
+    rules: {
+      // Spec, ticket and agent text is untrusted: render it as React elements only.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+          message:
+            "Untrusted text must not become HTML; render it with <Markdown> or as text.",
+        },
+        {
+          selector: "Property[key.name='dangerouslySetInnerHTML']",
+          message:
+            "Untrusted text must not become HTML; render it with <Markdown> or as text.",
+        },
+      ],
+    },
   },
   // Feature-Sliced Design: app → pages → widgets → features → entities → shared.
   // A slice may import only from lower layers, only through their index.ts, and

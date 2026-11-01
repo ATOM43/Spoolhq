@@ -9,12 +9,15 @@ export function Dialog({
   onClose,
   title,
   description,
+  closable = true,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   description?: string | undefined;
+  /** False: Escape does nothing (the content offers the way out). */
+  closable?: boolean;
   children: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -36,6 +39,11 @@ export function Dialog({
       ref={dialog}
       aria-label={title}
       onClose={onClose}
+      onCancel={(event) => {
+        if (!closable) {
+          event.preventDefault();
+        }
+      }}
       className="m-auto w-full max-w-xl rounded-lg border bg-surface p-6 text-ink shadow-lg backdrop:bg-black/50"
     >
       {open ? (

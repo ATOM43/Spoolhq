@@ -1,5 +1,5 @@
 import { useDaemonStatus } from "@/features/daemon-status";
-import { SettingsDialog } from "@/features/open-settings";
+import { SettingsDialog } from "@/features/settings";
 import { NewProjectButton } from "@/features/project-create";
 import {
   DaemonConnectingPanel,
@@ -17,7 +17,7 @@ export function HomePage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Home</h1>
         <div className="flex items-center gap-2">
-          <SettingsDialog />
+          <SettingsDialog firstRun />
           {status.state === "ok" ? <NewProjectButton /> : null}
         </div>
       </div>

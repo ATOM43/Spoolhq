@@ -46,6 +46,7 @@ function project(name: string, extra: Partial<Project> = {}): Project {
     total: 3,
     run_state: "idle",
     needs_you: 0,
+    latest_seq: 0,
     ...extra,
   };
 }
@@ -144,8 +145,14 @@ describe("Home", () => {
   });
 
   it("shows an error state with a retry that recovers", async () => {
-    GET.mockImplementationOnce(() =>
-      Promise.reject(
+    const usual = GET.getMockImplementation();
+    let failed = false;
+    GET.mockImplementation((path, init) => {
+      if (path !== "/api/projects" || failed) {
+        return usual?.(path, init);
+      }
+      failed = true;
+      return Promise.reject(
         new DaemonError({
           kind: "api",
           status: 500,
@@ -155,8 +162,8 @@ describe("Home", () => {
           etag: null,
           current: null,
         }),
-      ),
-    );
+      );
+    });
     projects = [project("demo")];
     renderHome();
     expect(

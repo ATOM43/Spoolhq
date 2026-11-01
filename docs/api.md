@@ -12,10 +12,10 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | --- | --- |
 | `GET /api/health` | `{"status": "ok"}`, no token |
 | `GET /api/version` | the daemon's version |
-| `GET /api/projects` | each project: `name`, `done`/`total` tickets, `run_state` (`running`, `paused` or `idle`), `needs_you` (tickets `awaiting_approval` or `blocked`) |
+| `GET /api/projects` | each project: `name`, `done`/`total` tickets, `run_state` (`running`, `paused` or `idle`), `needs_you` (tickets `awaiting_approval` or `blocked`), `latest_seq` (see [Starting from REST](#event-websocket)) |
 | `POST /api/projects` | create a project like `spool init`: `{"name", "repo", "branch", "remote", "template", "template_ref"}` (201) |
 | `POST /api/projects/{name}/commands/test` | `{"gate", "command"}`: run one stack command once in the project's repository, [as its gate would](#trying-a-stack-command) |
-| `GET /api/projects/{name}` | the summary plus `repo`, `default_branch`, `remote`, `invalid_tickets` |
+| `GET /api/projects/{name}` | the summary plus `repo`, `default_branch`, `remote`, `invalid_tickets`, and what can run: `next_ticket` (what `run/next` would start, else null), `idle` (`{code, ticket_ids, message}` when nothing can: `all_done`, `running`, `awaiting_approval`, `blocked`, `waiting`, `plan_not_approved` or `invalid_plan`; null with no tickets) and `remaining_h` |
 | `GET`, `PUT /api/projects/{name}/settings` | `project.yaml` as `{"settings": {...}}`, validated by the project model; [ETag](#etags-and-edit-conflicts) |
 | `GET`, `PUT /api/projects/{name}/spec` | `CONTEXT.md` as `{"content": "..."}`; ETag |
 | `GET /api/projects/{name}/tickets?status=&phase=` | `{"tickets": [...], "invalid": [...]}`; each ticket is `id`, `file_name`, `meta` (the frontmatter), `body` |
@@ -25,7 +25,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `POST /api/projects/{name}/plan/generate`, `/plan/approve` | see [planner.md](planner.md#api) |
 | `POST /api/projects/{name}/run/next`, `/run/all`, `/run/ticket/{id}` | start a run (201) |
 | `POST /api/projects/{name}/run/pause`, `/run/resume`, `/run/cancel` | the current run (or `?run_id=`) |
-| `GET /api/projects/{name}/runs/current` | the active (else latest) run with its phase lines |
+| `GET /api/projects/{name}/runs/current` | the active (else latest) run with its phase lines, tokens and `cost_micro_usd` (null unless an API-key backend reported a cost), and `latest_seq` |
 | `GET /api/projects/{name}/runs?cursor=&limit=` | the run history, [paged](#paged-run-history) |
 | `GET /api/projects/{name}/runs/{run_id}` | one run with its `attempts` (number, kind, status — the verdict —, backend, tokens, times) |
 | `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/{artifact}` | an attempt's file as stored; `artifact` is `transcript`, `gates`, `diff` or `review` (422 for anything else) |
@@ -85,6 +85,8 @@ A ticket PUT goes through the ticket store, so only frontmatter keys whose value
 ```
 
 `seq` is the event's id in the run log; it only grows. `attempt` is the attempt's number (as in the artifact URL), `ticket` the run's ticket (`plan` for a plan run), `data` the event's payload; its shape per type is in the OpenAPI components (`RunStatusData`, `RunPhaseData`, `AttemptStartedData`, …). Payload text is untrusted. When nothing happens for 20 s the daemon sends `{"type": "ping"}`.
+
+**Starting from REST.** `GET /api/projects`, `GET /api/projects/{name}` and `GET …/runs/current` include `latest_seq`: the newest stored event's `seq` (0 if none), read before the rest of the answer. A client loads its state over REST, then subscribes with `since=latest_seq`: it gets no history it already has, and an event written between the two calls still arrives, since the replay covers everything after `since`. The full history of a past run is read with `GET …/runs/{run_id}` and its artifacts, never by subscribing from 0.
 
 **Replay without gaps or duplicates.** The daemon subscribes to the project's event bus first (new events queue up), then sends the stored events with `seq > since` from SQLite, then the queue, skipping anything at or below the last `seq` it sent, then stays live. Reconnect with `since=<last seq you saw>` and you get exactly what you missed.
 

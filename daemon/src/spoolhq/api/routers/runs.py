@@ -115,8 +115,9 @@ def discard_ticket(name: ProjectName, ticket_id: TicketId, request: Request) -> 
 
 @router.get("/runs/current")
 def current_run(name: ProjectName, request: Request) -> CurrentRun:
+    latest = run_log(request, name).last_event_id()  # first, so nothing falls between
     with service_errors():
-        return CurrentRun.of(_loop(request).current(name))
+        return CurrentRun.of(_loop(request).current(name), latest)
 
 
 @router.get("/runs")

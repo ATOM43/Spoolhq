@@ -308,3 +308,15 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - New project dialog: name, repo (Tauri folder picker) or template from `GET /api/templates`; then the install, lint and test commands, each with **Test** (`POST …/commands/test`, gates code, no shell, 90 s), saved with the settings ETag. API field errors show next to their fields. New: `tauri-plugin-dialog` / `@tauri-apps/plugin-dialog` 2.8.3.
 - Tests: Rust (auth first, `since` after 4408 and after a drop, unsubscribe closes with 1000, 4401 stops), Vitest (Home in every state, "Needs you" once per kind, a run event updates progress with one refetch, New project field errors, Test pass/fail/timeout, created project appears, daemon down → back), daemon (command test pass, fail, timeout, missing program, shell syntax refused and never run, cwd is the repo, no token → 401; template list).
 - Docs: `architecture.md` (data and live events), `api.md`, `desktop/README.md`; DECISIONS 306–312.
+
+## T32 · Settings, project panel and Spec tab
+
+- Step 0: the frontend line limit already existed (`scripts/check_line_limit.py`, 500 lines, tests exempt, `schema.gen.ts` allowed) and was kept. Replay started from 0: the project and current-run answers now carry `latest_seq`, and `useProjectEvents` subscribes after it (DECISIONS 310, 313).
+- Daemon: `ProjectDetail` gained `next_ticket`, `idle` and `remaining_h`; `CurrentRun` gained `cost_micro_usd`. `websockets` 17.2 added: `spool serve` could not serve the event WebSocket before (401), found in the real app run.
+- Settings dialog (`features/settings`): Agents (version, login status and how to log in, Graphify), Accounts (write-only Anthropic, GitHub and ClickUp secrets, Set/Replace/Remove, value never kept), General (folders) and About; opens by itself on Home when no backend is ready and can't be closed until one is.
+- Project panel (`pages/project`): header with repo copy, branch, remote, progress and usage; run controls for every state (Run next/Run all, Pause, Resume, Cancel through a confirm, usage-limit pause with its reset time), each disabled control with its reason; tabs Spec, Tickets, Run (the last two are placeholders until T21/T22), opening on the section-8 tab; loading, error, unknown-project and daemon-missing states.
+- Spec tab (`widgets/spec-editor`): source / split / preview, autosave after 1 s and Ctrl/Cmd+S with If-Match, conflict bar with Reload and Keep mine, save state as icon + label, starter outline, Generate plan / Re-plan with reasons, progress and a failure bar with Retry.
+- Untrusted text: `Markdown` (react-markdown 10.1.0, raw HTML skipped, unsafe URLs emptied); ESLint bans `dangerouslySetInnerHTML`.
+- Tests: daemon (subscribe from `latest_seq` gets the event written in between and no history; readiness fields; WebSocket under real `spool serve`), Vitest (replay with a mocked bridge, Settings in every state and both first-run cases, the secret absent from the DOM and caches, run controls per state, autosave/412/Keep mine/Reload/Generate plan, inert markdown).
+- Docs: `architecture.md`, `api.md`, `CLAUDE.md` layout; DECISIONS 313–322.
+

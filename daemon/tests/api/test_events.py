@@ -172,6 +172,23 @@ def _timed_emit(log: RunLog, run_id: int) -> float:
     return time.monotonic() - start
 
 
+def test_subscribing_from_latest_seq_skips_history_but_not_later_events(
+    client: TestClient, token: str, workspace: Path
+) -> None:
+    log = run_log(client, workspace)
+    run = log.start_run("T01")
+    emit(log, run.id, 3).join()  # history the client already has through REST
+    project = client.get("/api/projects/demo", headers=auth(token)).json()
+    current = client.get("/api/projects/demo/runs/current", headers=auth(token)).json()
+    assert project["latest_seq"] == current["latest_seq"] == log.last_event_id() > 0
+    log.append_event(run.id, EventKind.LOG, {"message": "between REST and subscribe"})
+    with connect(client, token, since=project["latest_seq"]) as ws:
+        log.append_event(run.id, EventKind.LOG, {"message": "live"})
+        messages = receive(ws, 2)
+    assert [m["data"]["message"] for m in messages] == ["between REST and subscribe", "live"]
+    assert messages[0]["seq"] == project["latest_seq"] + 1
+
+
 def test_a_client_that_never_reads_is_dropped_and_never_slows_the_run(
     client: TestClient, token: str, workspace: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

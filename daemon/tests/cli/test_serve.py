@@ -68,3 +68,36 @@ def test_serve_starts_and_serves_docs(home: Path, free_port: int, tmp_path: Path
     assert token not in log_text
     loggers = {json.loads(line)["logger"] for line in log_text.splitlines()}
     assert "uvicorn.access" in loggers
+
+
+def test_serve_accepts_the_event_websocket(home: Path, free_port: int, tmp_path: Path) -> None:
+    """Regression: uvicorn upgrades a WebSocket only with a protocol library installed;
+    without one the desktop app's event stream got a 401 instead of a socket."""
+    from websockets.exceptions import ConnectionClosed
+    from websockets.sync.client import connect
+
+    with (tmp_path / "serve-output.txt").open("wb") as out:
+        process = subprocess.Popen(  # noqa: S603 - fixed argument list, no shell
+            [sys.executable, "-m", "spoolhq", "serve"],
+            stdout=out,
+            stderr=subprocess.STDOUT,
+            env={**os.environ, "SPOOLHQ_PORT": str(free_port)},
+        )
+        try:
+            wait_for_health(f"http://127.0.0.1:{free_port}", process)
+            token = read_token(home)
+            assert token is not None
+            url = f"ws://127.0.0.1:{free_port}/api/projects/nope/events?since=0"
+            with connect(url, open_timeout=5) as ws:
+                ws.send(json.dumps({"type": "auth", "token": token}))
+                with pytest.raises(ConnectionClosed) as closed:
+                    ws.recv(timeout=5)
+            assert closed.value.rcvd is not None
+            assert closed.value.rcvd.code == 4404  # authenticated, then: unknown project
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()

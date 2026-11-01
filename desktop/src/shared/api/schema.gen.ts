@@ -690,9 +690,16 @@ export interface components {
             input_tokens: number;
             /** Output Tokens */
             output_tokens: number;
+            /** Cost Micro Usd */
+            cost_micro_usd?: number | null;
             /** Phases */
             phases: components["schemas"]["PhaseLine"][];
             last_merged?: components["schemas"]["MergedView"] | null;
+            /**
+             * Latest Seq
+             * @default 0
+             */
+            latest_seq: number;
         };
         /** DaemonSettings */
         DaemonSettings: {
@@ -769,6 +776,21 @@ export interface components {
              */
             status: "ok";
         };
+        /**
+         * IdleView
+         * @description Why no ticket can run now (``spool run next`` says the same).
+         */
+        IdleView: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "all_done" | "running" | "awaiting_approval" | "blocked" | "waiting" | "plan_not_approved" | "invalid_plan";
+            /** Ticket Ids */
+            ticket_ids: string[];
+            /** Message */
+            message: string;
+        };
         /** InvalidTicketView */
         InvalidTicketView: {
             /** File Name */
@@ -844,6 +866,11 @@ export interface components {
             run_state: string;
             /** Needs You */
             needs_you: number;
+            /**
+             * Latest Seq
+             * @default 0
+             */
+            latest_seq: number;
             /** Repo */
             repo: string;
             /** Default Branch */
@@ -852,6 +879,14 @@ export interface components {
             remote: string | null;
             /** Invalid Tickets */
             invalid_tickets: number;
+            /** Next Ticket */
+            next_ticket?: string | null;
+            idle?: components["schemas"]["IdleView"] | null;
+            /**
+             * Remaining H
+             * @default 0
+             */
+            remaining_h: number;
         };
         /** ProjectSummary */
         ProjectSummary: {
@@ -865,6 +900,11 @@ export interface components {
             run_state: string;
             /** Needs You */
             needs_you: number;
+            /**
+             * Latest Seq
+             * @default 0
+             */
+            latest_seq: number;
         };
         /** Reject */
         Reject: {

@@ -75,9 +75,9 @@ spoolhq/
 ```text
 src/
   app/        # entry, providers (TanStack Query), router, global styles
-  pages/      # home/, project-panel/
-  widgets/    # top-bar/, daemon-down-panel/
-  features/   # daemon-status/, open-settings/
+  pages/      # home/, project/
+  widgets/    # top-bar/, daemon-down-panel/, spec-editor/
+  features/   # daemon-status/, settings/, project-create/
   entities/   # daemon/; project/, ticket/, run/ (empty for now)
   shared/     # api/, ui/, lib/, config/, styles/
 ```

@@ -61,8 +61,10 @@ def test_current_with_no_run(run_client: TestClient, token: str) -> None:
         "attempts": 0,
         "input_tokens": 0,
         "output_tokens": 0,
+        "cost_micro_usd": None,
         "phases": [],
         "last_merged": None,
+        "latest_seq": 0,
     }
 
 

@@ -31,12 +31,43 @@ def test_list_and_get_projects(run_client: TestClient, token: str, run_project: 
     listed = run_client.get("/api/projects", headers=auth(token))
     assert listed.status_code == 200
     assert listed.json() == [
-        {"name": "demo", "done": 0, "total": 1, "run_state": "idle", "needs_you": 0}
+        {
+            "name": "demo",
+            "done": 0,
+            "total": 1,
+            "run_state": "idle",
+            "needs_you": 0,
+            "latest_seq": 0,
+        }
     ]
     detail = run_client.get("/api/projects/demo", headers=auth(token)).json()
     assert detail["default_branch"] == "main"
     assert detail["invalid_tickets"] == 1
     assert detail["remote"] is None
+    assert detail["next_ticket"] == "T07"
+    assert detail["idle"] is None
+    assert detail["remaining_h"] == 1
+
+
+def test_project_detail_says_why_nothing_can_run(
+    run_client: TestClient, token: str, run_project: Path
+) -> None:
+    ticket = run_project / "tickets" / "T07-parse-slug.md"
+    ticket.write_text(
+        ticket.read_text(encoding="utf-8").replace("status: ready", "status: draft"),
+        encoding="utf-8",
+    )
+    detail = run_client.get("/api/projects/demo", headers=auth(token)).json()
+    assert detail["next_ticket"] is None
+    assert detail["idle"]["code"] == "plan_not_approved"
+    assert detail["idle"]["ticket_ids"] == ["T07"]
+    ticket.write_text(
+        ticket.read_text(encoding="utf-8").replace("depends_on: []", "depends_on: [T99]"),
+        encoding="utf-8",
+    )
+    idle = run_client.get("/api/projects/demo", headers=auth(token)).json()["idle"]
+    assert idle["code"] == "invalid_plan"
+    assert "T99" in idle["message"]
 
 
 def test_unknown_or_invalid_project_names(run_client: TestClient, token: str) -> None:

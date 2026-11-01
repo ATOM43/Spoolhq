@@ -99,12 +99,16 @@ class CurrentRun(BaseModel):
     attempts: int
     input_tokens: int
     output_tokens: int
+    cost_micro_usd: int | None = None
+    """What the run cost on an API-key backend; null when no attempt reported a cost."""
     phases: list[PhaseLine]
     last_merged: MergedView | None = None
     """The ticket the project's latest finished integration merged."""
+    latest_seq: int = 0
+    """The newest stored event's ``seq`` (0 if none), read before the rest of this answer."""
 
     @classmethod
-    def of(cls, current: Current) -> "CurrentRun":
+    def of(cls, current: Current, latest_seq: int = 0) -> "CurrentRun":
         usage = current.usage
         return cls(
             project=current.project,
@@ -114,8 +118,10 @@ class CurrentRun(BaseModel):
             attempts=current.attempts,
             input_tokens=usage.input_tokens if usage else 0,
             output_tokens=usage.output_tokens if usage else 0,
+            cost_micro_usd=usage.cost_micro_usd if usage else None,
             phases=[PhaseLine(id=event_id, text=text) for event_id, text in current.phases],
             last_merged=MergedView.of(current.last_merged) if current.last_merged else None,
+            latest_seq=latest_seq,
         )
 
 

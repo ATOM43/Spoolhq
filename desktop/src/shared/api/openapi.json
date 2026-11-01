@@ -2367,6 +2367,17 @@
             "type": "integer",
             "title": "Output Tokens"
           },
+          "cost_micro_usd": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micro Usd"
+          },
           "phases": {
             "items": {
               "$ref": "#/components/schemas/PhaseLine"
@@ -2383,6 +2394,11 @@
                 "type": "null"
               }
             ]
+          },
+          "latest_seq": {
+            "type": "integer",
+            "title": "Latest Seq",
+            "default": 0
           }
         },
         "type": "object",
@@ -2597,6 +2613,42 @@
         "type": "object",
         "title": "Health"
       },
+      "IdleView": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "all_done",
+              "running",
+              "awaiting_approval",
+              "blocked",
+              "waiting",
+              "plan_not_approved",
+              "invalid_plan"
+            ],
+            "title": "Code"
+          },
+          "ticket_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ticket Ids"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "ticket_ids",
+          "message"
+        ],
+        "title": "IdleView",
+        "description": "Why no ticket can run now (``spool run next`` says the same)."
+      },
       "InvalidTicketView": {
         "properties": {
           "file_name": {
@@ -2779,6 +2831,11 @@
             "type": "integer",
             "title": "Needs You"
           },
+          "latest_seq": {
+            "type": "integer",
+            "title": "Latest Seq",
+            "default": 0
+          },
           "repo": {
             "type": "string",
             "title": "Repo"
@@ -2801,6 +2858,32 @@
           "invalid_tickets": {
             "type": "integer",
             "title": "Invalid Tickets"
+          },
+          "next_ticket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Ticket"
+          },
+          "idle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdleView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "remaining_h": {
+            "type": "number",
+            "title": "Remaining H",
+            "default": 0
           }
         },
         "type": "object",
@@ -2838,6 +2921,11 @@
           "needs_you": {
             "type": "integer",
             "title": "Needs You"
+          },
+          "latest_seq": {
+            "type": "integer",
+            "title": "Latest Seq",
+            "default": 0
           }
         },
         "type": "object",

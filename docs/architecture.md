@@ -151,13 +151,14 @@ The code is `services/runloop/`: `RunContext`, `Ending` and the errors in `model
 ```text
 src/
   app/        # entry (main.tsx), providers (TanStack Query), router, global styles
-  pages/      # one slice per route: home/, project-panel/
-  widgets/    # self-contained screen blocks: top-bar/, daemon-down-panel/
-  features/   # user actions and behaviours: daemon-status/ (polling + retry), open-settings/,
-              # project-create/ (New project dialog)
+  pages/      # one slice per route: home/, project/ (header, run controls, tabs)
+  widgets/    # self-contained screen blocks: top-bar/, daemon-down-panel/,
+              # spec-editor/ (Spec tab: autosave, conflict bar, preview, Generate plan)
+  features/   # user actions and behaviours: daemon-status/ (polling + retry),
+              # settings/ (Settings dialog), project-create/ (New project dialog)
   entities/   # domain models and their query hooks: daemon/, project/, ticket/, run/, agent/
   shared/     # no domain knowledge: api/ (typed client, event stream, query keys),
-              # ui/ (Button, Card, Dialog, Field, Input, ProgressLine, Tabs, ...),
+              # ui/ (Button, ReasonButton, ConfirmDialog, Markdown, Dialog, Field, Tabs, ...),
               # lib/, config/, styles/ (design tokens)
 ```
 
@@ -167,7 +168,7 @@ Inside a slice, code is grouped by segment: `ui/` for components, `model/` for s
 
 - **Public API only.** Each slice (and each `shared/` segment) exports what others may use from its `index.ts`. Nothing imports a slice's internals (`@/features/daemon-status/model/...` is an error).
 - **Downward only.** A layer imports only from layers below it: app → pages → widgets → features → entities → shared.
-- **No sideways imports.** Slices on the same layer never import each other (`features/open-settings` cannot import `features/daemon-status`). If two slices need the same thing, move it down a layer.
+- **No sideways imports.** Slices on the same layer never import each other (`features/settings` cannot import `features/daemon-status`). If two slices need the same thing, move it down a layer.
 - **Imports use the `@/` alias** across slices (`@/shared/ui`); relative paths only inside a slice.
 - **Tests sit next to the code they test** (`status.ts` and `status.test.ts`).
 
@@ -203,9 +204,13 @@ Rust    events.rs: events_subscribe(project, since, channel) → id
   │  Tauri Channel (IPC)
 webview shared/api/events.ts: subscribeEvents({ project, since }, onEvent) → unsubscribe
   │
-        entities/project useProjectEvents(names): run.*, integrate and policy events
+        entities/project useProjectEvents(projects): run.*, integrate and policy events
         invalidate ["projects"] and the project's tickets; run, attempt, gate and review
         events its ["runs", name]; bursts are coalesced into one refetch per 250 ms
 ```
 
-Home subscribes to every listed project. The hook remembers each project's last `seq`, so returning to Home resumes the stream instead of replaying it.
+Home subscribes to every listed project, the project panel to its project. A first subscription starts after the `latest_seq` of the REST answer the screen was drawn from, so no stored history is replayed; an event written between that answer and the subscribe still arrives. The hook remembers each project's last `seq`, so a remount resumes after it. A past run's history is read with `GET …/runs/{id}` when it is opened.
+
+### Untrusted text
+
+Spec, ticket and agent text is untrusted. Markdown goes through `shared/ui` `Markdown` (react-markdown with `skipHtml` and its default URL transform, so raw HTML is dropped and `javascript:` links are emptied; links never navigate the webview). Everything else is rendered as React text. ESLint bans `dangerouslySetInnerHTML`. A disabled control is a `ReasonButton`: its reason is a tooltip and the button's accessible description.

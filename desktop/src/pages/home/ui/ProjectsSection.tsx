@@ -26,7 +26,7 @@ const NO_PROJECTS: ProjectSummary[] = [];
 export function ProjectsSection() {
   const projects = useProjects();
   const list = projects.data ?? NO_PROJECTS;
-  useProjectEvents(list.map((project) => project.name));
+  useProjectEvents(list);
 
   if (projects.isPending) {
     return (
