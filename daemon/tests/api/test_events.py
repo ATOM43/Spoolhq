@@ -40,6 +40,19 @@ def connect(
                 break
             time.sleep(0.01)
         yield ws
+        # TestClient cancels the app right after its own close; let the handler end
+        # first, as it does on a real server, or the cancel races it on a slow machine.
+        ws.close()
+        wait_closed(client)
+
+
+def wait_closed(client: TestClient) -> None:
+    streams = client.app.state.streams  # type: ignore[attr-defined]
+    for _ in range(500):
+        if streams.count == 0:
+            return
+        time.sleep(0.01)
+    raise AssertionError("the event stream did not end")
 
 
 def receive(ws: WebSocketTestSession, count: int) -> list[dict[str, Any]]:

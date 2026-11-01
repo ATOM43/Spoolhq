@@ -59,6 +59,11 @@ class EventStreams:
     def discard(self, stop: Callable[[], None]) -> None:
         self._stops.discard(stop)
 
+    @property
+    def count(self) -> int:
+        """Streams still open (a stream leaves this set as its handler ends)."""
+        return len(self._stops)
+
 
 class _Envelopes:
     """Run log rows → envelopes, caching each run's ticket and attempt numbers."""
@@ -153,10 +158,10 @@ async def _stream(
         gone = closed.done()
     finally:
         subscription.close()
-        streams.discard(request_stop)
         for task in (sender, closed, slow, stopping):
             task.cancel()
         await asyncio.gather(sender, closed, slow, stopping, return_exceptions=True)
+        streams.discard(request_stop)  # last: nothing is left to wait on after it
     if sender.done() and not sender.cancelled() and sender.exception() is not None:
         logger.warning("event stream failed", extra={"error": type(sender.exception()).__name__})
     code = CLOSE_TOO_SLOW if too_slow.is_set() else CLOSE_GOING_AWAY if stop.is_set() else None
