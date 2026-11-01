@@ -11,7 +11,8 @@ pub fn run() {
         .manage(daemon::Http::default())
         .invoke_handler(tauri::generate_handler![
             daemon::daemon_info,
-            daemon::daemon_get
+            daemon::daemon_get,
+            daemon::daemon_request
         ])
         .run(tauri::generate_context!())
         .expect("error while running the SpoolHQ desktop app");

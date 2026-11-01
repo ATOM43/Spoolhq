@@ -27,7 +27,11 @@ GatesFn = Callable[[Path, Mapping[str, str], Mapping[str, float], Path], GateRun
 
 
 class RunLoopError(Exception):
-    """A request the run loop refuses: nothing to run, a run already active, a bad state."""
+    """A request the run loop refuses: nothing to run, a run already active, a bad state.
+
+    ``code`` names the refusal for API clients (``conflict`` unless a subclass says)."""
+
+    code = "conflict"
 
 
 @contextmanager
@@ -42,9 +46,19 @@ def user_errors() -> Iterator[None]:
 class NotFoundError(RunLoopError):
     """An unknown project, run or ticket."""
 
+    code = "not_found"
+
 
 class RunActiveError(RunLoopError):
     """A run is already active in the project."""
+
+    code = "run_locked"
+
+
+class NotBlockedError(RunLoopError):
+    """Unblock asked for a ticket that is not blocked."""
+
+    code = "not_blocked"
 
 
 @dataclass(frozen=True)

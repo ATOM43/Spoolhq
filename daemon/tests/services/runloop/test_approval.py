@@ -307,3 +307,39 @@ def test_failing_gates_never_ask_the_reviewer_or_the_policy(
     assert run.status is RunStatus.BLOCKED
     assert reviewer.calls == []
     assert run.policy is None and decisions(log_of(registry), run) == []
+
+
+@pytest.mark.integration
+def test_unblock_continues_the_blocked_run_with_the_note(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    clock: ManualClock,
+    registry: RunRegistry,
+    projects_dir: Path,
+) -> None:
+    reviews = [transcripts.review("changes_requested", (True, False, True)) for _ in range(3)]
+    loop, _ = make_loop(
+        [transcripts.implement() for _ in range(4)],
+        [*reviews, transcripts.review("approve")],
+        integrator=Delivery(clock=clock),
+    )
+    with pytest.raises(RunLoopError, match="T01 is ready, not blocked") as refused:
+        loop.unblock("demo", "T01", "try again")
+    assert refused.value.code == "not_blocked"
+    loop.start("demo", "next")
+    loop.wait("demo")
+    blocked = log_of(registry).list_runs()[0]
+    assert blocked.status is RunStatus.BLOCKED
+    with pytest.raises(RunLoopError, match="say what should change"):
+        loop.unblock("demo", "T01", " ")
+
+    run = loop.unblock("demo", "T01", "use the slug helper")
+    loop.wait("demo")
+
+    assert run.id == blocked.id
+    assert log_of(registry).get_run(run.id).status is RunStatus.DONE
+    assert ticket_status(projects_dir) == "done"
+    last = log_of(registry).list_attempts(run.id)[-1]
+    assert last.kind is AttemptKind.PR_CHANGES
+    prompt = loop.agents.implementer.calls[-1][0]  # type: ignore[attr-defined]
+    assert "use the slug helper" in prompt

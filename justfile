@@ -21,11 +21,18 @@ lint:
     uv run --directory daemon mypy
     uv run --directory daemon lint-imports
     uv run --directory daemon python ../scripts/check_line_limit.py
+    uv run --directory daemon pytest tests/api/test_openapi.py -q -p no:cacheprovider
     pnpm --dir desktop exec eslint .
     pnpm --dir desktop exec prettier --check .
     pnpm --dir desktop exec tsc --noEmit
+    pnpm --dir desktop run check:api
     cargo fmt --manifest-path {{ tauri_manifest }} --check
     cargo clippy --manifest-path {{ tauri_manifest }} --locked --all-targets -- -D warnings
+
+# Regenerate the TypeScript API client from the daemon's OpenAPI schema.
+gen-api:
+    uv run --directory daemon python ../scripts/dump_openapi.py ../desktop/src/shared/api/openapi.json
+    pnpm --dir desktop run gen:api
 
 # Run all tests, with coverage (the daemon fails below 85% line coverage).
 test:

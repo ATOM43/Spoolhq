@@ -379,11 +379,11 @@ class RunLoop:
                     ticket = load_ticket(project, found.ticket_id, projects_dir=self.projects_dir)
                     manager = self._manager(settings)
                     worktree = manager.resume(ticket.id)
-                    if found.status is RunStatus.INTERRUPTED:
+                    if found.status in (RunStatus.INTERRUPTED, RunStatus.BLOCKED):
                         run = run_log.reopen_run(found.id)
                     else:
                         run = run_log.set_run_status(found.id, RunStatus.RUNNING)
-                    if found.status is RunStatus.AWAITING_APPROVAL:
+                    if found.status in (RunStatus.AWAITING_APPROVAL, RunStatus.BLOCKED):
                         self._ticket_status(project, ticket.id, "running")
                     if worktree is None:
                         reason = (
@@ -415,6 +415,10 @@ class RunLoop:
     def reject(self, project: str, ticket_id: str, note: str) -> Run:
         """A ``pr_changes`` attempt with ``note`` for a waiting ticket (``approval.reject``)."""
         return approval.reject(self, project, ticket_id, note)
+
+    def unblock(self, project: str, ticket_id: str, note: str) -> Run:
+        """A ``pr_changes`` attempt with ``note`` for a blocked ticket (``approval.unblock``)."""
+        return approval.unblock(self, project, ticket_id, note)
 
     def discard(self, project: str, ticket_id: str) -> None:
         """Remove the worktree of an interrupted or blocked ticket; ticket back to ``ready``."""

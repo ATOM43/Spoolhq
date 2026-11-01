@@ -132,7 +132,7 @@ def test_errors_from_the_daemon_exit_1(daemon: TestClient) -> None:
 
     result = runner.invoke(app, ["run", "pause", "demo"])
     assert result.exit_code == 1
-    assert "error: no run in 'demo'" in result.output
+    assert "error: no active run in 'demo'" in result.output
 
     result = runner.invoke(app, ["run", "discard", "demo", "T07"])
     assert result.exit_code == 1

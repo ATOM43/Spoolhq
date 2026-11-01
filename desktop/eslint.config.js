@@ -15,6 +15,7 @@ export default defineConfig(
       "coverage/",
       "src-tauri/target/",
       "src-tauri/gen/",
+      "src/shared/api/schema.gen.ts",
     ],
   },
   js.configs.recommended,

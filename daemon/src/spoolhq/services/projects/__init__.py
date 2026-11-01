@@ -1,6 +1,7 @@
 """Projects: creating, listing and loading SpoolHQ projects."""
 
 from spoolhq.services.projects.errors import ProjectError, ProjectValidationError
+from spoolhq.services.projects.files import EditConflict, etag_of, read_with_etag, write_if_match
 from spoolhq.services.projects.model import (
     DEFAULT_PROTECTED_PATHS,
     LOCKFILES,
@@ -18,16 +19,23 @@ from spoolhq.services.projects.model import (
     Tracker,
 )
 from spoolhq.services.projects.workspace import (
+    CONTEXT_FILE,
     InitResult,
     init_project,
     list_workspaces,
     load_project,
+    parse_project,
     project_dir,
     save_project,
     template_description,
 )
 
 __all__ = [
+    "CONTEXT_FILE",
+    "EditConflict",
+    "etag_of",
+    "read_with_etag",
+    "write_if_match",
     "Agents",
     "BackendSettings",
     "Budget",
@@ -48,6 +56,7 @@ __all__ = [
     "init_project",
     "list_workspaces",
     "load_project",
+    "parse_project",
     "project_dir",
     "save_project",
     "template_description",

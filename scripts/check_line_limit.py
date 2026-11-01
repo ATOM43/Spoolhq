@@ -14,7 +14,9 @@ SOURCES = (
     (ROOT / "desktop" / "src", ("*.ts", "*.tsx")),
 )
 # Repo-relative path -> why it may be longer than LIMIT.
-ALLOWED: dict[str, str] = {}
+ALLOWED: dict[str, str] = {
+    "desktop/src/shared/api/schema.gen.ts": "generated from openapi.json by `just gen-api`",
+}
 
 
 def is_test(path: Path) -> bool:

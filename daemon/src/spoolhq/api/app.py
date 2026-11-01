@@ -3,12 +3,18 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
 
 import spoolhq
-from spoolhq.api.routers import github, health, plan, runs, version
+from spoolhq.api import errors
+from spoolhq.api.routers import agents as agents_router
+from spoolhq.api.routers import events, github, health, plan, projects, runs, tickets, version
+from spoolhq.api.routers import settings as settings_router
+from spoolhq.api.schemas.events import EVENT_DATA_MODELS
 from spoolhq.api.security import LocalOnlyMiddleware
 from spoolhq.api.worktrees import check_git, recover_all_integrations, recover_all_worktrees
 from spoolhq.core.auth import load_or_create_token
@@ -82,17 +88,49 @@ def create_app(
             try:
                 yield
             finally:
+                app.state.streams.close_all()
                 app.state.plans.close()
                 app.state.github.close()
                 app.state.runloop.close()
         finally:
             registry.close()
 
-    app = FastAPI(title="SpoolHQ daemon", version=spoolhq.__version__, lifespan=lifespan)
-    app.include_router(health.router)
-    app.include_router(version.router)
-    app.include_router(runs.router)
-    app.include_router(plan.router)
-    app.include_router(github.router)
+    app = FastAPI(
+        title="SpoolHQ daemon",
+        version=spoolhq.__version__,
+        lifespan=lifespan,
+        responses={"default": {"model": errors.ErrorResponse, "description": "An error."}},
+    )
+    app.state.settings = settings
+    app.state.token = token
+    app.state.streams = events.EventStreams()
+    errors.install(app)
+    for module in (
+        health,
+        version,
+        projects,
+        tickets,
+        runs,
+        plan,
+        github,
+        agents_router,
+        settings_router,
+        events,
+    ):
+        app.include_router(module.router)
     app.add_middleware(LocalOnlyMiddleware, port=settings.port, token=token)
+    app.openapi = lambda: _openapi(app)  # type: ignore[method-assign]
     return app
+
+
+def _openapi(app: FastAPI) -> dict[str, Any]:
+    """The schema plus the event stream's message models, which no route returns."""
+    if app.openapi_schema is None:
+        schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+        components = schema.setdefault("components", {}).setdefault("schemas", {})
+        for model in EVENT_DATA_MODELS:
+            found = model.model_json_schema(ref_template="#/components/schemas/{model}")
+            components.update(found.pop("$defs", {}))
+            components[model.__name__] = found
+        app.openapi_schema = schema
+    return app.openapi_schema

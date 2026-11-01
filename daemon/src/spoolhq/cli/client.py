@@ -68,8 +68,8 @@ class ApiClient:
             raise ApiError(f"request to daemon failed: {exc}") from exc
         if response.status_code == 401:
             raise ApiError(f"daemon rejected the token in {token_path(home_dir())}")
-        if response.status_code in (404, 409):
-            # The run endpoints explain a refusal in "detail"; a bare 404 is a missing route.
+        if response.status_code in (404, 409, 422):
+            # The API explains a refusal in error.message; a bare 404 is a missing route.
             detail = _detail(response)
             if detail is not None and detail != "Not Found":
                 raise ApiError(detail)
@@ -87,8 +87,9 @@ class ApiClient:
 
 
 def _detail(response: httpx.Response) -> str | None:
+    """``error.message`` of the API's error format."""
     try:
-        detail = response.json().get("detail")
-    except (ValueError, AttributeError):
+        detail = response.json()["error"]["message"]
+    except (ValueError, KeyError, TypeError):
         return None
     return detail if isinstance(detail, str) else None

@@ -63,7 +63,7 @@ After an early stop the next prompt's `<previous_attempt>` says so (`Your last a
 | Run status | How | Ticket | Worktree | What next |
 | --- | --- | --- | --- | --- |
 | `paused` | a usage limit, or `spool run pause` | `running` | kept | resumes by itself at `reset_at` + 60 s (usage limit, daemon running), or `spool run resume` |
-| `blocked` | retries used up, an agent error, budget used up, the reviewer changed the worktree, an internal error | `blocked` | kept, for inspection | fix it, then `spool run discard` and run again |
+| `blocked` | retries used up, an agent error, budget used up, the reviewer changed the worktree, an internal error | `blocked` | kept, for inspection | unblock it with a note (`POST …/tickets/{id}/unblock`: the same run continues in the kept worktree with a `pr_changes` attempt whose prompt has the note), or `spool run discard` and run again |
 | `cancelled` | `spool run cancel` | `ready` | removed, with its branch | — |
 | `interrupted` | the daemon stopped while the run was active ([runs](runs.md#recovery)) | `running` | kept | `spool run resume`, or `spool run discard` |
 | `awaiting_approval` | the [merge policy](merge-policy.md) wants a person (hold mode included), waiting for a clean main checkout, or its integration was interrupted | `awaiting_approval` | kept | `spool run approve` (alias `integrate`) or `spool run reject --note` |
@@ -127,16 +127,19 @@ Tests use a fake one that returns `merged` (it never asks the policy), or `HoldF
 
 ## API and CLI
 
-All routes need the token. Unknown projects, runs and tickets give 404; refusals give 409; both carry the message in `detail`. The full REST and WebSocket API is T19.
+All routes need the token. Unknown projects, runs and tickets give 404; refusals give 409 (`run_locked` while another run is active); both carry the message in the [error format](api.md#errors). The whole API is in [api.md](api.md).
 
 | Route | Does |
 | --- | --- |
-| `POST /api/projects/{name}/runs` `{"mode": "next" \| "all", "ticket": "T04" \| null}` | start a run (201, the run) |
-| `POST /api/projects/{name}/runs/{id}/pause` | pause after the current step |
-| `POST /api/projects/{name}/runs/{id}/resume` | resume a paused or interrupted run |
-| `POST /api/projects/{name}/runs/{id}/cancel` | cancel |
+| `POST /api/projects/{name}/run/next` | run the next ready ticket (201, the run) |
+| `POST /api/projects/{name}/run/all` | run ready tickets one after another (201) |
+| `POST /api/projects/{name}/run/ticket/{id}` | run this ready ticket (201) |
+| `POST /api/projects/{name}/run/pause` (`?run_id=`) | pause the current run after its current step |
+| `POST /api/projects/{name}/run/resume` (`?run_id=`) | resume a paused or interrupted run |
+| `POST /api/projects/{name}/run/cancel` (`?run_id=`) | cancel |
 | `POST /api/projects/{name}/tickets/{id}/approve` (alias `/integrate`) | integrate a ticket waiting in `awaiting_approval` ([merge policy](merge-policy.md#local-approval)) |
 | `POST /api/projects/{name}/tickets/{id}/reject` `{"note": "..."}` | send a waiting ticket back with a note: a `pr_changes` attempt |
+| `POST /api/projects/{name}/tickets/{id}/unblock` `{"note": "..."}` | continue a blocked ticket's run in its kept worktree: a `pr_changes` attempt with the note (409 `not_blocked` otherwise) |
 | `POST /api/projects/{name}/tickets/{id}/discard` | discard an interrupted or blocked ticket's worktree |
 | `GET /api/projects/{name}/runs/current` | `active`, `working`, the active (else latest) run, its attempts, tokens and phase lines, and `last_merged` (`ticket_id`, full `commit`, `tag` of the latest finished integration, or `null`) |
 

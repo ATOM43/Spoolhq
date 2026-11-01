@@ -10,6 +10,7 @@ from spoolhq.services.scheduler.schedule import waiting_on
 from spoolhq.services.tickets import (
     TICKET_STATUSES,
     Ticket,
+    TicketMeta,
     TicketStatus,
     list_tickets,
     load_ticket,
@@ -99,3 +100,18 @@ def apply_transition(
         ticket.meta.status = status
         save_ticket(project, ticket, projects_dir=projects_dir)
     return TransitionResult(ticket, previous)
+
+
+def edit_ticket(
+    project: str, ticket_id: str, meta: TicketMeta, body: str, *, projects_dir: Path
+) -> Ticket:
+    """Save a whole edited ticket (frontmatter and body) through the ticket store, so
+    only changed keys are rewritten; a status change must be allowed by ``TRANSITIONS``."""
+    ticket = load_ticket(project, ticket_id, projects_dir=projects_dir)
+    if meta.status != ticket.meta.status:
+        check_transition(
+            ticket, meta.status, list_tickets(project, projects_dir=projects_dir).tickets
+        )
+    ticket.meta, ticket.body = meta, body
+    save_ticket(project, ticket, projects_dir=projects_dir)
+    return ticket

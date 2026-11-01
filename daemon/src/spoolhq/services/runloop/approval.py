@@ -13,7 +13,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from spoolhq.services.git import staged_changes
-from spoolhq.services.runloop.model import RunContext, RunLoopError, user_errors
+from spoolhq.services.runloop.model import NotBlockedError, RunContext, RunLoopError, user_errors
 from spoolhq.services.runloop.policy import DeliveryMode, as_record, delivery_mode, evaluate
 from spoolhq.services.runs import (
     ArtifactName,
@@ -23,6 +23,7 @@ from spoolhq.services.runs import (
     EventKind,
     Run,
     RunLog,
+    RunStatus,
     attempt_files,
     record_policy,
 )
@@ -122,3 +123,21 @@ def reject(loop: "RunLoop", project: str, ticket_id: str, note: str) -> Run:
         payload = {"message": "rejected by the user", "user_note": note.strip()}
         run_log.append_event(latest.id, EventKind.LOG, payload)
         return loop._continue(settings, workspace, run_log, latest, None, AttemptKind.PR_CHANGES)
+
+
+def unblock(loop: "RunLoop", project: str, ticket_id: str, note: str) -> Run:
+    """Continue a blocked ticket's latest run in its kept worktree: a ``pr_changes``
+    attempt with ``note`` as the user's note, then gates, reviewer and policy again."""
+    if not note.strip():
+        raise RunLoopError(NOTE_REQUIRED)
+    settings, workspace, run_log = loop._project(project)
+    with loop._mutex:
+        loop._check_free(project)
+        with user_errors():
+            status = load_ticket(project, ticket_id, projects_dir=loop.projects_dir).meta.status
+            runs = run_log.list_runs(ticket_id=ticket_id, limit=1)
+        if status != "blocked" or not runs or runs[0].status is not RunStatus.BLOCKED:
+            raise NotBlockedError(f"{ticket_id} is {status}, not blocked")
+        payload = {"message": "unblocked by the user", "user_note": note.strip()}
+        run_log.append_event(runs[0].id, EventKind.LOG, payload)
+        return loop._continue(settings, workspace, run_log, runs[0], None, AttemptKind.PR_CHANGES)

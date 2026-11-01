@@ -18,7 +18,9 @@ A **run** is one execution of the loop for one ticket, from being picked until i
 | `cancelled` | Stopped on request. Terminal. |
 | `interrupted` | The daemon stopped while the run was active (see [Recovery](#recovery)). Terminal. |
 
-A terminal status sets `ended_at`, and a run that has ended can't change again: `set_run_status` raises `run 12 is already done`, and `start_attempt` refuses it too. The one exception is `reopen_run(run_id)`: the run loop resumes an `interrupted` run in its kept worktree, which moves it back to `running` under the current daemon instance and clears `ended_at` and `reason` (event `run.status` with reason `resumed`).
+A terminal status sets `ended_at`, and a run that has ended can't change again: `set_run_status` raises `run 12 is already done`, and `start_attempt` refuses it too. The one exception is `reopen_run(run_id)`: the run loop resumes an `interrupted` run, or continues a `blocked` one the user unblocks, in its kept worktree, which moves it back to `running` under the current daemon instance and clears `ended_at` and `reason` (event `run.status` with reason `resumed`).
+
+`page_runs(run_log, cursor, limit)` (`history.py`) reads the run history newest first, behind an opaque cursor; see [api.md](api.md#paged-run-history).
 
 `set_run_status(run_id, status, reason, reset_at=None)` stores `reset_at` (when a usage limit resets) on a paused run and clears it on any other change; `set_progress_note(run_id, note)` stores the implementer's `<progress>` note, which integration uses for the commit message and `PROGRESS.md`.
 

@@ -5,13 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from spoolhq.services.runloop import Current, Merged, describe
-from spoolhq.services.runs import Run
-
-
-class StartRun(BaseModel):
-    mode: Literal["next", "all"] = "next"
-    ticket: str | None = None
-    """Run this ticket (it must be ready) instead of the next ready one; ``next`` only."""
+from spoolhq.services.runs import Attempt, Run, RunPage
 
 
 class Reject(BaseModel):
@@ -128,3 +122,48 @@ class CurrentRun(BaseModel):
 class Discarded(BaseModel):
     ticket_id: str
     status: Literal["ready"] = "ready"
+
+
+class AttemptView(BaseModel):
+    number: int
+    """Counts per ticket across its runs; the artifact URL uses it."""
+    kind: str
+    status: str
+    """The verdict: ``gates_failed``, ``changes_requested``, ``approved``, ``needs_human``…"""
+    backend: str | None
+    model: str | None
+    input_tokens: int
+    output_tokens: int
+    cost_micro_usd: int | None
+    started_at: str
+    ended_at: str | None
+
+    @classmethod
+    def of(cls, attempt: Attempt) -> "AttemptView":
+        return cls(
+            number=attempt.number,
+            kind=attempt.kind.value,
+            status=attempt.status.value,
+            backend=attempt.backend,
+            model=attempt.model,
+            input_tokens=attempt.input_tokens,
+            output_tokens=attempt.output_tokens,
+            cost_micro_usd=attempt.cost_micro_usd,
+            started_at=attempt.started_at,
+            ended_at=attempt.ended_at,
+        )
+
+
+class RunDetail(RunView):
+    attempts: list[AttemptView]
+
+
+class RunList(BaseModel):
+    items: list[RunView]
+    """Newest first."""
+    next_cursor: str | None
+    """Pass it as ``cursor`` for the next page; null on the last page."""
+
+    @classmethod
+    def of(cls, page: RunPage) -> "RunList":
+        return cls(items=[RunView.of(run) for run in page.runs], next_cursor=page.next_cursor)

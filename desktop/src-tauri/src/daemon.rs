@@ -30,6 +30,8 @@ pub struct DaemonInfo {
 pub struct DaemonReply {
     pub status: u16,
     pub body: String,
+    /// The `ETag` header, for the files the API edits with `If-Match`.
+    pub etag: Option<String>,
 }
 
 /// Failures before an HTTP status exists. Serialised as `{ "kind": ..., ... }`.
@@ -130,13 +132,18 @@ pub fn info(home: &Path, env_port: Option<OsString>) -> Result<DaemonInfo, Daemo
 }
 
 /// Build the request URL. Only `/api/...` paths on 127.0.0.1 can be requested, so the
-/// webview cannot use this command to reach any other host or scheme.
+/// webview cannot use this command to reach any other host or scheme. A query string
+/// may follow (`?status=ready&cursor=...`), percent-encoded.
 pub fn api_url(port: u16, path: &str) -> Result<String, DaemonError> {
-    let allowed = path.starts_with("/api/")
-        && !path.split('/').any(|segment| segment == "..")
-        && path
+    let (route, query) = path.split_once('?').unwrap_or((path, ""));
+    let allowed = route.starts_with("/api/")
+        && !route.split('/').any(|segment| segment == "..")
+        && route
             .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"/-_.".contains(&byte));
+            .all(|byte| byte.is_ascii_alphanumeric() || b"/-_.".contains(&byte))
+        && query
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.~=&%".contains(&byte));
     if !allowed {
         return Err(DaemonError::InvalidRequest {
             message: format!("not a daemon API path: {path:?}"),
@@ -178,11 +185,61 @@ pub async fn daemon_get(
     path: String,
     authenticated: bool,
 ) -> Result<DaemonReply, DaemonError> {
+    send(&http, "GET", &path, None, None, authenticated).await
+}
+
+/// Any API call with the token: `method` is GET, POST, PUT or DELETE, `body` is JSON,
+/// `if_match` the ETag of a file being saved.
+#[tauri::command]
+pub async fn daemon_request(
+    http: tauri::State<'_, Http>,
+    method: String,
+    path: String,
+    body: Option<String>,
+    if_match: Option<String>,
+) -> Result<DaemonReply, DaemonError> {
+    send(&http, &method, &path, body, if_match, true).await
+}
+
+/// The HTTP method, if the webview may use it.
+pub fn api_method(method: &str) -> Result<reqwest::Method, DaemonError> {
+    match method {
+        "GET" => Ok(reqwest::Method::GET),
+        "POST" => Ok(reqwest::Method::POST),
+        "PUT" => Ok(reqwest::Method::PUT),
+        "DELETE" => Ok(reqwest::Method::DELETE),
+        _ => Err(DaemonError::InvalidRequest {
+            message: format!("not an allowed method: {method:?}"),
+        }),
+    }
+}
+
+async fn send(
+    http: &Http,
+    method: &str,
+    path: &str,
+    body: Option<String>,
+    if_match: Option<String>,
+    authenticated: bool,
+) -> Result<DaemonReply, DaemonError> {
+    let method = api_method(method)?;
     let home = current_home()?;
     let port = read_port(&home, std::env::var_os(PORT_ENV_VAR))?;
-    let url = api_url(port, &path)?;
+    let url = api_url(port, path)?;
 
-    let mut request = http.0.get(url);
+    let mut request = http.0.request(method.clone(), url);
+    if method != reqwest::Method::GET {
+        // Starting a run or generating from a template can take a while.
+        request = request.timeout(Duration::from_secs(120));
+    }
+    if let Some(body) = body {
+        request = request
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body);
+    }
+    if let Some(etag) = if_match {
+        request = request.header(reqwest::header::IF_MATCH, etag);
+    }
     if authenticated {
         let token = read_token(&home)?.ok_or_else(|| DaemonError::TokenMissing {
             path: token_path(&home).display().to_string(),
@@ -197,8 +254,13 @@ pub async fn daemon_get(
     };
     let response = request.send().await.map_err(not_running)?;
     let status = response.status().as_u16();
+    let etag = response
+        .headers()
+        .get(reqwest::header::ETAG)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
     let body = response.text().await.map_err(not_running)?;
-    Ok(DaemonReply { status, body })
+    Ok(DaemonReply { status, body, etag })
 }
 
 #[cfg(test)]
@@ -329,7 +391,9 @@ mod tests {
             "/docs",
             "api/health",
             "/api/../docs",
-            "/api/x?y=1",
+            "/api/x?y=1#frag",
+            "/api/x?y=<script>",
+            "/api/x?a=b?c=d",
             "/api/@evil.example",
             "//evil.example/api/",
             "/api/x#frag",
@@ -338,6 +402,27 @@ mod tests {
                 matches!(api_url(8765, path), Err(DaemonError::InvalidRequest { .. })),
                 "{path} should be rejected"
             );
+        }
+    }
+
+    #[test]
+    fn api_url_keeps_an_encoded_query() {
+        assert_eq!(
+            api_url(8765, "/api/projects/demo/runs?limit=50&cursor=MjAy%3D").unwrap(),
+            "http://127.0.0.1:8765/api/projects/demo/runs?limit=50&cursor=MjAy%3D"
+        );
+    }
+
+    #[test]
+    fn only_api_methods_are_allowed() {
+        for method in ["GET", "POST", "PUT", "DELETE"] {
+            assert_eq!(api_method(method).unwrap().as_str(), method);
+        }
+        for method in ["PATCH", "CONNECT", "get", ""] {
+            assert!(matches!(
+                api_method(method),
+                Err(DaemonError::InvalidRequest { .. })
+            ));
         }
     }
 

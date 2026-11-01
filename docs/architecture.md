@@ -10,13 +10,15 @@ spoolhq/
   __main__.py   # python -m spoolhq
   core/         # config, auth (token), logs — shared by everything
   api/
-    app.py          # create_app, middleware wiring
-    security.py     # Host check + token middleware
-    routers/        # one file per resource: health.py, version.py, ...
+    app.py          # create_app, middleware wiring, the OpenAPI hook
+    security.py     # Host check + token middleware, 1 MB body cap
+    errors.py       # the {"error": {...}} format and service error mapping
+    params.py       # path patterns (project names, ticket ids), If-Match
+    routers/        # one file per resource: projects.py, tickets.py, runs.py, events.py (WebSocket), ...
     schemas/        # Pydantic request/response models
   services/     # domain logic, one package per domain:
                 # projects, tickets, scheduler, runs, git, github, agents, context,
-                # gates, review, planner, templates, codegraph, runloop, tracker
+                # gates, review, planner, templates, codegraph, runloop, tracker, secrets
   cli/          # Typer commands (main.py) + API client (client.py)
   templates/    # built-in project templates (package data, not Python modules)
 ```
@@ -47,7 +49,11 @@ cli    api        thin entry points: validate input, call a service, return the 
 | A setting, path or other shared helper | `core/` |
 | A new domain | a new package under `services/` with a docstring saying what it owns |
 
-New routes are token-protected by default (`api/security.py`); add a route to `PUBLIC_ROUTES` only if it must work without the token.
+New routes are token-protected by default (`api/security.py`); add a route to `PUBLIC_ROUTES` only if it must work without the token. Routers wrap service calls in `errors.service_errors()` and raise `errors.ApiError`, so every error has the one format in [api.md](api.md#errors); path parameters use the patterns in `params.py`.
+
+## API
+
+The daemon's REST API and event WebSocket are described in [api.md](api.md): the endpoints, the error format, ETags with `If-Match`, the paged run history, and the WebSocket's auth, replay and threading rule. The routers are thin; the logic behind them is in the services: ETag-guarded writes in `services/projects/files.py` (`write_if_match`), whole-ticket edits under the transition table in `services/scheduler/transitions.py` (`edit_ticket`), run history in `services/runs/history.py` (`page_runs`), unblocking in `services/runloop/approval.py` (`unblock`) and the secrets' status and keychain writes in `services/secrets/`. The WebSocket (`api/routers/events.py`) subscribes to the workspace's `EventBus`; `scripts/dump_openapi.py` and `just gen-api` produce the desktop app's typed client.
 
 ## Projects
 
@@ -173,9 +179,9 @@ Inside a slice, code is grouped by segment: `ui/` for components, `model/` for s
 | A block reused across pages, or a large part of one page | `widgets/<name>/` |
 | Something the user does (a button with its logic, a form, polling) | `features/<name>/` |
 | Types and logic for a domain object (project, ticket, run) | `entities/<name>/` |
-| A daemon endpoint call | `shared/api/` |
+| A daemon endpoint call | `shared/api/`: the generated `api` client (`http.ts`), the event stream (`events.ts`) |
 | A generic component (no domain knowledge) | `shared/ui/` |
 | A constant or helper used everywhere | `shared/config/` or `shared/lib/` |
 | A provider or global setup | `app/` |
 
-The Rust side of the desktop app (`desktop/src-tauri/`) is small and not layered: `daemon.rs` holds the only HTTP the app does.
+The Rust side of the desktop app (`desktop/src-tauri/`) is small and not layered: `daemon.rs` holds the only HTTP the app does (`daemon_get` for the health check, `daemon_request` for every API call, both adding the token).

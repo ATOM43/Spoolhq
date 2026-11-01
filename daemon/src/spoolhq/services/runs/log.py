@@ -254,15 +254,17 @@ class RunLog:
             return self._run(tx.conn, run_id)
 
     def reopen_run(self, run_id: int) -> Run:
-        """Move an ``interrupted`` run back to ``running`` under this daemon instance.
+        """Move an ``interrupted`` or ``blocked`` run back to ``running`` under this daemon
+        instance.
 
         The one way out of a terminal status: the run loop resumes a run a stopped
-        daemon left behind, in its kept worktree. Event ``run.status``.
+        daemon left behind, or one the user unblocks, in its kept worktree. Event
+        ``run.status``.
         """
         with self.transaction() as tx:
             run = self._run(tx.conn, run_id)
-            if run.status is not RunStatus.INTERRUPTED:
-                raise ValueError(f"run {run_id} is {run.status.value}, not interrupted")
+            if run.status not in (RunStatus.INTERRUPTED, RunStatus.BLOCKED):
+                raise ValueError(f"run {run_id} is {run.status.value}, not interrupted or blocked")
             tx.conn.execute(
                 "UPDATE runs SET status = ?, reason = NULL, ended_at = NULL, reset_at = NULL, "
                 "daemon_instance = ? WHERE id = ?",

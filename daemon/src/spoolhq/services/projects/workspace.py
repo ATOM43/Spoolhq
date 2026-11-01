@@ -106,6 +106,12 @@ def _validate(data: Any, *, folder_name: str | None, prefix: str | None) -> Proj
         raise ProjectValidationError(format_errors(exc, Project, prefix=prefix)) from exc
 
 
+def parse_project(name: str, data: Any) -> Project:
+    """Validate settings for the project ``name`` (ProjectValidationError listing every
+    problem); fields not in ``data`` stay unset, so ``save_project`` leaves them out."""
+    return _validate(data, folder_name=name, prefix=FILE_NAME)
+
+
 def load_project(name: str, *, projects_dir: Path) -> Project:
     """Load and validate ``<projects_dir>/<name>/project.yaml``.
 

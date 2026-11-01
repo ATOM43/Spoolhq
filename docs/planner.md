@@ -144,11 +144,11 @@ They run locally; the daemon is not needed. `generate` uses your logged-in `clau
 
 ## API
 
-Both need the token.
+Both need the token; errors use the [API's error format](api.md#errors).
 
 | Route | What it does |
 | --- | --- |
-| `POST /api/projects/{name}/plan` | Body `{"template_description": null}` (optional). Checks the project, `CONTEXT.md` and the ticket files at once (404 for an unknown project, 409 for the rest), then starts the planner on the daemon's worker and returns **202** with `{"run_id", "run"}`. One plan per project at a time (409). |
+| `POST /api/projects/{name}/plan/generate` | Body `{"template_description": null}` (optional). Checks the project, `CONTEXT.md` and the ticket files at once (404 for an unknown project, 409 for the rest), then starts the planner on the daemon's worker and returns **202** with `{"run_id", "run"}`. One plan per project at a time (409). |
 | `POST /api/projects/{name}/plan/approve` | 200 `{"approved": ["T01", …]}`, or 409 with the same message as the CLI. |
 
 The planner's work is recorded in the [run log](runs.md) as a run of kind `plan` (ticket id `plan`) with one attempt of kind `plan` in `runs/plan/<NNN>/` (its transcript) and the attempt's usage (input, output and cache-read tokens, so `spool runs show` gives the weighted total the budget counts). The run ends `done` (`18 draft tickets written`), `blocked` with the error, or `cancelled` when the daemon stops.

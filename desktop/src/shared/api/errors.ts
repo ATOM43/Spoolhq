@@ -8,6 +8,18 @@ export type DaemonErrorDetail =
   | { kind: "unauthorized" }
   /** The daemon rejected the request's Host header (HTTP 400). */
   | { kind: "bad_host" }
+  /** A non-2xx answer in the API's error format (`{"error": {...}}`). */
+  | {
+      kind: "api";
+      status: number;
+      code: string;
+      message: string;
+      field: string | null;
+      /** 412 `edit_conflict`: the file's current ETag. */
+      etag: string | null;
+      /** 412 `edit_conflict`: the file's current content, as its GET returns it. */
+      current: unknown;
+    }
   /** Any other non-2xx answer. */
   | { kind: "http"; status: number }
   /** The daemon answered 2xx with a body that is not what the client expects. */
@@ -45,6 +57,8 @@ function describe(detail: DaemonErrorDetail): string {
       return "The daemon rejected the access token.";
     case "bad_host":
       return "The daemon rejected the request's Host header.";
+    case "api":
+      return detail.message;
     case "http":
       return `The daemon answered with HTTP ${String(detail.status)}.`;
     case "invalid_response":

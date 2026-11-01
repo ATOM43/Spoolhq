@@ -23,6 +23,7 @@ from spoolhq.services.runs.files import (
     attempt_files,
     write_artifact,
 )
+from spoolhq.services.runs.history import RunPage, decode_cursor, encode_cursor, page_runs
 from spoolhq.services.runs.journal import (
     Integration,
     IntegrationState,
@@ -54,6 +55,10 @@ from spoolhq.services.runs.registry import RunRegistry, WorkspaceRuns
 from spoolhq.services.runs.rows import MAX_PAYLOAD_BYTES
 
 __all__ = [
+    "RunPage",
+    "decode_cursor",
+    "encode_cursor",
+    "page_runs",
     "ARTIFACT_NAMES",
     "INTERRUPTED_REASON",
     "MAX_PAYLOAD_BYTES",

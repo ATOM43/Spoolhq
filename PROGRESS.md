@@ -288,3 +288,13 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - `spool prompt show` ends with `Code map: not included here (built only during runs).`
 - Docs: `agents.md`, `codegraph.md`, `integration.md`; DECISIONS 291–294.
 
+
+## T19 · Live API
+
+- Step 0: route inventory in DECISIONS 295. Run control moved to `POST …/run/next|all|ticket/{id}|pause|resume|cancel` and plan generation to `…/plan/generate`; `spool run` uses them (`--run` becomes `?run_id=`).
+- REST (`api/routers/projects.py`, `tickets.py`, `runs.py`, `agents.py`, `settings.py`): projects (list with progress, run state and needs-you count; create like `spool init`), `project.yaml` and `CONTEXT.md` with ETag + If-Match (428, 412 with the current ETag and content), tickets (filters, edits through the ticket store and the transition table, unblock with a note), paged run history (opaque cursor, stable under inserts), one run with its attempts, attempt files by enum (symlinks out are 404), agents, daemon settings and write-only secrets in the OS keychain. One error format everywhere; path patterns for names and ids; 1 MB body cap.
+- WebSocket `…/events?since=`: auth as the first message (4401), origin check, envelope with `seq`, replay from SQLite after subscribing (no gaps, no duplicates), per-client queue of 1,000 filled only through `call_soon_threadsafe` (4408 when full; the run never waits), 20 s ping, 1001 on shutdown.
+- Unblock reopens the blocked run in its kept worktree with a `pr_changes` attempt whose prompt has the note.
+- TypeScript: `just gen-api` (schema dumped without a server, `openapi-typescript`), an `openapi-fetch` client through a new Rust command `daemon_request`, a WebSocket helper with `since` reconnects and backoff; drift checks for both generated files in `just lint`. New: `openapi-fetch` 0.17.0, `openapi-typescript` 7.13.0 (dev).
+- Tests: every endpoint with the token and without (401), conflicting edits for tickets, spec and settings, round-trip of every T05 fixture, 120-run paging with an insert between pages, artifacts, secrets leak scan, a fake run's full event stream in order, replay from the middle and at the live seam, a client that never reads, auth and origin; Vitest for the 4408 reconnect and the 412 error.
+- Docs: `api.md` (new), `architecture.md`, `run-loop.md`, `runs.md`, `planner.md`; DECISIONS 295–305.

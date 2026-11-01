@@ -145,6 +145,7 @@ function explain(error: DaemonError): {
         description: detail.message,
       };
     case "not_running":
+    case "api":
     case "http":
     case "invalid_response":
     case "internal":

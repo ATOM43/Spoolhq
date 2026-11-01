@@ -25,6 +25,14 @@ HOME_ENV_VAR = "SPOOLHQ_HOME"
 ENV_PREFIX = "SPOOLHQ_"
 LOOPBACK_HOST = "127.0.0.1"
 
+# Tauri's webview origins (macOS/Linux, Windows) and the Vite dev server (tauri.conf.json).
+DEFAULT_ORIGINS = (
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    "http://localhost:1420",
+)
+
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
@@ -76,6 +84,8 @@ class Settings(BaseSettings):
     log_level: LogLevel = "INFO"
     projects_dir: Path = Field(default_factory=default_projects_dir)
     worktrees_dir: Path = Field(default_factory=default_worktrees_dir)
+    allowed_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_ORIGINS))
+    """Browser origins the event WebSocket accepts: the desktop app's, and Vite's dev server."""
 
     @field_validator("host")
     @classmethod

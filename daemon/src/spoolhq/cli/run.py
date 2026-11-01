@@ -68,13 +68,10 @@ def _follow(project: str) -> None:
         raise typer.Exit(code=1)
 
 
-def _current_run_id(project: str, run_id: int | None) -> int:
-    if run_id is not None:
-        return run_id
-    run = _call("GET", f"{_base(project)}/runs/current")["run"]
-    if run is None:
-        fail(f"error: no run in '{project}'")
-    return int(run["id"])
+def _control(project: str, action: str, run_id: int | None) -> str:
+    """``/run/<action>``, for the given run or else the project's current one."""
+    query = f"?run_id={run_id}" if run_id is not None else ""
+    return f"{_base(project)}/run/{action}{query}"
 
 
 @run_app.command("next")
@@ -85,35 +82,36 @@ def next_command(
     ] = None,
 ) -> None:
     """Run the next ready ticket (or TICKET) and follow it."""
-    _call("POST", f"{_base(project)}/runs", {"mode": "next", "ticket": ticket})
+    path = f"/run/ticket/{ticket}" if ticket is not None else "/run/next"
+    _call("POST", f"{_base(project)}{path}")
     _follow(project)
 
 
 @run_app.command("all")
 def all_command(project: ProjectArg) -> None:
     """Run ready tickets one after another until one doesn't finish; follow them."""
-    _call("POST", f"{_base(project)}/runs", {"mode": "all", "ticket": None})
+    _call("POST", f"{_base(project)}/run/all")
     _follow(project)
 
 
 @run_app.command("pause")
 def pause_command(project: ProjectArg, run_id: RunOption = None) -> None:
     """Pause the run after its current step."""
-    run = _call("POST", f"{_base(project)}/runs/{_current_run_id(project, run_id)}/pause")
+    run = _call("POST", _control(project, "pause", run_id))
     typer.echo(f"run {run['id']} ({run['ticket_id']}) pauses after its current step")
 
 
 @run_app.command("resume")
 def resume_command(project: ProjectArg, run_id: RunOption = None) -> None:
     """Resume a paused or interrupted run now, and follow it."""
-    _call("POST", f"{_base(project)}/runs/{_current_run_id(project, run_id)}/resume")
+    _call("POST", _control(project, "resume", run_id))
     _follow(project)
 
 
 @run_app.command("cancel")
 def cancel_command(project: ProjectArg, run_id: RunOption = None) -> None:
     """Cancel the run: stop the agent, remove its worktree, ticket back to ready."""
-    run = _call("POST", f"{_base(project)}/runs/{_current_run_id(project, run_id)}/cancel")
+    run = _call("POST", _control(project, "cancel", run_id))
     typer.echo(f"cancelling run {run['id']} ({run['ticket_id']})")
 
 

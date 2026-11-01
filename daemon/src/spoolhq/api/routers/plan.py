@@ -3,14 +3,16 @@ required). Thin: the work is ``services.runloop.PlanJobs``'s, which runs the pla
 the daemon's worker and records it in the run log as a run of kind ``plan``.
 """
 
-from fastapi import APIRouter, HTTPException, Request, Security, status
+from fastapi import APIRouter, Request, Security, status
 
+from spoolhq.api.errors import service_errors
+from spoolhq.api.params import ProjectName
 from spoolhq.api.schemas.plan import GeneratePlan, PlanApproved, PlanStarted
 from spoolhq.api.schemas.runs import RunView
 from spoolhq.api.security import bearer_scheme
-from spoolhq.services.runloop import NotFoundError, PlanJobs, RunLoopError
+from spoolhq.services.runloop import PlanJobs
 
-router = APIRouter(prefix="/api/projects/{name}", dependencies=[Security(bearer_scheme)])
+router = APIRouter(prefix="/api/projects/{name}/plan", dependencies=[Security(bearer_scheme)])
 
 
 def _plans(request: Request) -> PlanJobs:
@@ -18,22 +20,16 @@ def _plans(request: Request) -> PlanJobs:
     return plans
 
 
-@router.post("/plan", status_code=status.HTTP_202_ACCEPTED)
-def generate_plan(name: str, request: Request, body: GeneratePlan | None = None) -> PlanStarted:
-    try:
+@router.post("/generate", status_code=status.HTTP_202_ACCEPTED)
+def generate_plan(
+    name: ProjectName, request: Request, body: GeneratePlan | None = None
+) -> PlanStarted:
+    with service_errors():
         run = _plans(request).start(name, body.template_description if body else None)
-    except NotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    except RunLoopError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     return PlanStarted(run_id=run.id, run=RunView.of(run))
 
 
-@router.post("/plan/approve")
-def approve_plan(name: str, request: Request) -> PlanApproved:
-    try:
+@router.post("/approve")
+def approve_plan(name: ProjectName, request: Request) -> PlanApproved:
+    with service_errors():
         return PlanApproved(approved=list(_plans(request).approve(name)))
-    except NotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    except RunLoopError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

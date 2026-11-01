@@ -2,7 +2,9 @@
 
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from types import FrameType
 from typing import Annotated
 
 import typer
@@ -92,8 +94,9 @@ def _serve(settings: Settings, home: Path) -> None:
     typer.echo(f"Token: {token_path(home)}  Logs: {log_file}")
     logger.info("starting daemon", extra={"host": settings.host, "port": settings.port})
 
-    uvicorn.run(
-        create_app(settings, token=token),
+    app = create_app(settings, token=token)
+    config = uvicorn.Config(
+        app,
         host=settings.host,
         port=settings.port,
         log_config=None,
@@ -101,6 +104,20 @@ def _serve(settings: Settings, home: Path) -> None:
         proxy_headers=False,
         server_header=False,
     )
+    _Server(config, app.state.streams.close_all).run()
+
+
+class _Server(uvicorn.Server):
+    """Closes the event streams with 1001 when asked to stop, before uvicorn's own
+    shutdown would close them as a restart (1012)."""
+
+    def __init__(self, config: uvicorn.Config, close_streams: Callable[[], None]) -> None:
+        super().__init__(config)
+        self._close_streams = close_streams
+
+    def handle_exit(self, sig: int, frame: FrameType | None) -> None:
+        self._close_streams()
+        super().handle_exit(sig, frame)
 
 
 @app.command()

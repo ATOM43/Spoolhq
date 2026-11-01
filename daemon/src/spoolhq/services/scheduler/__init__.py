@@ -35,6 +35,7 @@ from spoolhq.services.scheduler.transitions import (
     TransitionResult,
     apply_transition,
     check_transition,
+    edit_ticket,
     parse_status,
 )
 
@@ -53,6 +54,7 @@ __all__ = [
     "apply_transition",
     "check_transition",
     "critical_path",
+    "edit_ticket",
     "explain_idle",
     "id_key",
     "next_ready",

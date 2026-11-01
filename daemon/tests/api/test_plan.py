@@ -13,7 +13,7 @@ from spoolhq.services.runloop import Agents
 from spoolhq.services.runs import RunKind, RunLog, RunStatus
 from tests.conftest import DASHBOARD_PLAN, REVIEW_FIXTURES
 
-ROUTES = ["/api/projects/demo/plan", "/api/projects/demo/plan/approve"]
+ROUTES = ["/api/projects/demo/plan/generate", "/api/projects/demo/plan/approve"]
 
 
 def auth(token: str) -> dict[str, str]:
@@ -39,7 +39,7 @@ def test_every_plan_route_needs_the_token(plan_client: TestClient, path: str) ->
 def test_generate_returns_202_and_the_run_is_logged_as_a_plan(
     plan_client: TestClient, token: str, plan_project: Path
 ) -> None:
-    response = plan_client.post("/api/projects/demo/plan", headers=auth(token), json={})
+    response = plan_client.post("/api/projects/demo/plan/generate", headers=auth(token), json={})
 
     assert response.status_code == 202
     body = response.json()
@@ -57,26 +57,34 @@ def test_generate_returns_202_and_the_run_is_logged_as_a_plan(
 
 def test_generate_without_a_body_and_with_a_template(plan_client: TestClient, token: str) -> None:
     response = plan_client.post(
-        "/api/projects/demo/plan", headers=auth(token), json={"template_description": "x"}
+        "/api/projects/demo/plan/generate", headers=auth(token), json={"template_description": "x"}
     )
     assert response.status_code == 202
     plan_client.app.state.plans.wait("demo", 30)  # type: ignore[attr-defined]
-    assert plan_client.post("/api/projects/demo/plan", headers=auth(token)).status_code == 202
+    assert (
+        plan_client.post("/api/projects/demo/plan/generate", headers=auth(token)).status_code == 202
+    )
     plan_client.app.state.plans.wait("demo", 30)  # type: ignore[attr-defined]
 
 
 def test_generate_refusals(plan_client: TestClient, token: str, plan_project: Path) -> None:
-    missing = plan_client.post("/api/projects/nope/plan", headers=auth(token))
-    assert (missing.status_code, missing.json()) == (404, {"detail": "no project 'nope'"})
+    missing = plan_client.post("/api/projects/nope/plan/generate", headers=auth(token))
+    assert (missing.status_code, missing.json()) == (
+        404,
+        {"error": {"code": "not_found", "message": "no project 'nope'"}},
+    )
     (plan_project / "CONTEXT.md").unlink()
-    response = plan_client.post("/api/projects/demo/plan", headers=auth(token))
+    response = plan_client.post("/api/projects/demo/plan/generate", headers=auth(token))
     assert response.status_code == 409
-    assert response.json()["detail"].startswith("no CONTEXT.md in ")
+    assert response.json()["error"]["message"].startswith("no CONTEXT.md in ")
 
 
 def test_approve_mirrors_the_cli(plan_client: TestClient, token: str, plan_project: Path) -> None:
     nothing = plan_client.post("/api/projects/demo/plan/approve", headers=auth(token))
-    assert (nothing.status_code, nothing.json()) == (409, {"detail": "nothing to approve"})
+    assert (nothing.status_code, nothing.json()) == (
+        409,
+        {"error": {"code": "conflict", "message": "nothing to approve"}},
+    )
 
     tickets = plan_project / "tickets"
     for ticket_id, dep in (("T01", "T02"), ("T02", "T01")):
@@ -88,7 +96,12 @@ def test_approve_mirrors_the_cli(plan_client: TestClient, token: str, plan_proje
     cycle = plan_client.post("/api/projects/demo/plan/approve", headers=auth(token))
     assert (cycle.status_code, cycle.json()) == (
         409,
-        {"detail": "cannot approve the plan: cycle: T01 → T02 → T01"},
+        {
+            "error": {
+                "code": "conflict",
+                "message": "cannot approve the plan: cycle: T01 → T02 → T01",
+            }
+        },
     )
 
     (tickets / "T02-x.md").write_text(

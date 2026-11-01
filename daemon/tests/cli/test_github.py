@@ -114,7 +114,9 @@ def test_github_sync_prints_each_line(monkeypatch: pytest.MonkeyPatch) -> None:
         "no open pull requests in 'demo'\n"
     )
 
-    daemon_answering(monkeypatch, 409, {"detail": "'demo' has no git.remote"})
+    daemon_answering(
+        monkeypatch, 409, {"error": {"code": "conflict", "message": "'demo' has no git.remote"}}
+    )
     result = runner.invoke(app, ["github", "sync", "demo"])
     assert (result.exit_code, result.output) == (1, "error: 'demo' has no git.remote\n")
 
@@ -124,7 +126,7 @@ def test_github_sync_through_the_api(run_client: TestClient, token: str) -> None
     assert run_client.post("/api/projects/demo/github/sync").status_code == 401
     response = run_client.post("/api/projects/demo/github/sync", headers=headers)
     assert response.status_code == 409
-    assert response.json() == {"detail": "'demo' has no git.remote"}
+    assert response.json() == {"error": {"code": "conflict", "message": "'demo' has no git.remote"}}
     missing = run_client.post("/api/projects/nope/github/sync", headers=headers)
     assert missing.status_code == 404
 

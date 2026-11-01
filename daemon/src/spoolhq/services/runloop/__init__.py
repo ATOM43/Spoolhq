@@ -8,7 +8,7 @@ state machine itself is plain functions over a ``RunContext`` in ``machine.py``.
 the one service that imports the others; no service imports it. See ``docs/run-loop.md``.
 """
 
-from spoolhq.services.runloop.approval import approve, reject
+from spoolhq.services.runloop.approval import approve, reject, unblock
 from spoolhq.services.runloop.delivery import Delivery
 from spoolhq.services.runloop.integration import LocalIntegrator, recover_integrations
 from spoolhq.services.runloop.integrator import (
@@ -27,6 +27,7 @@ from spoolhq.services.runloop.model import (
     EndKind,
     Flags,
     Merged,
+    NotBlockedError,
     NotFoundError,
     RunActiveError,
     RunContext,
@@ -63,6 +64,7 @@ __all__ = [
     "LocalIntegrator",
     "Merged",
     "Mode",
+    "NotBlockedError",
     "NotFoundError",
     "PlanJobs",
     "PolicyDecision",
@@ -81,5 +83,6 @@ __all__ = [
     "path_matches",
     "recover_integrations",
     "reject",
+    "unblock",
     "take_run_lock",
 ]

@@ -29,9 +29,11 @@ interface RawDaemonInfo {
   token_path: string;
 }
 
-interface DaemonReply {
+export interface DaemonReply {
   status: number;
   body: string;
+  /** The ETag header, if the daemon sent one. */
+  etag?: string | null;
 }
 
 /** The port the daemon should be on and whether a token file exists. */
@@ -64,14 +66,9 @@ export async function getVersion(): Promise<Version> {
 
 async function get(path: string, authenticated: boolean): Promise<unknown> {
   const reply = await call<DaemonReply>("daemon_get", { path, authenticated });
-  if (reply.status === 401) {
-    throw new DaemonError({ kind: "unauthorized" });
-  }
-  if (reply.status === 400) {
-    throw new DaemonError({ kind: "bad_host" });
-  }
-  if (reply.status < 200 || reply.status >= 300) {
-    throw new DaemonError({ kind: "http", status: reply.status });
+  const error = replyError(reply);
+  if (error) {
+    throw error;
   }
   try {
     return JSON.parse(reply.body) as unknown;
@@ -80,7 +77,45 @@ async function get(path: string, authenticated: boolean): Promise<unknown> {
   }
 }
 
-async function call<T>(
+/** The error a non-2xx reply stands for, or null for a 2xx one. */
+export function replyError(reply: DaemonReply): DaemonError | null {
+  if (reply.status >= 200 && reply.status < 300) {
+    return null;
+  }
+  if (reply.status === 401) {
+    return new DaemonError({ kind: "unauthorized" });
+  }
+  const error = apiError(reply.body);
+  if (reply.status === 400 && (!error || error.code === "bad_host")) {
+    return new DaemonError({ kind: "bad_host" });
+  }
+  if (!error) {
+    return new DaemonError({ kind: "http", status: reply.status });
+  }
+  return new DaemonError({
+    kind: "api",
+    status: reply.status,
+    code: text(error.code),
+    message: text(error.message),
+    field: typeof error.field === "string" ? error.field : null,
+    etag: typeof error.etag === "string" ? error.etag : null,
+    current: error.current ?? null,
+  });
+}
+
+function apiError(body: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (isRecord(parsed) && isRecord(parsed.error)) {
+      return parsed.error;
+    }
+  } catch {
+    // Not JSON: no API error.
+  }
+  return null;
+}
+
+export async function call<T>(
   command: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
