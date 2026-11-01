@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **30 tickets in 6 phases, about 76 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **31 tickets in 6 phases, about 77 hours** for one developer.
 
 **What v1 includes**
 
@@ -81,9 +81,9 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T17 | GitHub delivery | 3 Planner and Git | T14 | 3.5 |
 | T18 | Merge policy | 3 Planner and Git | T12, T17 | 1.5 |
 | T19 | Live API | 4 Desktop UI | T07, T13 | 2.5 |
-| T20 | Home, project panel and dialogs | 4 Desktop UI | T03, T19 | 3 |
-| T21 | Tickets tab and drawer | 4 Desktop UI | T15, T20 | 3 |
-| T22 | Run tab | 4 Desktop UI | T20 | 3 |
+| T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
+| T21 | Tickets tab and drawer | 4 Desktop UI | T15, T32 | 3 |
+| T22 | Run tab | 4 Desktop UI | T32 | 3 |
 | T23 | Packaging | 4 Desktop UI | T21, T22 | 3 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T22 | 3 |
@@ -92,9 +92,10 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T30 | Codex CLI backend | 3 Planner and Git | T27 | 2 |
 | T31 | Claude Agent SDK backend | 3 Planner and Git | T27 | 2 |
 | T28 | Code graph with Graphify | 3 Planner and Git | T14, T16 | 2.5 |
-|  | **Total** |  |  | **76** |
+| T32 | Settings, project panel and Spec tab | 4 Desktop UI | T20 | 2 |
+|  | **Total** |  |  | **77** |
 
-Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T22 → T23 → T26 (27.5 h).
+Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T22 → T23 → T26 (28.5 h).
 
 ## Phase 0 — Scaffolding
 
@@ -415,7 +416,7 @@ Done when:
 
 ## Phase 4 — Desktop UI (v0 screens)
 
-Five tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Six tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -430,16 +431,29 @@ Done when:
 - [ ] API tests for every endpoint, including a conflicting edit
 - [ ] A test client receives every event of a fake run, in order
 
-### T20 · Home, project panel and dialogs
+### T20 · Event bridge, Home and New project
 
-The two screens and the setup dialogs. *Depends on: T03, T19 · 3 h*
+Live events in the app, the project list and project creation. *Depends on: T03, T19 · 2 h*
 
+- Event stream through Rust: commands that open the daemon WebSocket, authenticate and forward each event to the webview over a Tauri channel, reconnecting with `since`; the token never enters the webview.
+- Query hooks for projects, tickets, runs and agents; run events update them, no polling while the stream is up.
 - Home: project list with progress and status, a "Needs you" section, and an empty state that opens New project.
 - New project dialog: name, repo path or template, the three stack commands with **Test**.
-- Settings dialog: agent backend (detected CLIs with their login status, or an API key), GitHub and ClickUp tokens; secrets in the keychain. Opens on first run when no backend is ready.
+- A daemon-not-running state on Home instead of a blank window, which recovers by itself.
+
+Done when:
+
+- [ ] Run events reach the app through Rust; the token never enters the webview
+- [ ] From Home, create a project from a repo path or template, with each stack command tested, without touching the CLI
+- [ ] Home shows empty, loading, error and daemon-missing states
+
+### T32 · Settings, project panel and Spec tab
+
+The setup dialog and the panel where a project is written and planned. *Depends on: T20 · 2 h*
+
+- Settings dialog: detected backends with version and login status; write-only secrets (Anthropic key, GitHub and ClickUp tokens) in the keychain; opens on first run when no backend is ready.
 - Project panel shell: header with progress line and run controls that change with state (disabled controls say why); tabs Spec, Tickets, Run.
-- Spec tab: markdown editor with autosave and **Generate plan**.
-- A daemon-not-running state on both screens instead of a blank window.
+- Spec tab: markdown editor with autosave via ETag/If-Match, a conflict dialog on 412, and **Generate plan**.
 
 Done when:
 
@@ -448,7 +462,7 @@ Done when:
 
 ### T21 · Tickets tab and drawer
 
-Plan review, the board and approvals in one list. *Depends on: T15, T20 · 3 h*
+Plan review, the board and approvals in one list. *Depends on: T15, T32 · 3 h*
 
 - One list grouped by status. While the plan is a draft, a banner shows the ticket count, validation problems and **Approve plan**.
 - Ticket drawer: details, "Done when" with the latest review result, dependencies, attempts. Editable when draft, ready or blocked.
@@ -462,7 +476,7 @@ Done when:
 
 ### T22 · Run tab
 
-Watch the agent and inspect past attempts. *Depends on: T20 · 3 h*
+Watch the agent and inspect past attempts. *Depends on: T32 · 3 h*
 
 - Live transcript with collapsible tool calls; sub-tabs Gates, Review and Diff.
 - Step indicator (Worktree → Implement → Gates → Review → Policy → Integrate), attempt number, elapsed time, cost.
