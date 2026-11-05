@@ -45,7 +45,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Projects */
+        /**
+         * List Projects
+         * @description Every workspace; a project whose creation left paths behind is listed as
+         *     ``cleanup_failed`` instead (also when its workspace is gone).
+         */
         get: operations["list_projects_api_projects_get"];
         put?: never;
         /**
@@ -164,6 +168,26 @@ export interface paths {
          * @description Stop the job and roll back; answers once the rollback is done (at most 15 s).
          */
         post: operations["cancel_job_api_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Job
+         * @description Forget an ended job, so the project list stops showing what it left behind.
+         */
+        post: operations["dismiss_job_api_jobs__job_id__dismiss_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -980,6 +1004,8 @@ export interface components {
             settings_error?: components["schemas"]["SettingsProblem"] | null;
             /** Job Id */
             job_id?: string | null;
+            /** Left */
+            left?: string[];
             /** Repo */
             repo: string | null;
             /** Default Branch */
@@ -1035,6 +1061,8 @@ export interface components {
             settings_error?: components["schemas"]["SettingsProblem"] | null;
             /** Job Id */
             job_id?: string | null;
+            /** Left */
+            left?: string[];
         };
         /** Reject */
         Reject: {
@@ -1831,6 +1859,36 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["JobView"];
                 };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    dismiss_job_api_jobs__job_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Job id. */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description An error. */
             default: {

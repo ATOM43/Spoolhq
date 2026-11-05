@@ -280,6 +280,43 @@ describe("Home", () => {
     expect(subscribeEvents).not.toHaveBeenCalled();
   });
 
+  it("shows a rollback that left paths behind as a card that Dismiss hides", async () => {
+    const job = "b".repeat(32);
+    projects = [
+      project("alpha"),
+      project("broken", {
+        run_state: "cleanup_failed",
+        job_id: job,
+        left: ["/code/broken"],
+        total: 0,
+      }),
+    ];
+    POST.mockImplementation(() => {
+      projects = [project("alpha")];
+      return Promise.resolve({ response: new Response(null, { status: 204 }) });
+    });
+    renderHome();
+    const card = await screen.findByRole("article", {
+      name: "Cleanup failed: broken",
+    });
+    expect(card).toHaveTextContent("Couldn't clean up broken");
+    expect(card).toHaveTextContent("/code/broken");
+    // Only a card: no project card, no event stream for it.
+    expect(screen.queryByRole("link", { name: /broken/ })).toBeNull();
+    expect(screen.getByText("1 project")).toBeInTheDocument();
+    expect(subscribeEvents).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Dismiss" }),
+    );
+    expect(POST).toHaveBeenCalledWith("/api/jobs/{job_id}/dismiss", {
+      params: { path: { job_id: job } },
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: /Needs you/ })).toBeNull();
+    });
+  });
+
   it("shows a 'Needs you' card for each kind, with its action", async () => {
     projects = [
       project("alpha", {

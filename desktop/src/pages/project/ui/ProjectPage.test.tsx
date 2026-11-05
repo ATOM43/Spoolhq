@@ -6,6 +6,7 @@ import { RouterProvider } from "react-router/dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProjectDetail } from "@/entities/project";
+import type { Schemas } from "@/shared/api";
 import {
   api,
   DaemonError,
@@ -43,7 +44,54 @@ const PROBLEM = {
   message: "must be greater than 0",
 };
 
+type Job = Schemas["JobView"];
+
 let detail: ProjectDetail;
+let job: Job;
+
+const JOB_ID = "a".repeat(32);
+
+function creationJob(
+  state: Job["state"],
+  commands: Job["steps"][number]["state"] = "running",
+): Job {
+  const step = (
+    name: Job["steps"][number]["name"],
+    title: string,
+    stepState: Job["steps"][number]["state"],
+  ) => ({
+    name,
+    title,
+    state: stepState,
+    duration_s: null,
+    passed: [],
+    message: stepState === "failed" ? "The test command failed" : null,
+    output: stepState === "failed" ? "FAILED test_example" : null,
+    field: stepState === "failed" ? "commands.test" : null,
+  });
+  return {
+    id: JOB_ID,
+    project: "demo",
+    source: "empty",
+    state,
+    steps: [
+      step("workspace", "Create workspace", "passed"),
+      step("repo", "Prepare repo", "passed"),
+      step("commands", "Check commands", commands),
+      step("commit", "Initial commit", "pending"),
+    ],
+    rollback:
+      state === "running" ? null : { removed: ["/code/demo"], left: [] },
+  };
+}
+
+const CREATING = {
+  run_state: "creating",
+  job_id: JOB_ID,
+  repo: null,
+  default_branch: null,
+  has_spec: false,
+};
 
 function project(extra: Partial<ProjectDetail> = {}): ProjectDetail {
   return {
@@ -110,6 +158,9 @@ describe("project panel", () => {
       if (path === "/api/projects/{name}") {
         return ok(detail);
       }
+      if (path === "/api/jobs/{job_id}") {
+        return ok(job);
+      }
       if (path === "/api/agents") {
         return ok({
           backends,
@@ -170,6 +221,49 @@ describe("project panel", () => {
       screen.getByText("No plan yet · write the spec, then generate a plan"),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Tickets 0" })).toBeInTheDocument();
+  });
+
+  it("shows Creating… and the live checklist while the project is created, then Spec", async () => {
+    detail = project(CREATING);
+    job = creationJob("running");
+    showPanel();
+    const checklist = await screen.findByRole("region", {
+      name: "Creating the project",
+    });
+    expect(screen.getByText("Creating…")).toBeInTheDocument();
+    expect(
+      checklist.querySelector('[data-step="commands"][data-state="running"]'),
+    ).not.toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(subscribeEvents).not.toHaveBeenCalled();
+    const read = GET.mock.calls.map(([path]) => path);
+    expect(read).not.toContain("/api/projects/{name}/spec");
+    expect(read).not.toContain("/api/projects/{name}/runs/current");
+
+    detail = project({ has_spec: false });
+    job = creationJob("succeeded", "passed");
+    const spec = await screen.findByRole(
+      "tab",
+      { name: "Spec" },
+      { timeout: 3000 },
+    );
+    expect(spec).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText("Creating…")).toBeNull();
+  });
+
+  it("says the project wasn't created when its creation fails", async () => {
+    detail = project(CREATING);
+    job = creationJob("failed", "failed");
+    showPanel();
+    expect(
+      await screen.findByText("This project wasn't created"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to Home" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+    expect(screen.getByText("FAILED test_example")).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).toBeNull();
   });
 
   it("opens on the tab the link asks for", async () => {

@@ -85,6 +85,26 @@ class CreationJobs:
                 None,
             )
 
+    def left_behind(self) -> list[Job]:
+        """Copies of the ended jobs whose rollback couldn't delete everything."""
+        with self._lock:
+            self._prune()
+            return [
+                copy.deepcopy(job)
+                for job, _, _ in self._jobs.values()
+                if job.rollback is not None and job.rollback.left
+            ]
+
+    def dismiss(self, job_id: str) -> None:
+        """Forget an ended job (its left-behind paths stop being listed); a running job
+        stays."""
+        with self._lock:
+            found = self._jobs.get(job_id)
+            if found is None:
+                raise UnknownJobError(f"no job {job_id!r}")
+            if found[0].state != "running":
+                del self._jobs[job_id]
+
     def wait(self, job_id: str, timeout: float | None = None) -> Job:
         with self._lock:
             found = self._jobs.get(job_id)

@@ -353,3 +353,5 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 347 · The template list carries its commands, and the commands step its progress · docs/decisions/api.md
 348 · The New project dialog · docs/decisions/desktop.md
 349 · Where the spec won over the D1 PNG · docs/decisions/desktop.md
+350 · A rollback that left paths behind is a list entry, `cleanup_failed` · docs/decisions/api.md
+351 · The panel while a project is created, and error toasts · docs/decisions/desktop.md

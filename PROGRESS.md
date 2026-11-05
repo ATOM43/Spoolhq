@@ -9,7 +9,7 @@ Built: T01–T20, T27–T36. Older entries are in [docs/progress-archive.md](doc
 - **Tooling and CI**: monorepo (`daemon/`, `desktop/`, `templates/`, `docs/`), `justfile` (`install`, `lint`, `test`, `dev`), CI on Linux, macOS and Windows; ruff, mypy strict, import-linter, ESLint boundaries, 500-line limit, 85% daemon coverage.
 - **Core** (`core/`): config from `config.toml` and `SPOOLHQ_*`, bearer token, JSON logs, single-instance lock, ticket ids and `slugify`, the agent environment allowlist.
 - **Projects** (`services/projects/`): workspaces under `~/spoolhq-projects/`, `project.yaml` validated by Pydantic (stack commands optional), invalid settings reported per project.
-- **Creation** (`services/creation/`): a job that creates a project from a built-in template, an existing repo or an empty repo (workspace → repo → check commands → initial commit), refuses unsafe paths first and rolls back only what it created; `spool init` and `POST /api/projects` share it (only `spool init` takes folder or git URL templates, `--template-ref` and `--branch`); a project held by a running job is reported as `creating`.
+- **Creation** (`services/creation/`): a job that creates a project from a built-in template, an existing repo or an empty repo (workspace → repo → check commands → initial commit), refuses unsafe paths first and rolls back only what it created; `spool init` and `POST /api/projects` share it (only `spool init` takes folder or git URL templates, `--template-ref` and `--branch`); a project held by a running job is reported as `creating`, one whose rollback left paths as `cleanup_failed` (until dismissed).
 - **Tickets** (`services/tickets/`): Markdown tickets with frontmatter, byte-exact round trip, `spool tickets`, "Done when" parsing.
 - **Scheduler** (`services/scheduler/`): dependency graph, status transitions, `next_ready`, cycles, critical path, `spool plan check`.
 - **Run log** (`services/runs/`): SQLite per workspace (schema 7), append-only events, event bus, crash recovery, integration journal, usage totals.
@@ -28,15 +28,6 @@ Built: T01–T20, T27–T36. Older entries are in [docs/progress-archive.md](doc
 - **CLI** (`cli/`): `spool serve`, `init`, `project`, `tickets`, `plan`, `run`, `runs`, `review`, `gates`, `prompt`, `templates`, `agents`, `worktrees`, `github`, `secrets`.
 - **Desktop** (`desktop/`): Tauri 2 + React, token kept in Rust, event bridge, Home with Needs you, the New project dialog (three sources, live checklist, Fix), Settings (also from the panel), project panel with run controls and the Spec tab.
 - **Not built yet**: tracker sync (T24; `services/tracker/` is empty), Tickets tab (T21), Run tab (T22), packaging (T23), dogfood (T25), release docs (T26).
-
-## Chore · Docs split
-
-- `DECISIONS.md` is now an index (`NNN · title · area file`); the 329 entries moved word for word into `docs/decisions/<area>.md`: core, projects-tickets, runloop, agents, git-github, api, desktop, codegraph, tracker (empty).
-- `PROGRESS.md` starts with a "What exists" summary and keeps the last 5 entries; older ones moved word for word to `docs/progress-archive.md`.
-- `CLAUDE.md` holds rules only and says what to read first; the Graphify rebuild steps moved to `docs/codegraph.md`.
-- `scripts/check_decisions.py` (in `just lint`): every index number has exactly one entry and the reverse, no gaps or duplicates, titles match the entry headings, each line names the right file. Tests in `daemon/tests/test_layout.py`.
-- `task.md`'s example `merge_policy` already used the model's keys (`max_diff_lines`, `protected_paths`; fixed in 7b4f640), so it is unchanged.
-- DECISIONS 330.
 
 ## Chore · Context pack reads split decisions
 
@@ -74,3 +65,11 @@ Built: T01–T20, T27–T36. Older entries are in [docs/progress-archive.md](doc
 - Desktop: `features/project-create` rewritten to D1 (560 px, ✕): source switch, template cards with Bundled badge, name with live slug check, workspace path, repo folder with picker and per-source help, stack commands (pre-filled / "e.g. just test" / optional), "More" (remote, merge preset, ClickUp list); Create posts, 422 errors at their field; checklist polled every 500 ms (stops on close) with icon + label per step and "n of 3 passed"; failure shows message, output and rollback, **Fix** focuses the failed field; Cancel and close ask first, then cancel; success opens the panel on Spec with the toast "Project created — write your spec next" (new shared `showToast`/`Toaster`). Home shows "Creating…" and no Needs-you card or event stream for such a project. The two-step dialog and its placeholder commands are gone.
 - Tests: daemon (template commands, `creating` not validated, gone after rollback, `passed`, CLI folder/git-URL/unsafe templates, `--branch dev`, `--branch` with an existing repo, bad branch, API 422 for folder/URL and unknown `template_ref`/`branch`), Vitest (fields and help per source, `VW`, pre-filled commands, empty repo without commands, 422 at its field, step states, failure output and Fix focus, left-behind line, Cancel confirm, success navigation and toast, polling stops on close, templates Retry, Home "Creating…").
 - Docs: `api.md` (template `commands`, `passed`, a project being created), `templates.md`, README (`spool init` options); DECISIONS 345–349.
+
+## Chore · T36 follow-ups
+
+- Daemon: an ended creation job whose rollback left paths is listed by `GET /api/projects` as `run_state: "cleanup_failed"` with `job_id` and `left` (kept 1 h); `POST /api/jobs/{id}/dismiss` forgets it. TS client regenerated.
+- Desktop: Home shows such a project only as a Needs-you card "Couldn't clean up <name>" with the paths and **Dismiss**; a Cancel whose rollback leaves something shows an error toast. The panel of a project being created shows "Creating…" and the job's live checklist, nothing else; it opens on Spec on success and says "This project wasn't created" with **Back to Home** on failure or cancel.
+- A real failing `test` command (a script printing `FAILED test_example`, exit 1) shows its own output in the failed step for every source; no fix was needed.
+- Tests: daemon (left paths listed and dismissed, clean rollback not listed, running job not dismissed, a read-only repo the rollback can't delete, the real failing command per source), Vitest (Needs-you card and Dismiss, cancel toast, panel creating / success on Spec / failure).
+- Docs: `api.md` (rollback left behind, dismiss, the panel while creating); DECISIONS 350–351.

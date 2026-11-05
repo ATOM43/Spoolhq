@@ -27,7 +27,9 @@ const NO_PROJECTS: ProjectSummary[] = [];
 
 export function ProjectsSection() {
   const projects = useProjects();
-  const list = projects.data ?? NO_PROJECTS;
+  const all = projects.data ?? NO_PROJECTS;
+  // A creation whose rollback left paths behind is only a Needs-you card.
+  const list = all.filter((project) => project.run_state !== "cleanup_failed");
   // A project being created has no event stream yet; the dialog refreshes the list.
   useProjectEvents(list.filter((project) => project.run_state !== "creating"));
 
@@ -72,7 +74,7 @@ export function ProjectsSection() {
       </Card>
     );
   }
-  if (list.length === 0) {
+  if (all.length === 0) {
     return (
       <EmptyState
         icon={<FolderOpen aria-hidden />}
@@ -84,7 +86,7 @@ export function ProjectsSection() {
   }
   return (
     <>
-      <NeedsYou projects={list} />
+      <NeedsYou projects={all} />
       <section
         aria-labelledby="projects-heading"
         className="flex flex-col gap-3"

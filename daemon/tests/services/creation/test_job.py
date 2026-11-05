@@ -1,6 +1,8 @@
 """The creation job end to end: each source, a failure after every step, cancel."""
 
 import hashlib
+import shlex
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -221,6 +223,24 @@ def test_a_failing_test_command_names_its_field(
     assert step.output is not None
     assert "FAILED tests/test_math.py::test_add" in step.output
     assert not (projects_dir / "demo").exists()
+
+
+@pytest.mark.usefixtures("builtin_fixture")
+@pytest.mark.parametrize("source", ["template", "empty", "existing"])
+def test_a_real_failing_test_command_shows_its_own_output(
+    source: str, tmp_path: Path, projects_dir: Path, home: Path, git_repo: Path
+) -> None:
+    script = tmp_path / "failing_test.py"
+    script.write_text("print('FAILED test_example')\nraise SystemExit(1)\n", encoding="utf-8")
+    fields = source_fields(source, tmp_path, git_repo)
+    failing = shlex.join([Path(sys.executable).as_posix(), script.as_posix()])
+    fields["commands"] = {**PASS, "test": failing}
+    job = create(projects_dir, home, **fields)
+    step = job.steps[2]
+    assert (job.state, step.state, step.field) == ("failed", "failed", "commands.test")
+    assert step.output is not None
+    assert "FAILED test_example" in step.output
+    assert "git" not in step.output.lower()
 
 
 @pytest.mark.usefixtures("isolated_git")

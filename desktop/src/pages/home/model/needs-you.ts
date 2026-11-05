@@ -1,7 +1,7 @@
 import type { ProjectSummary } from "@/entities/project";
 
 export type NeedsYouKind =
-  "blocked" | "approval" | "plan" | "interrupted" | "usage_limit";
+  "blocked" | "approval" | "plan" | "interrupted" | "usage_limit" | "cleanup";
 
 export interface NeedsYouCard {
   key: string;
@@ -13,6 +13,8 @@ export interface NeedsYouCard {
   reason: string;
   /** When it started needing the user, if known. */
   at: string | null;
+  /** For `cleanup`: the creation job to dismiss. */
+  job?: string;
 }
 
 interface TicketLike {
@@ -29,13 +31,27 @@ const time = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 /** Everything waiting for the user, across projects: blocked tickets, tickets awaiting
- * approval, draft plans, runs a stopped daemon interrupted, usage-limit pauses. */
+ * approval, draft plans, runs a stopped daemon interrupted, usage-limit pauses, and
+ * creations whose rollback left paths behind. */
 export function needsYouCards(
   projects: ProjectSummary[],
   tickets: Record<string, TicketLike[] | undefined>,
 ): NeedsYouCard[] {
   const cards: NeedsYouCard[] = [];
   for (const project of projects) {
+    if (project.run_state === "cleanup_failed") {
+      cards.push({
+        key: `${project.name}/cleanup`,
+        kind: "cleanup",
+        project: project.name,
+        ticket: null,
+        title: `Couldn't clean up ${project.name}`,
+        reason: `Left behind: ${(project.left ?? []).join(", ")}`,
+        at: null,
+        job: project.job_id ?? "",
+      });
+      continue;
+    }
     if (project.settings_error || project.run_state === "creating") {
       continue; // the project card already says what to fix, or that it's being made
     }

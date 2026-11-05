@@ -55,6 +55,11 @@ export function cancelJob(id: string): Promise<Job> {
   );
 }
 
+/** The toast for a rollback that left paths behind (Home shows them on a card). */
+export function cleanupToast(job: Job): string {
+  return `Couldn't clean up ${job.project} · see Needs you on Home`;
+}
+
 /** A 422's request field (`body.` dropped) and message; null for any other error. */
 export function fieldError(
   error: unknown,

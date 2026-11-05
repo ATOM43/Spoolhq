@@ -1,5 +1,5 @@
 import { FolderX, ListTodo, LoaderCircle, Play, RotateCw } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import { useDaemonStatus } from "@/features/daemon-status";
@@ -27,6 +27,7 @@ import {
 import { SpecEditor } from "@/widgets/spec-editor";
 
 import { formatUsage, guidance, panelState, type Tab } from "../model/state";
+import { CreatingPanel } from "./CreatingPanel";
 import { ProjectHeader } from "./ProjectHeader";
 import { RunControls } from "./RunControls";
 import { SettingsBar } from "./SettingsBar";
@@ -66,6 +67,25 @@ export function ProjectPage() {
 
 function Panel({ name }: { name: string }) {
   const project = useProject(name);
+  // The creation job holding the project; kept after it ends, to show how it ended.
+  const [creating, setCreating] = useState<string | null>(null);
+  const [created, setCreated] = useState(false);
+  const { refetch } = project;
+  const onCreated = useCallback(() => {
+    void refetch().then(() => {
+      setCreated(true);
+      setCreating(null);
+    });
+  }, [refetch]);
+  const data = project.data;
+  if (data?.run_state === "creating" && data.job_id && creating === null) {
+    setCreating(data.job_id);
+  }
+  if (creating !== null && data) {
+    return (
+      <CreatingPanel project={data} job={creating} onCreated={onCreated} />
+    );
+  }
   if (project.isPending) {
     return (
       <p className="flex items-center gap-2 px-6 py-6 text-sm text-ink-muted">
@@ -112,6 +132,7 @@ function Panel({ name }: { name: string }) {
   return (
     <Loaded
       project={project.data}
+      initialTab={created ? "spec" : null}
       reloading={project.isFetching}
       onReload={() => void project.refetch()}
     />
@@ -126,10 +147,12 @@ const TABS: readonly Tab[] = ["spec", "tickets", "run"];
 
 function Loaded({
   project,
+  initialTab,
   reloading,
   onReload,
 }: {
   project: ProjectDetail;
+  initialTab: Tab | null;
   reloading: boolean;
   onReload: () => void;
 }) {
@@ -139,7 +162,7 @@ function Loaded({
   useProjectEvents([project]);
   const [params] = useSearchParams();
   const asked = TABS.find((tab) => tab === params.get("tab")) ?? null;
-  const [chosen, setChosen] = useState<Tab | null>(asked);
+  const [chosen, setChosen] = useState<Tab | null>(asked ?? initialTab);
 
   const ready = !current.isPending && !spec.isPending;
   const specEmpty = (spec.data?.content.trim() ?? "") === "";

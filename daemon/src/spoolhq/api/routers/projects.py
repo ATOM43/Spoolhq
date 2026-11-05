@@ -137,12 +137,35 @@ def _summary(request: Request, name: str) -> tuple[ProjectSummary, TicketListing
     return summary, listing, project
 
 
+def _left_behind(request: Request) -> dict[str, ProjectSummary]:
+    """Per project, the latest ended creation whose rollback left paths behind."""
+    jobs: CreationJobs = request.app.state.creation
+    return {
+        job.project: ProjectSummary(
+            name=job.project,
+            done=0,
+            total=0,
+            run_state="cleanup_failed",
+            needs_you=0,
+            job_id=job.id,
+            left=job.rollback.left if job.rollback else [],
+        )
+        for job in sorted(jobs.left_behind(), key=lambda job: job.ended_at or 0.0)
+    }
+
+
 @router.get("")
 def list_projects(request: Request) -> list[ProjectSummary]:
-    return [
-        _creating(request, path.name) or _summary(request, path.name)[0]
+    """Every workspace; a project whose creation left paths behind is listed as
+    ``cleanup_failed`` instead (also when its workspace is gone)."""
+    left = _left_behind(request)
+    listed = [
+        _creating(request, path.name)
+        or left.pop(path.name, None)
+        or _summary(request, path.name)[0]
         for path in list_workspaces(settings(request).projects_dir)
     ]
+    return listed + list(left.values())
 
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED)

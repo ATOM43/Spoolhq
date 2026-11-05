@@ -329,3 +329,12 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - Spec toolbar: word count; Import .md (FileReader, confirm before replacing a non-empty spec).
 - Tests: daemon (invalid `project.yaml` listed with its field while others load, usage sums, latest activity and step, `has_spec`, `split_error`), Vitest (every status label and icon, Settings invalid, each Needs-you kind and its action, hidden when empty, guidance per state, tooltip on hover and focus, invalid-settings bar and Reload, Import .md with and without confirmation).
 - Docs: `api.md`; DECISIONS 323–329.
+
+## Chore · Docs split
+
+- `DECISIONS.md` is now an index (`NNN · title · area file`); the 329 entries moved word for word into `docs/decisions/<area>.md`: core, projects-tickets, runloop, agents, git-github, api, desktop, codegraph, tracker (empty).
+- `PROGRESS.md` starts with a "What exists" summary and keeps the last 5 entries; older ones moved word for word to `docs/progress-archive.md`.
+- `CLAUDE.md` holds rules only and says what to read first; the Graphify rebuild steps moved to `docs/codegraph.md`.
+- `scripts/check_decisions.py` (in `just lint`): every index number has exactly one entry and the reverse, no gaps or duplicates, titles match the entry headings, each line names the right file. Tests in `daemon/tests/test_layout.py`.
+- `task.md`'s example `merge_policy` already used the model's keys (`max_diff_lines`, `protected_paths`; fixed in 7b4f640), so it is unchanged.
+- DECISIONS 330.

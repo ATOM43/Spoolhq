@@ -4,10 +4,11 @@ import { useEffect, useState, type SyntheticEvent } from "react";
 import { flushSync } from "react-dom";
 
 import { queryKeys } from "@/shared/api";
-import { Button, ConfirmDialog, ReasonButton } from "@/shared/ui";
+import { Button, ConfirmDialog, ReasonButton, showToast } from "@/shared/ui";
 
 import {
   cancelJob,
+  cleanupToast,
   fieldError,
   startJob,
   useJob,
@@ -131,6 +132,12 @@ export function NewProjectForm({
     setConfirming(false);
     if (jobId !== null) {
       void cancelJob(jobId)
+        .then((ended) => {
+          // The dialog is closed by now; the toast says what the rollback couldn't delete.
+          if (ended.rollback && ended.rollback.left.length > 0) {
+            showToast(cleanupToast(ended), "error");
+          }
+        })
         .catch(() => null) // a job that already ended has nothing to stop
         .finally(() => {
           void queryClient.invalidateQueries({ queryKey: queryKeys.projects });

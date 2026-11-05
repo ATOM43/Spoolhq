@@ -39,7 +39,8 @@ class ProjectSummary(BaseModel):
     """Valid tickets of the plan."""
     run_state: str
     """The active run's status (``running``, ``paused``), ``creating`` while a creation
-    job holds the project (see ``job_id``), else ``idle``."""
+    job holds the project (see ``job_id``), ``cleanup_failed`` when a failed or cancelled
+    creation left paths behind (see ``left``), else ``idle``."""
     needs_you: int
     """Tickets waiting for a person: ``awaiting_approval`` or ``blocked``."""
     latest_seq: int = 0
@@ -64,8 +65,11 @@ class ProjectSummary(BaseModel):
     settings_error: SettingsProblem | None = None
     """Set when ``project.yaml`` doesn't load; the project is listed anyway."""
     job_id: str | None = None
-    """While ``run_state`` is ``creating``: the creation job. Nothing else is read then,
-    so the other fields keep their defaults."""
+    """While ``run_state`` is ``creating`` or ``cleanup_failed``: the creation job.
+    Nothing else is read then, so the other fields keep their defaults."""
+    left: list[str] = Field(default_factory=list)
+    """For ``cleanup_failed``: the paths the rollback couldn't delete. Listed for an
+    hour after the job ended, or until ``POST /api/jobs/{id}/dismiss``."""
 
 
 class IdleView(BaseModel):

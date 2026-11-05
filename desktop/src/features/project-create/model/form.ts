@@ -119,10 +119,14 @@ export function toRequest(form: Form): CreateRequest {
 }
 
 /** A step's title for this job: the repo step says what it does for the source. */
-export function stepTitle(step: JobStep, form: Form, job: Job): string {
+export function stepTitle(
+  step: JobStep,
+  form: Form | undefined,
+  job: Job,
+): string {
   if (step.name === "repo") {
     return job.source === "template"
-      ? `Generate from ${form.template}`
+      ? `Generate from ${form?.template ?? "the template"}`
       : job.source === "existing"
         ? "Prepare repo"
         : "Init repo";
@@ -132,10 +136,14 @@ export function stepTitle(step: JobStep, form: Form, job: Job): string {
     step.state !== "pending" &&
     step.state !== "skipped"
   ) {
+    const passed = String(step.passed.length);
+    if (!form) {
+      return `${step.title} · ${passed} passed`; // the panel has no form to count
+    }
     const total = GATES.filter(
       (gate) => form.commands[gate].trim() !== "",
     ).length;
-    return `${step.title} · ${String(step.passed.length)} of ${String(total)} passed`;
+    return `${step.title} · ${passed} of ${String(total)} passed`;
   }
   return step.title;
 }

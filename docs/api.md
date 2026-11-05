@@ -12,10 +12,11 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | --- | --- |
 | `GET /api/health` | `{"status": "ok"}`, no token |
 | `GET /api/version` | the daemon's version |
-| `GET /api/projects` | each project: `name`, `done`/`total`/`draft` tickets, `remaining_h`, `run_state` (`running`, `paused`, `creating` or `idle`; see [A project being created](#a-project-being-created)), `needs_you` (tickets `awaiting_approval` or `blocked`), `latest_seq` (see [Starting from REST](#event-websocket)), `has_spec` (`CONTEXT.md` isn't blank or init's starter), `template` (null for an existing repo), `run` (the active, else latest run) and `run_step` (its latest phase), `last_activity` (the latest event's time), `usage` (`tokens` of attempts without a cost, `cost_usd` summed over those with one), and `settings_error` (`{file, field, message}`, the first problem of a `project.yaml` that doesn't load; the project is listed anyway) |
+| `GET /api/projects` | each project: `name`, `done`/`total`/`draft` tickets, `remaining_h`, `run_state` (`running`, `paused`, `creating`, `cleanup_failed` or `idle`; see [A project being created](#a-project-being-created) and [Rollback](#rollback)), `needs_you` (tickets `awaiting_approval` or `blocked`), `latest_seq` (see [Starting from REST](#event-websocket)), `has_spec` (`CONTEXT.md` isn't blank or init's starter), `template` (null for an existing repo), `run` (the active, else latest run) and `run_step` (its latest phase), `last_activity` (the latest event's time), `usage` (`tokens` of attempts without a cost, `cost_usd` summed over those with one), and `settings_error` (`{file, field, message}`, the first problem of a `project.yaml` that doesn't load; the project is listed anyway) |
 | `POST /api/projects` | start a [creation job](#creating-a-project), like `spool init`: 202 `{"job_id"}`, or 422 with the field before any job starts |
 | `GET /api/jobs/{job_id}` | the creation job: `state` and its `steps`, plus `rollback` after a failure or cancel |
 | `POST /api/jobs/{job_id}/cancel` | stop the job and roll back; answers when the rollback is done (at most 15 s) |
+| `POST /api/jobs/{job_id}/dismiss` | 204: forget a job that ended, so the list stops showing what its rollback [left behind](#rollback); a running job stays |
 | `POST /api/projects/{name}/commands/test` | `{"gate", "command"}`: run one stack command once in the project's repository, [as its gate would](#trying-a-stack-command) |
 | `GET /api/projects/{name}` | the summary plus `repo`, `default_branch`, `remote` (all three null while `settings_error` is set), `invalid_tickets`, and what can run: `next_ticket` (what `run/next` would start, else null) and `idle` (`{code, ticket_ids, message}` when nothing can: `all_done`, `running`, `awaiting_approval`, `blocked`, `waiting`, `plan_not_approved` or `invalid_plan`; null with no tickets) |
 | `GET`, `PUT /api/projects/{name}/settings` | `project.yaml` as `{"settings": {...}}`, validated by the project model; [ETag](#etags-and-edit-conflicts) |
@@ -69,11 +70,13 @@ A failed step has a fixed `message` ("The test command failed"), the trimmed `ou
 
 ### A project being created
 
-While a running job holds a project, `GET /api/projects` and `GET /api/projects/{name}` report it with `run_state: "creating"` and the job's `job_id`, and read nothing else: its `project.yaml` is written before the repo exists, so it is not validated (no `settings_error`), and the other fields keep their defaults (`needs_you` 0, no `run`). Home shows "Creating…". When the job ends the usual state takes over; a rolled-back project is gone from the list.
+While a running job holds a project, `GET /api/projects` and `GET /api/projects/{name}` report it with `run_state: "creating"` and the job's `job_id`, and read nothing else: its `project.yaml` is written before the repo exists, so it is not validated (no `settings_error`), and the other fields keep their defaults (`needs_you` 0, no `run`). Home shows "Creating…", and the project panel shows the job's checklist instead of its tabs (it opens on Spec when the job succeeds, and says "This project wasn't created" when it fails or is cancelled). When the job ends the usual state takes over; a rolled-back project is gone from the list.
 
 ### Rollback
 
 On a failure or cancel the job deletes exactly the paths it created, newest first, and records the result in `rollback`: `removed` (each deleted path) and `left` (any it couldn't delete; empty when the rollback is complete). It never deletes or changes anything that existed before: a folder that existed empty stays, emptied of what the job wrote, and an existing repository is never touched. Deleting never follows a symlink. The projects folder is removed only if the job created it and it is still empty.
+
+While an ended job is kept (an hour) and its `left` isn't empty, `GET /api/projects` lists that project with `run_state: "cleanup_failed"`, the `job_id` and `left`, and nothing else (in place of its workspace, if that was left behind too). Home shows it as a Needs-you card, "Couldn't clean up <name>", with **Dismiss** (`POST /api/jobs/{job_id}/dismiss`); the app also shows a toast when a Cancel's rollback leaves something behind.
 
 ### Merge presets
 

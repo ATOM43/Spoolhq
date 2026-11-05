@@ -4,12 +4,14 @@ import {
   CircleDashed,
   CirclePause,
   Eye,
+  FolderX,
   ListChecks,
   LoaderCircle,
   OctagonX,
   Play,
   RotateCcw,
   Trash2,
+  X,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
@@ -19,7 +21,7 @@ import { ticketsQuery } from "@/entities/ticket";
 import { cn, formatTime, timeAgo } from "@/shared/lib";
 import { Button, ConfirmDialog } from "@/shared/ui";
 
-import { useInterruptedRun } from "../model/actions";
+import { useDismissJob, useInterruptedRun } from "../model/actions";
 import {
   needsYouCards,
   type NeedsYouCard,
@@ -54,6 +56,11 @@ const CHIP: Record<
     icon: <CirclePause aria-hidden />,
     label: "Paused · usage limit",
     tone: "bg-warning/10 text-warning",
+  },
+  cleanup: {
+    icon: <FolderX aria-hidden />,
+    label: "Cleanup failed",
+    tone: "bg-danger/10 text-danger",
   },
 };
 
@@ -154,7 +161,9 @@ function Card({ card }: { card: NeedsYouCard }) {
         ) : null}
         <span className="truncate">{card.ticket?.title ?? card.title}</span>
       </p>
-      <p className="truncate text-sm text-ink-muted">{card.reason}</p>
+      <p className="truncate text-sm text-ink-muted" title={card.reason}>
+        {card.reason}
+      </p>
       <div className="mt-auto flex gap-2 pt-1">
         <Action card={card} />
       </div>
@@ -193,7 +202,33 @@ function Action({ card }: { card: NeedsYouCard }) {
       );
     case "interrupted":
       return <ResumeOrDiscard project={card.project} ticket={ticket} />;
+    case "cleanup":
+      return <Dismiss job={card.job ?? ""} />;
   }
+}
+
+function Dismiss({ job }: { job: string }) {
+  const dismiss = useDismissJob(job);
+  return (
+    <div className="flex flex-col gap-1">
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={dismiss.isPending}
+        onClick={() => {
+          dismiss.mutate();
+        }}
+      >
+        <X aria-hidden />
+        Dismiss
+      </Button>
+      {dismiss.error ? (
+        <p role="alert" className="text-sm text-danger">
+          {dismiss.error.message}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function LinkButton({

@@ -69,6 +69,7 @@
     "/api/projects": {
       "get": {
         "summary": "List Projects",
+        "description": "Every workspace; a project whose creation left paths behind is listed as\n``cleanup_failed`` instead (also when its workspace is gone).",
         "operationId": "list_projects_api_projects_get",
         "responses": {
           "200": {
@@ -571,6 +572,47 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/dismiss": {
+      "post": {
+        "summary": "Dismiss Job",
+        "description": "Forget an ended job, so the project list stops showing what it left behind.",
+        "operationId": "dismiss_job_api_jobs__job_id__dismiss_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$",
+              "description": "Job id.",
+              "title": "Job Id"
+            },
+            "description": "Job id."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "default": {
             "description": "An error.",
@@ -3132,6 +3174,13 @@
             ],
             "title": "Job Id"
           },
+          "left": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Left"
+          },
           "repo": {
             "anyOf": [
               {
@@ -3313,6 +3362,13 @@
               }
             ],
             "title": "Job Id"
+          },
+          "left": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Left"
           }
         },
         "type": "object",

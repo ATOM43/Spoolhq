@@ -1,5 +1,9 @@
 const SHOW_MS = 5000;
-let current: string | null = null;
+export interface Toast {
+  text: string;
+  tone: "success" | "error";
+}
+let current: Toast | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -9,11 +13,12 @@ function emit() {
 }
 
 /** G2: a confirmation, top-right, for 5 s. One at a time; a newer one replaces it. */
-export function showToast(text: string) {
-  current = text;
+export function showToast(text: string, tone: Toast["tone"] = "success") {
+  const shown = { text, tone };
+  current = shown;
   emit();
   setTimeout(() => {
-    if (current === text) {
+    if (current === shown) {
       current = null;
       emit();
     }

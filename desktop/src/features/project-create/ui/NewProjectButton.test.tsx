@@ -356,6 +356,30 @@ describe("New project", () => {
     expect(screen.queryByRole("dialog", { name: "New project" })).toBeNull();
   });
 
+  it("shows a toast when a cancel's rollback leaves paths behind", async () => {
+    POST.mockImplementation((path) => {
+      if (path === "/api/jobs/{job_id}/cancel") {
+        return ok(
+          job("cancelled", [["passed"], ["failed"]], {
+            rollback: { removed: [], left: ["/home/me/code/demo"] },
+          }),
+        );
+      }
+      return ok({ job_id: JOB_ID });
+    });
+    await openDialog();
+    await fill("demo");
+    await userEvent.click(create());
+    await screen.findByRole("region", { name: "Creating the project" });
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Stop and remove" }),
+    );
+    expect(
+      await screen.findByText("Couldn't clean up demo · see Needs you on Home"),
+    ).toBeVisible();
+  });
+
   it("opens the panel on Spec with a toast on success", async () => {
     jobReply = job("succeeded", [
       ["passed"],

@@ -53,7 +53,7 @@ function rollbackLine(job: Job): string | null {
 }
 
 /** "Creating the project": each step's state as icon + label; a failure expands. */
-export function Checklist({ job, form }: { job: Job; form: Form }) {
+export function Checklist({ job, form }: { job: Job; form?: Form }) {
   const rollback = rollbackLine(job);
   return (
     <section

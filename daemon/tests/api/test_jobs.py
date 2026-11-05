@@ -1,6 +1,8 @@
 """``POST /api/projects`` starts a creation job; ``/api/jobs`` reads and cancels it."""
 
 import os
+import shlex
+import sys
 import threading
 import time
 from pathlib import Path
@@ -11,7 +13,7 @@ from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from spoolhq.cli import app
-from spoolhq.services.creation import NAME_RULE, Job
+from spoolhq.services.creation import NAME_RULE, Job, Rollback
 from tests.conftest import fake_tool_cmd, make_template, run_git
 
 pytestmark = pytest.mark.usefixtures("git_identity")
@@ -232,3 +234,76 @@ def test_a_rolled_back_project_is_gone_from_the_list(
     assert job["state"] == "failed"
     assert job["steps"][2]["field"] == "commands.test"
     assert client.get("/api/projects", headers=auth(token)).json() == []
+
+
+def _ended(jobs: Any, job_id: str, project: str, left: list[str]) -> Job:
+    job = Job(id=job_id, project=project, source="empty", state="failed")
+    job.rollback, job.ended_at = Rollback(left=left), time.monotonic()
+    jobs._jobs[job.id] = (job, threading.Event(), threading.Thread())
+    return job
+
+
+def test_a_rollback_that_left_paths_is_listed_until_dismissed(
+    client: TestClient, token: str, projects_dir: Path
+) -> None:
+    jobs = client.app.state.creation  # type: ignore[attr-defined]
+    _ended(jobs, "b" * 32, "gone", ["/code/gone"])
+    _ended(jobs, "c" * 32, "clean", [])
+    (projects_dir / "half").mkdir(parents=True)  # its workspace was left behind too
+    _ended(jobs, "d" * 32, "half", [str(projects_dir / "half")])
+    listed = {p["name"]: p for p in client.get("/api/projects", headers=auth(token)).json()}
+    assert set(listed) == {"gone", "half"}
+    assert (listed["gone"]["run_state"], listed["gone"]["job_id"]) == ("cleanup_failed", "b" * 32)
+    assert listed["gone"]["left"] == ["/code/gone"]
+    assert listed["half"]["left"] == [str(projects_dir / "half")]
+
+    answer = client.post(f"/api/jobs/{'b' * 32}/dismiss", headers=auth(token))
+    assert answer.status_code == 204
+    names = [p["name"] for p in client.get("/api/projects", headers=auth(token)).json()]
+    assert names == ["half"]
+    assert client.post(f"/api/jobs/{'b' * 32}/dismiss", headers=auth(token)).status_code == 404
+
+
+def test_a_running_job_is_not_dismissed(client: TestClient, token: str) -> None:
+    jobs = client.app.state.creation  # type: ignore[attr-defined]
+    job = Job(id="e" * 32, project="demo", source="empty")
+    jobs._jobs[job.id] = (job, threading.Event(), threading.Thread())
+    assert client.post(f"/api/jobs/{job.id}/dismiss", headers=auth(token)).status_code == 204
+    assert job.id in jobs._jobs
+    job.state = "succeeded"  # the client's shutdown would join its unstarted thread
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(sys.platform == "win32" or os.geteuid() == 0, reason="POSIX permissions")
+def test_a_read_only_path_the_rollback_cant_delete_is_listed(
+    client: TestClient, token: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from spoolhq.services.git import worktrees
+
+    def give_up(func: Any, path: str, exc: BaseException) -> None:
+        raise exc
+
+    # remove_path would make the folder writable and retry: as if that chmod failed.
+    monkeypatch.setattr(worktrees, "_clear_read_only_and_retry", give_up)
+    holder = tmp_path / "holder"
+    holder.mkdir()
+    repo = holder / "new"
+    script = tmp_path / "lock.py"
+    script.write_text(
+        "import os, pathlib, sys\n"
+        "pathlib.Path('kept.txt').write_text('x', encoding='utf-8')\n"
+        "os.chmod('.', 0o555)\n"
+        "sys.exit(1)\n",
+        encoding="utf-8",
+    )
+    commands = {"test": shlex.join([Path(sys.executable).as_posix(), script.as_posix()])}
+    body = {"source": "empty", "repo_path": str(repo), "commands": commands}
+    try:
+        job = finished(client, token, post(client, token, **body).json()["job_id"])
+    finally:
+        os.chmod(repo, 0o700)  # writable again, so tmp_path can be removed
+    assert job["state"] == "failed"
+    assert job["rollback"]["left"]
+    listed = client.get("/api/projects", headers=auth(token)).json()
+    assert [(p["name"], p["run_state"]) for p in listed] == [("demo", "cleanup_failed")]
+    assert listed[0]["left"] == job["rollback"]["left"]
