@@ -21,6 +21,7 @@ lint:
     uv run --directory daemon mypy
     uv run --directory daemon lint-imports
     uv run --directory daemon python ../scripts/check_line_limit.py
+    uv run --directory daemon python ../scripts/check_decisions.py
     uv run --directory daemon pytest tests/api/test_openapi.py -q -p no:cacheprovider
     pnpm --dir desktop exec eslint .
     pnpm --dir desktop exec prettier --check .
