@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **34 tickets in 6 phases, about 83.5 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **35 tickets in 6 phases, about 84.5 hours** for one developer.
 
 **What v1 includes**
 
@@ -82,9 +82,9 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T18 | Merge policy | 3 Planner and Git | T12, T17 | 1.5 |
 | T19 | Live API | 4 Desktop UI | T07, T13 | 2.5 |
 | T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
-| T21 | Tickets tab and drawer | 4 Desktop UI | T15, T35 | 3 |
+| T21 | Tickets tab and drawer | 4 Desktop UI | T15, T36 | 3 |
 | T22 | Run tab | 4 Desktop UI | T32 | 3 |
-| T23 | Packaging | 4 Desktop UI | T21, T22, T35 | 3 |
+| T23 | Packaging | 4 Desktop UI | T21, T22, T36 | 3 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T22 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
@@ -95,10 +95,11 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T32 | Settings, project panel and Spec tab | 4 Desktop UI | T20 | 2 |
 | T33 | Home and project panel polish | 4 Desktop UI | T32 | 2 |
 | T34 | Settings polish and secret test | 4 Desktop UI | T33 | 1.5 |
-| T35 | New project flow | 4 Desktop UI | T34, T16 | 3 |
-|  | **Total** |  |  | **83.5** |
+| T35 | Project creation job | 4 Desktop UI | T34, T16 | 2 |
+| T36 | New project dialog | 4 Desktop UI | T35 | 2 |
+|  | **Total** |  |  | **84.5** |
 
-Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T21 → T23 → T26 (35 h).
+Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T23 → T26 (36 h).
 
 ## Phase 0 — Scaffolding
 
@@ -419,7 +420,7 @@ Done when:
 
 ## Phase 4 — Desktop UI (v0 screens)
 
-Nine tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Ten tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -493,23 +494,41 @@ Done when:
 - [ ] Settings matches the design, with the spec winning where they differ
 - [ ] Each secret can be tested without the value ever leaving the daemon
 
-### T35 · New project flow
+### T35 · Project creation job
 
-Create a project from a template, an existing repo or an empty repo, with a visible checklist. *Depends on: T34, T16 · 3 h*
+The daemon creates a project from a template, an existing repo or an empty repo, step by step, and rolls back what it created on failure. *Depends on: T34, T16 · 2 h*
 
-- Source: **Template / Existing repo / Empty repo**; template cards.
-- Name with slug and workspace preview; stack commands pre-filled.
+- `POST /api/projects` returns 202 with a job id. Body: `name` (`^[a-z][a-z0-9-]{0,39}$`), `source` (`template` / `existing` / `empty`), an absolute `repo_path`, `template` (a name from `GET /api/templates` only, no git URLs or local paths), `commands` (`install`, `lint`, `test`; optional for `empty`), optional `git_remote`, `merge_preset` and `clickup_list_id`. Validation errors return 422 with the field before any job starts; `spool init` uses the same service.
+- Path safety: refuse `/`, the home folder, anything inside the projects folder, the worktrees folder or `~/.spoolhq`, symlinked targets, a dirty existing repo and a duplicate name.
+- Steps: create workspace → prepare repo (Copier, check only, or `git init -b main`) → check commands through the gates (install 600 s, lint and test 300 s) → initial commit. Each step reports its state, duration and, on failure, a fixed message, trimmed output and the request field that caused it.
+- Rollback on failure or cancel: delete only the paths the job created, in reverse order, never following symlinks; an existing repo is never touched. The outcome is recorded in the job.
+- `GET /api/jobs/{job_id}` and `POST /api/jobs/{job_id}/cancel`; jobs are kept in memory for 1 hour after they end.
+- Stack commands become optional in `project.yaml`; a project without a `test` command can't run tickets. Merge presets map onto `merge_policy`. `GET /api/templates` adds a one-line `summary`.
+
+Done when:
+
+- [ ] A project can be created from a template, an existing repo and an empty repo through the API
+- [ ] A failing step rolls back everything SpoolHQ created and never touches an existing repo
+- [ ] Unsafe paths and template sources are refused before any job starts
+
+### T36 · New project dialog
+
+Create a project from the app with a visible checklist. *Depends on: T35 · 2 h*
+
+- Source switch **Template / Existing repo / Empty repo**; template cards.
+- Name with slug check and workspace preview; repo folder picker; stack commands pre-filled.
 - A collapsed **More** section: GitHub remote, merge preset, ClickUp list.
-- A create checklist (create workspace → generate or init → check commands → initial commit) with live progress and rollback of only what SpoolHQ created.
+- A live create checklist with **Fix** and **Cancel** on failure.
+- The old two-step flow removed.
 
 Done when:
 
 - [ ] A project can be created from each of the three sources without the CLI
-- [ ] A failing step rolls back everything SpoolHQ created and never touches an existing repo
+- [ ] A failed step shows its error and output and returns to the field that caused it
 
 ### T21 · Tickets tab and drawer
 
-Plan review, the board and approvals in one list. *Depends on: T15, T35 · 3 h*
+Plan review, the board and approvals in one list. *Depends on: T15, T36 · 3 h*
 
 - One list grouped by status. While the plan is a draft, a banner shows the ticket count, validation problems and **Approve plan**.
 - Ticket drawer: details, "Done when" with the latest review result, dependencies, attempts. Editable when draft, ready or blocked.
@@ -537,7 +556,7 @@ Done when:
 
 ### T23 · Packaging
 
-One installer that brings its own daemon. *Depends on: T21, T22, T35 · 3 h*
+One installer that brings its own daemon. *Depends on: T21, T22, T36 · 3 h*
 
 - The daemon is bundled with PyInstaller and shipped as a Tauri sidecar; the app starts it when it is not running.
 - Closing the window leaves the daemon and any run going, with a tray icon to quit.
