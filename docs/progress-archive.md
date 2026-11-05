@@ -318,3 +318,14 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - Untrusted text: `Markdown` (react-markdown 10.1.0, raw HTML skipped, unsafe URLs emptied); ESLint bans `dangerouslySetInnerHTML`.
 - Tests: daemon (subscribe from `latest_seq` gets the event written in between and no history; readiness fields; WebSocket under real `spool serve`), Vitest (replay with a mocked bridge, Settings in every state and both first-run cases, the secret absent from the DOM and caches, run controls per state, autosave/412/Keep mine/Reload/Generate plan, inert markdown).
 - Docs: `architecture.md`, `api.md`, `CLAUDE.md` layout; DECISIONS 313–322.
+
+## T33 · Home and project panel polish
+
+- Plan: T33, T34 and T35 added to Phase 4 (34 tickets, 83.5 h); T21 and T23 now depend on T35; critical path T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T21 → T23 → T26 (35 h).
+- Daemon: the project list and detail report an invalid `project.yaml` per project (`settings_error` with file, field, message) instead of failing, plus `draft`, `remaining_h`, `has_spec`, `template`, `run`, `run_step`, `last_activity` and `usage` (tokens and USD summed from the run log, `services/runs/totals.py`). TS client regenerated.
+- Home: full-width top bar (SpoolHQ, daemon status, Settings, + New project); Needs-you cards per kind with one action each (Unblock, Review, Review plan, Resume/Discard, Open run), hidden when empty; 320 px project cards with template badge, progress "13 of 18 done · 12 h left", status chip (icon + label, never "Unknown"), last activity and usage; daemon-down layout from the V1 PNG.
+- Project panel: full width; breadcrumb, repo path with copy, branch, remote; guidance line by section-8 state or progress with usage; underlined tabs with counts; red invalid-settings bar with Reload; `?tab=` opens a tab; the Spec editor and preview fill the window and scroll on their own.
+- Disabled controls: muted look and a CSS-only tooltip on hover and keyboard focus (`ReasonButton`).
+- Spec toolbar: word count; Import .md (FileReader, confirm before replacing a non-empty spec).
+- Tests: daemon (invalid `project.yaml` listed with its field while others load, usage sums, latest activity and step, `has_spec`, `split_error`), Vitest (every status label and icon, Settings invalid, each Needs-you kind and its action, hidden when empty, guidance per state, tooltip on hover and focus, invalid-settings bar and Reload, Import .md with and without confirmation).
+- Docs: `api.md`; DECISIONS 323–329.

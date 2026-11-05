@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 import spoolhq
 from spoolhq.cli import app
 from spoolhq.services.projects import load_project
-from tests.conftest import fake_tool_cmd, make_git_template, run_git
+from tests.conftest import fake_tool_cmd, make_git_template, make_template, run_git
 
 runner = CliRunner()
 PASS = fake_tool_cmd("pass")
@@ -83,11 +83,74 @@ def test_init_rolls_back_a_failed_step(projects_dir: Path, tmp_path: Path) -> No
     assert not projects_dir.exists()
 
 
-def test_init_refuses_a_git_template(projects_dir: Path, tmp_path: Path) -> None:
-    url, _ = make_git_template(tmp_path)
-    result = runner.invoke(app, ["init", "demo", "--repo", str(tmp_path / "n"), "--template", url])
+@pytest.mark.integration
+def test_init_from_a_local_folder_template(projects_dir: Path, tmp_path: Path) -> None:
+    folder = make_template(tmp_path / "my-template")
+    repo = tmp_path / "new"
+    result = runner.invoke(app, ["init", "demo", "--repo", str(repo), "--template", str(folder)])
+    assert result.exit_code == 0, result.output
+    assert (repo / "README.md").read_text(encoding="utf-8") == "# demo\n"
+    template = load_project("demo", projects_dir=projects_dir).template
+    assert template is not None
+    assert (template.name, template.source, template.ref) == (
+        "fixture",
+        str(folder.resolve()),
+        None,
+    )
+    assert run_git(repo, "branch", "--show-current").strip() == "main"
+
+
+@pytest.mark.integration
+def test_init_from_a_git_template_at_a_ref(projects_dir: Path, tmp_path: Path) -> None:
+    url, commit = make_git_template(tmp_path)
+    repo = tmp_path / "new"
+    args = ["init", "demo", "--repo", str(repo), "--template", url, "--template-ref", "main"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    template = load_project("demo", projects_dir=projects_dir).template
+    assert template is not None
+    assert (template.source, template.ref) == (url, commit)
+    assert f"_commit: {commit}" in (repo / ".copier-answers.yml").read_text(encoding="utf-8")
+
+
+@pytest.mark.integration
+def test_init_refuses_an_unsafe_folder_template(projects_dir: Path, tmp_path: Path) -> None:
+    unsafe = "_tasks: [echo hi]\nproject_name:\n  type: str\n  default: x\n"
+    folder = make_template(tmp_path / "unsafe", copier_yml=unsafe)
+    repo = tmp_path / "new"
+    result = runner.invoke(app, ["init", "demo", "--repo", str(repo), "--template", str(folder)])
     assert result.exit_code == 1
-    assert "error: template: Choose one of the templates the app lists" in result.output
+    assert "error: template: Couldn't generate the project" in result.output
+    assert "needs Copier tasks or extensions" in result.output
+    assert not repo.exists()
+    assert not projects_dir.exists()
+
+
+@pytest.mark.integration
+def test_init_an_empty_repo_on_a_branch(projects_dir: Path, tmp_path: Path) -> None:
+    repo = tmp_path / "new"
+    args = ["init", "demo", "--repo", str(repo), "--source", "empty", "--branch", "dev"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    assert run_git(repo, "branch", "--show-current").strip() == "dev"
+    assert load_project("demo", projects_dir=projects_dir).default_branch == "dev"
+
+
+def test_init_refuses_a_branch_for_an_existing_repo(projects_dir: Path, git_repo: Path) -> None:
+    args = ["init", "demo", "--repo", str(git_repo), *COMMANDS, "--branch", "dev"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 1
+    assert result.output == "error: branch: An existing repo uses its checked-out branch\n"
+    result = runner.invoke(app, [*args[:-2], "--template-ref", "v1"])
+    assert "error: template_ref: Only a git template takes a ref" in result.output
+    assert not projects_dir.exists()
+
+
+def test_init_refuses_a_bad_branch_name(projects_dir: Path, tmp_path: Path) -> None:
+    args = ["init", "demo", "--repo", str(tmp_path / "n"), "--source", "empty"]
+    result = runner.invoke(app, [*args, "--branch", "a..b"])
+    assert result.exit_code == 1
+    assert "error: branch: 'a..b' is not a valid branch name" in result.output
 
 
 def test_validate_prints_every_error(projects_dir: Path, git_repo: Path) -> None:

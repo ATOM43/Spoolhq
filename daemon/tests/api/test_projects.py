@@ -47,6 +47,7 @@ def test_list_and_get_projects(run_client: TestClient, token: str, run_project: 
             "last_activity": None,
             "usage": {"tokens": 0, "cost_usd": None},
             "settings_error": None,
+            "job_id": None,
         }
     ]
     detail = run_client.get("/api/projects/demo", headers=auth(token)).json()

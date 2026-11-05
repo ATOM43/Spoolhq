@@ -74,6 +74,17 @@ def _load(
     return None, SettingsProblem(file=str(folder / "project.yaml"), field=field, message=message)
 
 
+def _creating(request: Request, name: str) -> ProjectSummary | None:
+    """A project a creation job still holds: reported as such, its files left alone."""
+    jobs: CreationJobs = request.app.state.creation
+    job_id = jobs.running(name)
+    if job_id is None:
+        return None
+    return ProjectSummary(
+        name=name, done=0, total=0, run_state="creating", needs_you=0, job_id=job_id
+    )
+
+
 def _summary(request: Request, name: str) -> tuple[ProjectSummary, TicketListing, Project | None]:
     folder = workspace(request, name)
     # Read first: an event written while the rest is read is then replayed after it.
@@ -129,7 +140,8 @@ def _summary(request: Request, name: str) -> tuple[ProjectSummary, TicketListing
 @router.get("")
 def list_projects(request: Request) -> list[ProjectSummary]:
     return [
-        _summary(request, path.name)[0] for path in list_workspaces(settings(request).projects_dir)
+        _creating(request, path.name) or _summary(request, path.name)[0]
+        for path in list_workspaces(settings(request).projects_dir)
     ]
 
 
@@ -146,6 +158,10 @@ def create_project(body: CreateProject, request: Request) -> JobStarted:
 
 @router.get("/{name}")
 def get_project(name: ProjectName, request: Request) -> ProjectDetail:
+    if creating := _creating(request, name):
+        return ProjectDetail(
+            **creating.model_dump(), repo=None, default_branch=None, remote=None, invalid_tickets=0
+        )
     summary, listing, project = _summary(request, name)
     tickets, next_ticket, idle = listing.tickets, None, None
     try:

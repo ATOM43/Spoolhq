@@ -259,6 +259,27 @@ describe("Home", () => {
     expect(screen.queryByText(/Unknown/)).toBeNull();
   });
 
+  it("shows a project being created as Creating…, with no Needs-you card", async () => {
+    projects = [
+      // What the daemon reports while a creation job holds the project; even a
+      // half-written project.yaml is never reported as invalid then.
+      project("fresh", {
+        run_state: "creating",
+        job_id: "a".repeat(32),
+        total: 0,
+        draft: 2, // would be a "Draft plan" card for any other project
+      }),
+    ];
+    renderHome();
+    const card = await screen.findByRole("link", { name: /fresh/ });
+    const status = within(card).getByText("Creating…");
+    expect(status).toHaveAttribute("data-status", "creating");
+    expect(status.querySelector("svg.animate-spin")).not.toBeNull();
+    expect(card).not.toHaveTextContent("Settings invalid");
+    expect(screen.queryByRole("region", { name: /Needs you/ })).toBeNull();
+    expect(subscribeEvents).not.toHaveBeenCalled();
+  });
+
   it("shows a 'Needs you' card for each kind, with its action", async () => {
     projects = [
       project("alpha", {
@@ -401,9 +422,9 @@ describe("Home", () => {
     expect(screen.queryByText("The daemon isn't running")).toBeNull();
   });
 
-  it("shows a created project in the list without a reload", async () => {
+  it("shows a project being created in the list without a reload", async () => {
     POST.mockImplementation(() => {
-      projects = [project("fresh", { total: 0 })];
+      projects = [project("fresh", { total: 0, run_state: "creating" })];
       return ok({ job_id: "j1" });
     });
     renderHome();
@@ -415,25 +436,47 @@ describe("Home", () => {
     }
     await userEvent.click(newProject);
     const dialog = screen.getByRole("dialog", { name: "New project" });
-    await userEvent.type(within(dialog).getByLabelText("Name"), "fresh");
+    await userEvent.click(
+      within(dialog).getByRole("radio", { name: "Empty repo" }),
+    );
     await userEvent.type(
-      within(dialog).getByLabelText("Repository folder"),
+      within(dialog).getByLabelText("Project name"),
+      "fresh",
+    );
+    await userEvent.type(
+      within(dialog).getByLabelText("Repo folder"),
       "/repos/fresh",
     );
+    const steps = ["passed", "running", "pending", "pending"].map((state) => ({
+      name: "workspace",
+      title: "Step",
+      state,
+      duration_s: null,
+      passed: [],
+      message: null,
+      output: null,
+      field: null,
+    }));
     GET.mockImplementation((path) =>
       path === "/api/projects"
         ? ok(projects)
-        : path === "/api/projects/{name}/settings"
-          ? ok({ settings: { commands: {} } })
-          : path === "/api/jobs/{job_id}"
-            ? ok({ id: "j1", project: "fresh", state: "succeeded", steps: [] })
-            : ok([]),
+        : path === "/api/jobs/{job_id}"
+          ? ok({
+              id: "j1",
+              project: "fresh",
+              source: "empty",
+              state: "running",
+              steps,
+            })
+          : ok([]),
     );
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Create project" }),
     );
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: /fresh/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /fresh/ })).toHaveTextContent(
+        "Creating…",
+      );
     });
   });
 });

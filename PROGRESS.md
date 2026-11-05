@@ -4,12 +4,12 @@ Newest entries at the bottom. One entry per merged ticket.
 
 ## What exists
 
-Built: T01–T20, T27–T35. Older entries are in [docs/progress-archive.md](docs/progress-archive.md); code layout in [docs/architecture.md](docs/architecture.md).
+Built: T01–T20, T27–T36. Older entries are in [docs/progress-archive.md](docs/progress-archive.md); code layout in [docs/architecture.md](docs/architecture.md).
 
 - **Tooling and CI**: monorepo (`daemon/`, `desktop/`, `templates/`, `docs/`), `justfile` (`install`, `lint`, `test`, `dev`), CI on Linux, macOS and Windows; ruff, mypy strict, import-linter, ESLint boundaries, 500-line limit, 85% daemon coverage.
 - **Core** (`core/`): config from `config.toml` and `SPOOLHQ_*`, bearer token, JSON logs, single-instance lock, ticket ids and `slugify`, the agent environment allowlist.
 - **Projects** (`services/projects/`): workspaces under `~/spoolhq-projects/`, `project.yaml` validated by Pydantic (stack commands optional), invalid settings reported per project.
-- **Creation** (`services/creation/`): a job that creates a project from a built-in template, an existing repo or an empty repo (workspace → repo → check commands → initial commit), refuses unsafe paths first and rolls back only what it created; `spool init` and `POST /api/projects` share it.
+- **Creation** (`services/creation/`): a job that creates a project from a built-in template, an existing repo or an empty repo (workspace → repo → check commands → initial commit), refuses unsafe paths first and rolls back only what it created; `spool init` and `POST /api/projects` share it (only `spool init` takes folder or git URL templates, `--template-ref` and `--branch`); a project held by a running job is reported as `creating`.
 - **Tickets** (`services/tickets/`): Markdown tickets with frontmatter, byte-exact round trip, `spool tickets`, "Done when" parsing.
 - **Scheduler** (`services/scheduler/`): dependency graph, status transitions, `next_ready`, cycles, critical path, `spool plan check`.
 - **Run log** (`services/runs/`): SQLite per workspace (schema 7), append-only events, event bus, crash recovery, integration journal, usage totals.
@@ -26,19 +26,8 @@ Built: T01–T20, T27–T35. Older entries are in [docs/progress-archive.md](doc
 - **Secrets** (`services/secrets/`): Anthropic, GitHub and ClickUp secrets in the OS keychain, write-only over the API; each can be tested with one read-only call to its provider.
 - **API** (`api/`): REST for projects, creation jobs, tickets, spec, settings, runs, plan, agents, templates, secrets; one error format; ETags; WebSocket events with replay.
 - **CLI** (`cli/`): `spool serve`, `init`, `project`, `tickets`, `plan`, `run`, `runs`, `review`, `gates`, `prompt`, `templates`, `agents`, `worktrees`, `github`, `secrets`.
-- **Desktop** (`desktop/`): Tauri 2 + React, token kept in Rust, event bridge, Home with Needs you, New project, Settings (also from the panel), project panel with run controls and the Spec tab.
-- **Not built yet**: tracker sync (T24; `services/tracker/` is empty), Tickets tab (T21), Run tab (T22), New project dialog (T36; the old dialog is adapted to the job API meanwhile), packaging (T23), dogfood (T25), release docs (T26).
-
-## T33 · Home and project panel polish
-
-- Plan: T33, T34 and T35 added to Phase 4 (34 tickets, 83.5 h); T21 and T23 now depend on T35; critical path T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T21 → T23 → T26 (35 h).
-- Daemon: the project list and detail report an invalid `project.yaml` per project (`settings_error` with file, field, message) instead of failing, plus `draft`, `remaining_h`, `has_spec`, `template`, `run`, `run_step`, `last_activity` and `usage` (tokens and USD summed from the run log, `services/runs/totals.py`). TS client regenerated.
-- Home: full-width top bar (SpoolHQ, daemon status, Settings, + New project); Needs-you cards per kind with one action each (Unblock, Review, Review plan, Resume/Discard, Open run), hidden when empty; 320 px project cards with template badge, progress "13 of 18 done · 12 h left", status chip (icon + label, never "Unknown"), last activity and usage; daemon-down layout from the V1 PNG.
-- Project panel: full width; breadcrumb, repo path with copy, branch, remote; guidance line by section-8 state or progress with usage; underlined tabs with counts; red invalid-settings bar with Reload; `?tab=` opens a tab; the Spec editor and preview fill the window and scroll on their own.
-- Disabled controls: muted look and a CSS-only tooltip on hover and keyboard focus (`ReasonButton`).
-- Spec toolbar: word count; Import .md (FileReader, confirm before replacing a non-empty spec).
-- Tests: daemon (invalid `project.yaml` listed with its field while others load, usage sums, latest activity and step, `has_spec`, `split_error`), Vitest (every status label and icon, Settings invalid, each Needs-you kind and its action, hidden when empty, guidance per state, tooltip on hover and focus, invalid-settings bar and Reload, Import .md with and without confirmation).
-- Docs: `api.md`; DECISIONS 323–329.
+- **Desktop** (`desktop/`): Tauri 2 + React, token kept in Rust, event bridge, Home with Needs you, the New project dialog (three sources, live checklist, Fix), Settings (also from the panel), project panel with run controls and the Spec tab.
+- **Not built yet**: tracker sync (T24; `services/tracker/` is empty), Tickets tab (T21), Run tab (T22), packaging (T23), dogfood (T25), release docs (T26).
 
 ## Chore · Docs split
 
@@ -77,3 +66,11 @@ Built: T01–T20, T27–T35. Older entries are in [docs/progress-archive.md](doc
 - Desktop: the old dialog's model adapted to the job API (UI unchanged until T36); the panel shows the `no_commands` reason.
 - Tests: each source end to end, a forced failure after every step for every source (tree and git state unchanged), an empty folder kept, symlinks not followed, cancel during commands, a failing test command (`commands.test`, first failure line), path, template and name refusals with no job, presets and their decisions, CLI and API workspaces identical, 1 h retention.
 - Docs: `api.md` (creating a project, rollback, presets), `templates.md`, `project-yaml.md`, `architecture.md`, README, `task.md`; DECISIONS 337–344.
+
+## T36 · New project dialog
+
+- Daemon: `GET /api/templates` adds `commands` (`install`, `lint`, `test` from the contract); a job's `commands` step adds `passed`. While a running job holds a project, the list and detail answer `run_state: "creating"` with `job_id` and read nothing else (no `project.yaml` validation, no run log). TS client regenerated.
+- CLI: `spool init --template` takes a built-in name, a local folder or a git URL again, plus `--template-ref` and `--branch` (template or empty repo, default `main`; refused for an existing repo with "An existing repo uses its checked-out branch"), through a CLI-only `Local` option on `check_request`; `CreateProject` is unchanged and the API still refuses a folder or URL. Folder and URL templates pass `check_safe`; step 2 renders the commit step 1 resolved; `template.name` is the contract's name.
+- Desktop: `features/project-create` rewritten to D1 (560 px, ✕): source switch, template cards with Bundled badge, name with live slug check, workspace path, repo folder with picker and per-source help, stack commands (pre-filled / "e.g. just test" / optional), "More" (remote, merge preset, ClickUp list); Create posts, 422 errors at their field; checklist polled every 500 ms (stops on close) with icon + label per step and "n of 3 passed"; failure shows message, output and rollback, **Fix** focuses the failed field; Cancel and close ask first, then cancel; success opens the panel on Spec with the toast "Project created — write your spec next" (new shared `showToast`/`Toaster`). Home shows "Creating…" and no Needs-you card or event stream for such a project. The two-step dialog and its placeholder commands are gone.
+- Tests: daemon (template commands, `creating` not validated, gone after rollback, `passed`, CLI folder/git-URL/unsafe templates, `--branch dev`, `--branch` with an existing repo, bad branch, API 422 for folder/URL and unknown `template_ref`/`branch`), Vitest (fields and help per source, `VW`, pre-filled commands, empty repo without commands, 422 at its field, step states, failure output and Fix focus, left-behind line, Cancel confirm, success navigation and toast, polling stops on close, templates Retry, Home "Creating…").
+- Docs: `api.md` (template `commands`, `passed`, a project being created), `templates.md`, README (`spool init` options); DECISIONS 345–349.

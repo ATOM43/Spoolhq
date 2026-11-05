@@ -36,6 +36,7 @@ from spoolhq.services.creation import (
     CreateProject,
     CreationError,
     Job,
+    Local,
     Runner,
     StackCommands,
     check_request,
@@ -44,7 +45,7 @@ from spoolhq.services.creation.request import MergePreset, Source
 from spoolhq.services.github import github_token
 from spoolhq.services.projects import ProjectError, load_project
 from spoolhq.services.projects.workspace import REPO_NOTES
-from spoolhq.services.templates import builtin_names, load_contract, open_template
+from spoolhq.services.templates import TemplateError, load_contract, open_template
 
 app = typer.Typer(
     name="spool",
@@ -160,7 +161,15 @@ def init(
         typer.Option(help="template, existing or empty (default: template with --template)."),
     ] = None,
     template: Annotated[
-        str | None, typer.Option(help="A built-in template (spool templates list).")
+        str | None,
+        typer.Option(help="A built-in template (spool templates list), a folder or a git URL."),
+    ] = None,
+    template_ref: Annotated[
+        str | None, typer.Option(help="Branch, tag or commit of a git template.")
+    ] = None,
+    branch: Annotated[
+        str | None,
+        typer.Option(help="First branch of a template or empty repo (default: main)."),
     ] = None,
     install: CommandOption = None,
     lint: CommandOption = None,
@@ -177,13 +186,18 @@ def init(
 ) -> None:
     """Create a project: generate its repo from a template, use an existing git
     repository or start an empty one, check the stack commands and make the first
-    commit. A failed step undoes what was created. Same service as POST /api/projects."""
+    commit. A failed step undoes what was created. Same service as POST /api/projects,
+    which takes built-in templates only; a folder or URL template passes the same
+    Copier safety check."""
     settings = _settings()
     commands = {"install": install, "lint": lint, "test": test}
-    if template is not None and template in builtin_names():
+    if template is not None and None in commands.values():
         # The template's own commands, unless given: what the app's dialog pre-fills.
-        with open_template(template) as found:
-            defaults = load_contract(found.root, found.label).commands.gates()
+        try:
+            with open_template(template, template_ref) as found:
+                defaults = load_contract(found.root, found.label).commands.gates()
+        except TemplateError as exc:
+            _fail(f"error: template: {exc}")
         commands = {gate: value or defaults[gate] for gate, value in commands.items()}
     try:
         request = CreateProject(
@@ -201,6 +215,7 @@ def init(
             projects_dir=settings.projects_dir,
             worktrees_dir=settings.worktrees_dir,
             home=home_dir(),
+            local=Local(template_ref=template_ref, branch=branch),
         )
     except ValidationError as exc:
         _fail("\n".join(f"error: {error['msg']}" for error in exc.errors()))

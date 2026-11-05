@@ -16,6 +16,11 @@ def test_list_templates(client: TestClient, token: str) -> None:
     assert by_name["fastapi-react"]["summary"] == (
         "FastAPI · SQLAlchemy · pytest · React · Vite · TypeScript · justfile · CI"
     )
+    assert by_name["fastapi-react"]["commands"] == {
+        "install": "just install",
+        "lint": "just lint",
+        "test": "just test",
+    }
 
 
 def test_list_templates_needs_the_token(client: TestClient) -> None:

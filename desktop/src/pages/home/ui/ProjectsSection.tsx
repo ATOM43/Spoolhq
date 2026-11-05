@@ -28,7 +28,8 @@ const NO_PROJECTS: ProjectSummary[] = [];
 export function ProjectsSection() {
   const projects = useProjects();
   const list = projects.data ?? NO_PROJECTS;
-  useProjectEvents(list);
+  // A project being created has no event stream yet; the dialog refreshes the list.
+  useProjectEvents(list.filter((project) => project.run_state !== "creating"));
 
   if (projects.isPending) {
     return (

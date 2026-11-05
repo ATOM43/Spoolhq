@@ -6,7 +6,7 @@ The code is `services/templates/`: the contract in `contract.py`, sources in `so
 
 ## Sources
 
-`spool templates check` takes one of these; creating a project (`spool init --template`, `POST /api/projects`) takes **only a built-in name**, since a template can run code:
+`spool templates check` and `spool init --template` take any of these (`--template-ref` for a git ref); `POST /api/projects`, whose input comes from the app's webview, takes **only a built-in name**, since a template can run code. A folder or URL template passes the same no-trust check as a built-in before it renders:
 
 | Source | Looks like | `template.ref` in `project.yaml` |
 | --- | --- | --- |

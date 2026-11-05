@@ -1,23 +1,38 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useNavigate } from "react-router";
 
-import { Button, Dialog } from "@/shared/ui";
+import { queryKeys } from "@/shared/api";
+import { Button, Dialog, showToast } from "@/shared/ui";
 
-import { CommandsStep } from "./CommandsStep";
-import { CreateStep } from "./CreateStep";
+import { NewProjectForm } from "./NewProjectForm";
 
-/** The New project button and its two-step dialog: create, then test the commands. */
+export const CREATED_TOAST = "Project created — write your spec next";
+
+/** The New project button and D1, its dialog. */
 export function NewProjectButton({
   variant = "default",
 }: {
   variant?: "default" | "outline";
 }) {
   const [open, setOpen] = useState(false);
-  const [created, setCreated] = useState<string | null>(null);
-  const close = () => {
+  const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const close = useCallback(() => {
     setOpen(false);
-    setCreated(null);
-  };
+    setBusy(false);
+  }, []);
+  const created = useCallback(
+    (name: string) => {
+      close();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.projects });
+      void navigate(`/p/${name}?tab=spec`);
+      showToast(CREATED_TOAST);
+    },
+    [close, navigate, queryClient],
+  );
 
   return (
     <>
@@ -33,18 +48,11 @@ export function NewProjectButton({
       <Dialog
         open={open}
         onClose={close}
-        title={created === null ? "New project" : "Stack commands"}
-        description={
-          created === null
-            ? "Link a git repository, or generate one from a template."
-            : undefined
-        }
+        closable={!busy}
+        title="New project"
+        className="max-h-[calc(100vh-2rem)] max-w-[560px] overflow-y-auto"
       >
-        {created === null ? (
-          <CreateStep onCreated={setCreated} onCancel={close} />
-        ) : (
-          <CommandsStep name={created} onDone={close} />
-        )}
+        <NewProjectForm onClose={close} onBusy={setBusy} onCreated={created} />
       </Dialog>
     </>
   );

@@ -1,71 +1,105 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createMemoryRouter, useLocation } from "react-router";
+import { RouterProvider } from "react-router/dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api, DaemonError, pickFolder } from "@/shared/api";
+import { api, DaemonError, type Schemas } from "@/shared/api";
+import { Toaster } from "@/shared/ui";
 
-import { NewProjectButton } from "./NewProjectButton";
+import { NAME_RULE } from "../model/form";
+import { CREATED_TOAST, NewProjectButton } from "./NewProjectButton";
 
 vi.mock("@/shared/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/shared/api")>();
   return {
     ...actual,
-    api: { GET: vi.fn(), POST: vi.fn(), PUT: vi.fn() },
+    api: { GET: vi.fn(), POST: vi.fn() },
     pickFolder: vi.fn(),
   };
 });
 
 type Handler = (path: string, init?: unknown) => unknown;
-const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn<Handler>>;
-const GET = mocked(api.GET);
-const POST = mocked(api.POST);
-const PUT = mocked(api.PUT);
+const GET = vi.mocked(api.GET) as unknown as ReturnType<typeof vi.fn<Handler>>;
+const POST = vi.mocked(api.POST) as unknown as ReturnType<
+  typeof vi.fn<Handler>
+>;
+type Job = Schemas["JobView"];
+type Step = Schemas["StepView"];
 
-const ok = (data: unknown, headers: Record<string, string> = {}) =>
-  Promise.resolve({ data, response: new Response(null, { headers }) });
-
-function apiError(field: string | null, message: string, status = 422) {
-  return new DaemonError({
-    kind: "api",
-    status,
-    code: status === 422 ? "validation_error" : "conflict",
-    message,
-    field,
-    etag: null,
-    current: null,
-  });
-}
-
-const TEMPLATES = [
-  { name: "fastapi-react", description: "FastAPI and React." },
-  { name: "cli-tool", description: "A Python CLI." },
-];
-const JOB = { id: "j1", project: "demo", state: "succeeded", steps: [] };
-const SETTINGS = {
-  name: "demo",
+const ok = (data: unknown) =>
+  Promise.resolve({ data, response: new Response() });
+const JOB_ID = "a".repeat(32);
+const TEMPLATE = {
+  name: "fastapi-react",
+  description: "A FastAPI and React stack.",
+  summary: "FastAPI · SQLAlchemy · pytest · React",
   commands: { install: "just install", lint: "just lint", test: "just test" },
 };
+const NAMES = ["workspace", "repo", "commands", "commit"] as const;
+const TITLES = [
+  "Create workspace",
+  "Prepare repo",
+  "Check commands",
+  "Initial commit",
+];
 
-function result(status: string, extra: Record<string, unknown> = {}) {
+function job(
+  state: Job["state"],
+  steps: [Step["state"], Partial<Step>?][],
+  extra: Partial<Job> = {},
+): Job {
   return {
-    status,
-    exit_code: status === "passed" ? 0 : 1,
-    duration_s: 1.25,
-    output: "",
-    output_truncated: false,
-    timeout_s: 90,
+    id: JOB_ID,
+    project: "demo",
+    source: "template",
+    state,
+    rollback: null,
+    steps: steps.map(([stepState, more], index) => ({
+      name: NAMES[index] ?? "commit",
+      title: TITLES[index] ?? "",
+      state: stepState,
+      duration_s: null,
+      passed: [],
+      message: null,
+      output: null,
+      field: null,
+      ...more,
+    })),
     ...extra,
   };
 }
 
+const RUNNING = job("running", [
+  ["passed"],
+  ["passed"],
+  ["running", { passed: ["install", "lint"] }],
+  ["pending"],
+]);
+
+let jobReply: Job = RUNNING;
+
+function Panel() {
+  const location = useLocation();
+  return <p>Panel at {location.pathname + location.search}</p>;
+}
+
 function renderButton() {
-  const queryClient = new QueryClient({
+  const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  const router = createMemoryRouter(
+    [
+      { path: "/", element: <NewProjectButton /> },
+      { path: "/p/:id", element: <Panel /> },
+    ],
+    { initialEntries: ["/"] },
+  );
   render(
-    <QueryClientProvider client={queryClient}>
-      <NewProjectButton />
+    <QueryClientProvider client={client}>
+      <RouterProvider router={router} />
+      <Toaster />
     </QueryClientProvider>,
   );
 }
@@ -73,298 +107,306 @@ function renderButton() {
 async function openDialog() {
   renderButton();
   await userEvent.click(screen.getByRole("button", { name: "New project" }));
-  return screen.getByRole("dialog", { name: "New project" });
+  const dialog = screen.getByRole("dialog", { name: "New project" });
+  await within(dialog).findByText("fastapi-react");
+  return dialog;
 }
 
-async function createDemo() {
-  const dialog = await openDialog();
-  await userEvent.type(within(dialog).getByLabelText("Name"), "demo");
-  await userEvent.type(
-    within(dialog).getByLabelText("Repository folder"),
-    "/repos/demo",
-  );
-  await userEvent.click(
-    within(dialog).getByRole("button", { name: "Create project" }),
-  );
-  return screen.findByRole("dialog", { name: "Stack commands" });
+async function fill(name: string, repo = "/home/me/code/demo") {
+  await userEvent.type(screen.getByLabelText("Project name"), name);
+  await userEvent.type(screen.getByLabelText("Repo folder"), repo);
 }
+
+const create = () => screen.getByRole("button", { name: "Create project" });
+const jobPolls = () =>
+  GET.mock.calls.filter(([path]) => path === "/api/jobs/{job_id}").length;
+const requestBody = () =>
+  (POST.mock.calls[0]?.[1] as { body: Record<string, unknown> }).body;
 
 describe("New project", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    jobReply = RUNNING;
     GET.mockImplementation((path) => {
       if (path === "/api/templates") {
-        return ok(TEMPLATES);
+        return ok([TEMPLATE]);
       }
-      if (path === "/api/projects/{name}/settings") {
-        return ok({ settings: SETTINGS }, { ETag: '"etag-1"' });
+      if (path === "/api/settings") {
+        return ok({ projects_dir: "/home/me/spoolhq-projects" });
       }
       if (path === "/api/jobs/{job_id}") {
-        return ok(JOB);
+        return ok(jobReply);
       }
       throw new Error(`unexpected GET ${path}`);
     });
-    POST.mockImplementation((path) =>
-      path === "/api/projects"
-        ? ok({ job_id: "j1" })
-        : Promise.reject(new Error(`unexpected POST ${path}`)),
-    );
-  });
-
-  it("says what is missing before Create is enabled", async () => {
-    const dialog = await openDialog();
-    const create = within(dialog).getByRole("button", {
-      name: "Create project",
-    });
-    expect(create).toBeDisabled();
-    expect(within(dialog).getByText("Enter a name.")).toBeInTheDocument();
-    await userEvent.type(within(dialog).getByLabelText("Name"), "demo");
-    expect(within(dialog).getByText("Choose a folder.")).toBeInTheDocument();
-  });
-
-  it("fills the repository from the folder picker and creates the project", async () => {
-    vi.mocked(pickFolder).mockResolvedValue("/home/me/repo");
-    const dialog = await openDialog();
-    await userEvent.type(within(dialog).getByLabelText("Name"), "demo");
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Choose…" }),
-    );
-    expect(within(dialog).getByLabelText("Repository folder")).toHaveValue(
-      "/home/me/repo",
-    );
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Create project" }),
-    );
-    await screen.findByRole("dialog", { name: "Stack commands" });
-    expect(POST).toHaveBeenCalledWith("/api/projects", {
-      body: {
-        name: "demo",
-        source: "existing",
-        repo_path: "/home/me/repo",
-        template: null,
-        commands: SETTINGS.commands,
-        merge_preset: "direct_unless_risky",
-      },
+    POST.mockImplementation((path) => {
+      if (path === "/api/projects") {
+        return ok({ job_id: JOB_ID });
+      }
+      if (path === "/api/jobs/{job_id}/cancel") {
+        return ok(
+          job("cancelled", [["passed"], ["failed"], ["pending"], ["pending"]]),
+        );
+      }
+      throw new Error(`unexpected POST ${path}`);
     });
   });
 
-  it("creates from a template chosen from the daemon's list", async () => {
+  it("shows the right fields and help text for each source", async () => {
     const dialog = await openDialog();
-    await userEvent.type(within(dialog).getByLabelText("Name"), "demo");
-    await userEvent.click(within(dialog).getByLabelText(/A template/));
-    const select = within(dialog).getByLabelText("Template");
+    expect(within(dialog).getByText("Bundled")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /fastapi-react/ })).toBeChecked();
+    expect(
+      screen.getByText("A new or empty folder; its parent must exist"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Filled in from the template. Gates run these on every ticket.",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Project name"), "demo");
+    expect(screen.getByLabelText("Workspace")).toHaveTextContent(
+      "/home/me/spoolhq-projects/demo",
+    );
+
+    await userEvent.click(screen.getByRole("radio", { name: "Existing repo" }));
+    expect(within(dialog).queryByText("fastapi-react")).toBeNull();
+    expect(
+      screen.getByText(
+        "The stack commands run in your checkout; files they create (like .venv) stay even if creation fails",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("test")).toHaveValue("");
+    expect(screen.getByLabelText("test")).toHaveAttribute(
+      "placeholder",
+      "e.g. just test",
+    );
+    expect(
+      screen.getByText("Gates run these on every ticket."),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("radio", { name: "Empty repo" }));
+    expect(
+      screen.getByText("A new or empty folder; its parent must exist"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Leave empty to set later in project.yaml. Gates run these on every ticket.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/merge policy: Direct unless risky/)).toBeVisible();
+  });
+
+  it("shows the name rule for VW and keeps Create disabled", async () => {
+    await openDialog();
+    await fill("VW");
+    expect(screen.getByRole("alert")).toHaveTextContent(NAME_RULE);
+    expect(create()).toBeDisabled();
+    await userEvent.clear(screen.getByLabelText("Project name"));
+    await userEvent.type(screen.getByLabelText("Project name"), "vw");
+    expect(create()).toBeEnabled();
+  });
+
+  it("fills the commands in from the template", async () => {
+    await openDialog();
+    expect(screen.getByLabelText("install")).toHaveValue("just install");
+    expect(screen.getByLabelText("lint")).toHaveValue("just lint");
+    expect(screen.getByLabelText("test")).toHaveValue("just test");
+  });
+
+  it("creates an empty repo without commands", async () => {
+    await openDialog();
+    await userEvent.click(screen.getByRole("radio", { name: "Empty repo" }));
+    await fill("demo");
+    await userEvent.click(create());
     await waitFor(() => {
-      expect(select).toBeEnabled();
+      expect(POST).toHaveBeenCalledWith("/api/projects", expect.anything());
     });
-    await userEvent.selectOptions(select, "fastapi-react");
-    expect(within(dialog).getByText("FastAPI and React.")).toBeInTheDocument();
-    await userEvent.type(
-      within(dialog).getByLabelText("New or empty folder"),
-      "/repos/new",
-    );
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Create project" }),
-    );
-    await screen.findByRole("dialog", { name: "Stack commands" });
-    expect(POST).toHaveBeenCalledWith("/api/projects", {
-      body: {
-        name: "demo",
-        source: "template",
-        repo_path: "/repos/new",
-        template: "fastapi-react",
-        commands: SETTINGS.commands,
-        merge_preset: "direct_unless_risky",
-      },
+    expect(requestBody()).toEqual({
+      name: "demo",
+      source: "empty",
+      repo_path: "/home/me/code/demo",
+      template: null,
+      commands: { install: null, lint: null, test: null },
+      git_remote: null,
+      merge_preset: "direct_unless_risky",
+      clickup_list_id: null,
     });
   });
 
-  it("shows API field errors next to their fields", async () => {
-    POST.mockRejectedValueOnce(
-      apiError("name", "name: String should match pattern"),
+  it("puts a 422 next to its field, with no checklist", async () => {
+    POST.mockImplementation(() =>
+      Promise.reject(
+        new DaemonError({
+          kind: "api",
+          status: 422,
+          code: "validation_error",
+          message: "The parent folder doesn't exist",
+          field: "repo_path",
+          etag: null,
+          current: null,
+        }),
+      ),
     );
-    const dialog = await openDialog();
-    await userEvent.type(within(dialog).getByLabelText("Name"), "Bad Name");
-    await userEvent.type(
-      within(dialog).getByLabelText("Repository folder"),
-      "/r",
-    );
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Create project" }),
-    );
-    const name = within(dialog).getByLabelText("Name");
+    await openDialog();
+    await fill("demo");
+    await userEvent.click(create());
+    const repo = screen.getByLabelText("Repo folder");
     await waitFor(() => {
-      expect(name).toHaveAccessibleDescription(
-        "name: String should match pattern",
+      expect(repo).toHaveAccessibleDescription(
+        "The parent folder doesn't exist",
       );
     });
-    expect(name).toHaveAttribute("aria-invalid", "true");
-
-    POST.mockRejectedValueOnce(
-      apiError("repo_path", "repo: not a git repository"),
-    );
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Create project" }),
-    );
-    await waitFor(() => {
-      expect(
-        within(dialog).getByLabelText("Repository folder"),
-      ).toHaveAccessibleDescription("repo: not a git repository");
-    });
-
-    POST.mockRejectedValueOnce(
-      apiError(null, "project folder already exists: /w/demo", 409),
-    );
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Create project" }),
-    );
+    expect(repo).toHaveAttribute("aria-invalid", "true");
     expect(
-      await within(dialog).findByText("project folder already exists: /w/demo"),
-    ).toBeInTheDocument();
+      screen.queryByRole("region", { name: "Creating the project" }),
+    ).toBeNull();
+    expect(repo).toBeEnabled();
   });
 
-  it("shows a failed creation step", async () => {
-    GET.mockImplementation((path) =>
-      path === "/api/jobs/{job_id}"
-        ? ok({
-            ...JOB,
-            state: "failed",
-            steps: [
-              {
-                name: "commands",
-                state: "failed",
-                message: "The test command failed",
-                output: "FAILED t.py",
-              },
-            ],
-          })
-        : ok(TEMPLATES),
-    );
-    const dialog = await openDialog();
-    await userEvent.type(within(dialog).getByLabelText("Name"), "demo");
-    await userEvent.type(
-      within(dialog).getByLabelText("Repository folder"),
-      "/r",
-    );
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Create project" }),
-    );
-    expect(
-      await within(dialog).findByText("The test command failed: FAILED t.py"),
-    ).toBeInTheDocument();
+  it("shows each step's state while the job runs", async () => {
+    await openDialog();
+    await fill("demo");
+    await userEvent.click(create());
+    const list = await screen.findByRole("region", {
+      name: "Creating the project",
+    });
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "Create workspacePassed",
+      "Generate from fastapi-reactPassed",
+      "Check commands · 2 of 3 passedRunning",
+      "Initial commitPending",
+    ]);
+    expect(screen.getByRole("button", { name: "Creating…" })).toBeDisabled();
+    expect(screen.getByLabelText("Project name")).toBeDisabled();
+    const [install, , test] = screen
+      .getAllByText(/^(Passed|Running)$/)
+      .filter((el) => !list.contains(el));
+    expect(install).toHaveTextContent("Passed");
+    expect(test).toHaveTextContent("Running");
   });
 
-  it("tests each stack command and shows pass and fail", async () => {
-    POST.mockImplementation((path, init) => {
-      if (path === "/api/projects") {
-        return ok({ job_id: "j1" });
-      }
-      const { gate } = (init as { body: { gate: string } }).body;
-      return gate === "lint"
-        ? ok(result("passed", { output: "All checks passed!" }))
-        : ok(result("failed", { output: "FAILED tests/test_a.py::test_x" }));
-    });
-    const dialog = await createDemo();
-    expect(within(dialog).getByLabelText("Lint")).toHaveValue("just lint");
-
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Test Lint" }),
-    );
-    expect(
-      await within(dialog).findByText(/Passed · 1\.3 s/),
-    ).toBeInTheDocument();
-    expect(within(dialog).getByText("All checks passed!")).toBeInTheDocument();
-
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Test Test" }),
-    );
-    expect(
-      await within(dialog).findByText(/Failed \(exit 1\)/),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).getByText("FAILED tests/test_a.py::test_x"),
-    ).toBeInTheDocument();
-    expect(POST).toHaveBeenCalledWith("/api/projects/{name}/commands/test", {
-      params: { path: { name: "demo" } },
-      body: { gate: "test", command: "just test" },
-    });
-  });
-
-  it("shows a refused command under its field and a timeout", async () => {
-    POST.mockImplementation((path, init) => {
-      if (path === "/api/projects") {
-        return ok({ job_id: "j1" });
-      }
-      const { gate } = (init as { body: { gate: string } }).body;
-      return gate === "install"
-        ? Promise.reject(
-            apiError("command", "command: shell syntax isn't supported"),
-          )
-        : ok(result("timed_out", { exit_code: null }));
-    });
-    const dialog = await createDemo();
-    const install = within(dialog).getByLabelText("Install");
-    await userEvent.clear(install);
-    await userEvent.type(install, "make && make install");
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Test Install" }),
-    );
-    await waitFor(() => {
-      expect(install).toHaveAccessibleDescription(
-        "command: shell syntax isn't supported",
-      );
-    });
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Test Lint" }),
-    );
-    expect(
-      await within(dialog).findByText(/Timed out after 90 s/),
-    ).toBeInTheDocument();
-  });
-
-  it("saves the commands with the ETag and closes", async () => {
-    PUT.mockReturnValue(ok({ settings: SETTINGS }));
-    const dialog = await createDemo();
-    const lint = within(dialog).getByLabelText("Lint");
-    await userEvent.clear(lint);
-    await userEvent.type(lint, "uv run ruff check");
-    expect(
-      within(dialog).getByRole("button", { name: "Test Lint" }),
-    ).toBeEnabled();
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Save commands" }),
-    );
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).toBeNull();
-    });
-    expect(PUT).toHaveBeenCalledWith("/api/projects/{name}/settings", {
-      params: { path: { name: "demo" }, header: { "if-match": '"etag-1"' } },
-      body: {
-        settings: {
-          ...SETTINGS,
-          commands: {
-            install: "just install",
-            lint: "uv run ruff check",
-            test: "just test",
+  it("shows a failed step's output and Fix focuses its field", async () => {
+    jobReply = job(
+      "failed",
+      [
+        ["passed"],
+        ["passed"],
+        [
+          "failed",
+          {
+            passed: ["install", "lint"],
+            message: "The test command failed",
+            output: "FAILED tests/test_math.py::test_add",
+            field: "commands.test",
           },
-        },
-      },
-    });
+        ],
+        ["pending"],
+      ],
+      { rollback: { removed: ["/home/me/code/demo"], left: [] } },
+    );
+    await openDialog();
+    await fill("demo");
+    await userEvent.click(create());
+    expect(
+      await screen.findByText("FAILED tests/test_math.py::test_add"),
+    ).toBeVisible();
+    expect(screen.getByText("The test command failed")).toBeVisible();
+    expect(screen.getByText("Rolled back")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Fix" }));
+    expect(
+      screen.queryByRole("region", { name: "Creating the project" }),
+    ).toBeNull();
+    expect(screen.getByLabelText("test")).toBeEnabled();
+    expect(screen.getByLabelText("test")).toHaveFocus();
   });
 
-  it("disables Test and Save for an empty command and says why", async () => {
-    const dialog = await createDemo();
-    await userEvent.clear(within(dialog).getByLabelText("Test"));
+  it("names what a rollback left behind", async () => {
+    jobReply = job("failed", [["passed"], ["failed", { field: "template" }]], {
+      rollback: { removed: [], left: ["/home/me/code/demo"] },
+    });
+    await openDialog();
+    await fill("demo");
+    await userEvent.click(create());
     expect(
-      within(dialog).getByRole("button", { name: "Test Test" }),
-    ).toBeDisabled();
+      await screen.findByText("Left behind: /home/me/code/demo"),
+    ).toBeVisible();
+  });
+
+  it("asks before Cancel stops the job", async () => {
+    await openDialog();
+    await fill("demo");
+    await userEvent.click(create());
+    await screen.findByRole("region", { name: "Creating the project" });
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const confirm = screen.getByRole("dialog", {
+      name: "Stop and remove what was created?",
+    });
+    expect(POST).not.toHaveBeenCalledWith(
+      "/api/jobs/{job_id}/cancel",
+      expect.anything(),
+    );
+    await userEvent.click(
+      within(confirm).getByRole("button", { name: "Stop and remove" }),
+    );
+    expect(POST).toHaveBeenCalledWith("/api/jobs/{job_id}/cancel", {
+      params: { path: { job_id: JOB_ID } },
+    });
+    expect(screen.queryByRole("dialog", { name: "New project" })).toBeNull();
+  });
+
+  it("opens the panel on Spec with a toast on success", async () => {
+    jobReply = job("succeeded", [
+      ["passed"],
+      ["passed"],
+      ["passed"],
+      ["passed"],
+    ]);
+    await openDialog();
+    await fill("demo");
+    await userEvent.click(create());
+    expect(await screen.findByText("Panel at /p/demo?tab=spec")).toBeVisible();
+    expect(screen.getByText(CREATED_TOAST).parentElement).toHaveAttribute(
+      "aria-live",
+      "polite",
+    );
+  });
+
+  it("stops polling when the dialog closes", async () => {
+    await openDialog();
+    await fill("demo");
+    await userEvent.click(create());
+    await waitFor(
+      () => {
+        expect(jobPolls()).toBeGreaterThanOrEqual(2);
+      },
+      { timeout: 2000 },
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Stop and remove" }),
+    );
+    const polls = jobPolls();
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(jobPolls()).toBe(polls);
+  });
+
+  it("offers Retry when the templates don't load", async () => {
+    let fail = true;
+    const usual = GET.getMockImplementation();
+    GET.mockImplementation((path, init) =>
+      path === "/api/templates" && fail
+        ? Promise.reject(new Error("down"))
+        : usual?.(path, init),
+    );
+    renderButton();
+    await userEvent.click(screen.getByRole("button", { name: "New project" }));
     expect(
-      within(dialog).getByText("Enter a command to test it."),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).getByRole("button", { name: "Save commands" }),
-    ).toBeDisabled();
-    expect(
-      within(dialog).getByText("Enter the test command to save."),
-    ).toBeInTheDocument();
+      await screen.findByText("Couldn't load the templates"),
+    ).toBeVisible();
+    fail = false;
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("fastapi-react")).toBeVisible();
   });
 });

@@ -12,6 +12,8 @@ class StepView(BaseModel):
     title: str
     state: Literal["pending", "running", "passed", "failed", "skipped"]
     duration_s: float | None
+    passed: list[Literal["install", "lint", "test"]]
+    """For ``commands``: the commands that passed so far, in order (empty for the rest)."""
     message: str | None
     """For a failure: a fixed message."""
     output: str | None

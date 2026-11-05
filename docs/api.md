@@ -12,7 +12,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | --- | --- |
 | `GET /api/health` | `{"status": "ok"}`, no token |
 | `GET /api/version` | the daemon's version |
-| `GET /api/projects` | each project: `name`, `done`/`total`/`draft` tickets, `remaining_h`, `run_state` (`running`, `paused` or `idle`), `needs_you` (tickets `awaiting_approval` or `blocked`), `latest_seq` (see [Starting from REST](#event-websocket)), `has_spec` (`CONTEXT.md` isn't blank or init's starter), `template` (null for an existing repo), `run` (the active, else latest run) and `run_step` (its latest phase), `last_activity` (the latest event's time), `usage` (`tokens` of attempts without a cost, `cost_usd` summed over those with one), and `settings_error` (`{file, field, message}`, the first problem of a `project.yaml` that doesn't load; the project is listed anyway) |
+| `GET /api/projects` | each project: `name`, `done`/`total`/`draft` tickets, `remaining_h`, `run_state` (`running`, `paused`, `creating` or `idle`; see [A project being created](#a-project-being-created)), `needs_you` (tickets `awaiting_approval` or `blocked`), `latest_seq` (see [Starting from REST](#event-websocket)), `has_spec` (`CONTEXT.md` isn't blank or init's starter), `template` (null for an existing repo), `run` (the active, else latest run) and `run_step` (its latest phase), `last_activity` (the latest event's time), `usage` (`tokens` of attempts without a cost, `cost_usd` summed over those with one), and `settings_error` (`{file, field, message}`, the first problem of a `project.yaml` that doesn't load; the project is listed anyway) |
 | `POST /api/projects` | start a [creation job](#creating-a-project), like `spool init`: 202 `{"job_id"}`, or 422 with the field before any job starts |
 | `GET /api/jobs/{job_id}` | the creation job: `state` and its `steps`, plus `rollback` after a failure or cancel |
 | `POST /api/jobs/{job_id}/cancel` | stop the job and roll back; answers when the rollback is done (at most 15 s) |
@@ -32,7 +32,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/projects/{name}/runs/{run_id}` | one run with its `attempts` (number, kind, status — the verdict —, backend, tokens, times) |
 | `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/{artifact}` | an attempt's file as stored; `artifact` is `transcript`, `gates`, `diff` or `review` (422 for anything else) |
 | `POST /api/projects/{name}/github/sync` | check open pull requests now |
-| `GET /api/templates` | the built-in templates: `name` (what `POST /api/projects` takes as `template`), `description` and `summary` (one line of at most 120 characters, for a card; null if the template has none) |
+| `GET /api/templates` | the built-in templates: `name` (what `POST /api/projects` takes as `template`), `description`, `summary` (one line of at most 120 characters, for a card; null if the template has none) and `commands` (`install`, `lint`, `test` from its `spoolhq-template.yaml`, which the New project dialog pre-fills) |
 | `GET /api/agents` | what `spool agents` shows: each backend (installed, version, login, policy parts) and Graphify |
 | `GET /api/settings` | the daemon's settings, and for each secret (`anthropic`, `github`, `clickup`) only `{"set", "source": "keychain" \| "env" \| null}` |
 | `PUT`, `DELETE /api/settings/secrets/{name}` | store `{"value"}` in the OS keychain, or remove it (204) |
@@ -52,7 +52,7 @@ A secret's value is write-only: it goes to the OS keychain (service `spoolhq`, t
 | `name` | `^[a-z][a-z0-9-]{0,39}$` ("Use lowercase letters, digits and hyphens, starting with a letter"); no project of that name may exist |
 | `source` | `template`, `existing` or `empty` |
 | `repo_path` | absolute. `existing`: a git repository with a branch checked out and no uncommitted changes (they are listed); otherwise a folder that doesn't exist yet (its parent must) or is empty |
-| `template` | `template` only: a name from `GET /api/templates`. No git URLs or local paths, since a Copier template can run code |
+| `template` | `template` only: a name from `GET /api/templates`. No git URLs or local paths, since a Copier template can run code (`spool init` takes them; the request has no `template_ref` or `branch`) |
 | `commands` | `install`, `lint`, `test`; each required unless `source` is `empty`, same no-shell rule as `project.yaml` |
 | `git_remote`, `merge_preset`, `clickup_list_id` | optional; `merge_preset` is `direct_unless_risky` (default), `always_pr` or `always_direct` ([below](#merge-presets)) |
 
@@ -62,10 +62,14 @@ The job then runs four steps, each `pending`, `running`, `passed`, `failed` or `
 
 1. **Create workspace** (`workspace`): `<projects>/<name>/` with `project.yaml`, the starter `CONTEXT.md`, `tickets/` and `runs/` (and `TEMPLATE.md` for a template).
 2. **Prepare repo** (`repo`): Copier generates the template into `repo_path` (no trust, [templates](templates.md#no-trust)); `existing` is only checked again, never written to; `empty` creates the folder if needed and runs `git init -b main`.
-3. **Check commands** (`commands`): install (600 s), then lint and test (300 s each), once each in the repo through the gates code (no shell, scrubbed environment). An unset command is skipped; with none the step is `skipped`. For `existing` they run in your checkout, as a gate would.
+3. **Check commands** (`commands`): install (600 s), then lint and test (300 s each), once each in the repo through the gates code (no shell, scrubbed environment). An unset command is skipped; with none the step is `skipped`. `passed` lists the commands that passed so far (the app shows "2 of 3 passed"). For `existing` they run in your checkout, as a gate would.
 4. **Initial commit** (`commit`): `chore: generate from <template> <ref>` for a template, `git commit --allow-empty -m "Initial commit (SpoolHQ)"` for `empty` (hooks and signing off, your git identity required); skipped for `existing`.
 
 A failed step has a fixed `message` ("The test command failed"), the trimmed `output` and the request `field` that caused it (`commands.test`, `repo_path`, `template`). The job's `state` is `running`, then `succeeded`, `failed` or `cancelled`. Jobs live in the daemon's memory for an hour after they end; a restart forgets them. The app polls `GET /api/jobs/{job_id}` every 500 ms only while a job runs, since no project event stream exists before the project does.
+
+### A project being created
+
+While a running job holds a project, `GET /api/projects` and `GET /api/projects/{name}` report it with `run_state: "creating"` and the job's `job_id`, and read nothing else: its `project.yaml` is written before the repo exists, so it is not validated (no `settings_error`), and the other fields keep their defaults (`needs_you` 0, no `run`). Home shows "Creating…". When the job ends the usual state takes over; a rolled-back project is gone from the list.
 
 ### Rollback
 

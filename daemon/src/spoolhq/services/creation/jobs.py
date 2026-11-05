@@ -73,6 +73,18 @@ class CreationJobs:
                 raise UnknownJobError(f"no job {job_id!r}")
             return copy.deepcopy(found[0])
 
+    def running(self, project: str) -> str | None:
+        """The id of the running job creating ``project``, if any."""
+        with self._lock:
+            return next(
+                (
+                    job.id
+                    for job, _, _ in self._jobs.values()
+                    if job.project == project and job.state == "running"
+                ),
+                None,
+            )
+
     def wait(self, job_id: str, timeout: float | None = None) -> Job:
         with self._lock:
             found = self._jobs.get(job_id)

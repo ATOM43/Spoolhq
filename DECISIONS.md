@@ -348,3 +348,8 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 342 · `spool init` runs the creation job, with built-in templates only · docs/decisions/projects-tickets.md
 343 · Templates have a one-line `summary` · docs/decisions/projects-tickets.md
 344 · The old New project dialog stays until T36 · docs/decisions/desktop.md
+345 · `spool init` takes folder and git URL templates again; the API doesn't · docs/decisions/projects-tickets.md
+346 · A project being created reports `creating`, and nothing else is read · docs/decisions/api.md
+347 · The template list carries its commands, and the commands step its progress · docs/decisions/api.md
+348 · The New project dialog · docs/decisions/desktop.md
+349 · Where the spec won over the D1 PNG · docs/decisions/desktop.md

@@ -1,5 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
+import { cn } from "@/shared/lib";
+
 /**
  * A modal dialog on the native <dialog>, which traps focus and closes on Escape
  * without injecting inline styles (see the CSP).
@@ -10,6 +12,7 @@ export function Dialog({
   title,
   description,
   closable = true,
+  className,
   children,
 }: {
   open: boolean;
@@ -18,6 +21,8 @@ export function Dialog({
   description?: string | undefined;
   /** False: Escape does nothing (the content offers the way out). */
   closable?: boolean;
+  /** Extra classes, such as another width. */
+  className?: string | undefined;
   children: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -44,7 +49,10 @@ export function Dialog({
           event.preventDefault();
         }
       }}
-      className="m-auto w-full max-w-xl rounded-lg border bg-surface p-6 text-ink shadow-lg backdrop:bg-black/50"
+      className={cn(
+        "m-auto w-full max-w-xl rounded-lg border bg-surface p-6 text-ink shadow-lg backdrop:bg-black/50",
+        className,
+      )}
     >
       {open ? (
         <>

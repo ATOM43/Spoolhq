@@ -1,6 +1,7 @@
 """``POST /api/projects`` starts a creation job; ``/api/jobs`` reads and cancels it."""
 
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -10,8 +11,8 @@ from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from spoolhq.cli import app
-from spoolhq.services.creation import NAME_RULE
-from tests.conftest import fake_tool_cmd, run_git
+from spoolhq.services.creation import NAME_RULE, Job
+from tests.conftest import fake_tool_cmd, make_template, run_git
 
 pytestmark = pytest.mark.usefixtures("git_identity")
 PASS = {gate: fake_tool_cmd("pass") for gate in ("install", "lint", "test")}
@@ -155,6 +156,12 @@ def test_unsafe_requests_start_no_job(
     assert refused(client, token, **template, template="nope", repo_path=new) == "template"
     url = "https://github.com/o/t.git"
     assert refused(client, token, **template, template=url, repo_path=new) == "template"
+    folder = make_template(tmp_path / "local-template")
+    assert refused(client, token, **template, template=str(folder), repo_path=new) == "template"
+    # The CLI-only options aren't part of the request (DECISIONS 345).
+    for extra in ({"template_ref": "main"}, {"branch": "dev"}):
+        response = post(client, token, **template, template="fixture", repo_path=new, **extra)
+        assert (response.status_code, response.json()["error"]["field"]) == (422, *extra)
     (git_repo / "dirty.txt").write_text("x", encoding="utf-8")
     existing = {"source": "existing", "repo_path": str(git_repo), "commands": PASS}
     assert refused(client, token, **existing) == "repo_path"
@@ -189,3 +196,39 @@ def test_the_cli_and_the_api_make_the_same_workspace(
     assert finished(client, token, job_id)["state"] == "succeeded"
     assert files() == from_cli
     assert "protected_paths: ['**']" in from_cli["project.yaml"]
+
+
+def test_a_project_being_created_is_reported_as_creating(
+    client: TestClient, token: str, projects_dir: Path
+) -> None:
+    folder = projects_dir / "demo"
+    folder.mkdir(parents=True)
+    # Half written: as a job's own project.yaml is before its repo exists.
+    (folder / "project.yaml").write_text("name: demo\nrepo: relative\n", encoding="utf-8")
+    jobs = client.app.state.creation  # type: ignore[attr-defined]
+    job = Job(id="a" * 32, project="demo", source="empty")
+    jobs._jobs[job.id] = (job, threading.Event(), threading.Thread())
+    for answer in (
+        client.get("/api/projects", headers=auth(token)).json()[0],
+        client.get("/api/projects/demo", headers=auth(token)).json(),
+    ):
+        assert answer["run_state"] == "creating"
+        assert answer["job_id"] == job.id
+        assert answer["settings_error"] is None
+        assert answer["needs_you"] == 0
+    job.state = "succeeded"
+    listed = client.get("/api/projects", headers=auth(token)).json()[0]
+    assert (listed["run_state"], listed["job_id"]) == ("idle", None)
+    assert listed["settings_error"]["field"] == "repo"
+
+
+@pytest.mark.integration
+def test_a_rolled_back_project_is_gone_from_the_list(
+    client: TestClient, token: str, tmp_path: Path
+) -> None:
+    commands = {"test": fake_tool_cmd("fail-test")}
+    body = {"source": "empty", "repo_path": str(tmp_path / "new"), "commands": commands}
+    job = finished(client, token, post(client, token, **body).json()["job_id"])
+    assert job["state"] == "failed"
+    assert job["steps"][2]["field"] == "commands.test"
+    assert client.get("/api/projects", headers=auth(token)).json() == []

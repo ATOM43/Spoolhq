@@ -3121,6 +3121,17 @@
               }
             ]
           },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
           "repo": {
             "anyOf": [
               {
@@ -3291,6 +3302,17 @@
                 "type": "null"
               }
             ]
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
           }
         },
         "type": "object",
@@ -3822,6 +3844,18 @@
             ],
             "title": "Duration S"
           },
+          "passed": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "install",
+                "lint",
+                "test"
+              ]
+            },
+            "type": "array",
+            "title": "Passed"
+          },
           "message": {
             "anyOf": [
               {
@@ -3862,11 +3896,35 @@
           "title",
           "state",
           "duration_s",
+          "passed",
           "message",
           "output",
           "field"
         ],
         "title": "StepView"
+      },
+      "TemplateCommandsView": {
+        "properties": {
+          "install": {
+            "type": "string",
+            "title": "Install"
+          },
+          "lint": {
+            "type": "string",
+            "title": "Lint"
+          },
+          "test": {
+            "type": "string",
+            "title": "Test"
+          }
+        },
+        "type": "object",
+        "required": [
+          "install",
+          "lint",
+          "test"
+        ],
+        "title": "TemplateCommandsView"
       },
       "TemplateView": {
         "properties": {
@@ -3888,12 +3946,16 @@
               }
             ],
             "title": "Summary"
+          },
+          "commands": {
+            "$ref": "#/components/schemas/TemplateCommandsView"
           }
         },
         "type": "object",
         "required": [
           "name",
-          "description"
+          "description",
+          "commands"
         ],
         "title": "TemplateView"
       },

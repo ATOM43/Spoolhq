@@ -978,6 +978,8 @@ export interface components {
             last_activity?: string | null;
             usage?: components["schemas"]["UsageTotal"];
             settings_error?: components["schemas"]["SettingsProblem"] | null;
+            /** Job Id */
+            job_id?: string | null;
             /** Repo */
             repo: string | null;
             /** Default Branch */
@@ -1031,6 +1033,8 @@ export interface components {
             last_activity?: string | null;
             usage?: components["schemas"]["UsageTotal"];
             settings_error?: components["schemas"]["SettingsProblem"] | null;
+            /** Job Id */
+            job_id?: string | null;
         };
         /** Reject */
         Reject: {
@@ -1189,12 +1193,23 @@ export interface components {
             state: "pending" | "running" | "passed" | "failed" | "skipped";
             /** Duration S */
             duration_s: number | null;
+            /** Passed */
+            passed: ("install" | "lint" | "test")[];
             /** Message */
             message: string | null;
             /** Output */
             output: string | null;
             /** Field */
             field: string | null;
+        };
+        /** TemplateCommandsView */
+        TemplateCommandsView: {
+            /** Install */
+            install: string;
+            /** Lint */
+            lint: string;
+            /** Test */
+            test: string;
         };
         /** TemplateView */
         TemplateView: {
@@ -1204,6 +1219,7 @@ export interface components {
             description: string;
             /** Summary */
             summary?: string | null;
+            commands: components["schemas"]["TemplateCommandsView"];
         };
         /** TicketList */
         TicketList: {

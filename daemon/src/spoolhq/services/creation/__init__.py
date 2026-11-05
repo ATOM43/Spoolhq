@@ -21,6 +21,7 @@ from spoolhq.services.creation.request import (
     Checked,
     CreateProject,
     CreationError,
+    Local,
     StackCommands,
     check_request,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "CreationError",
     "CreationJobs",
     "Job",
+    "Local",
     "Rollback",
     "Runner",
     "StackCommands",

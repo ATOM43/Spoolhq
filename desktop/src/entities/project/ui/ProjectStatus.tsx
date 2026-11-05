@@ -17,6 +17,10 @@ import type { ProjectSummary } from "../model/queries";
 import { projectState, type ProjectStatusKind } from "../model/status";
 
 const LOOK: Record<ProjectStatusKind, { icon: ReactNode; tone: string }> = {
+  creating: {
+    icon: <LoaderCircle aria-hidden className="animate-spin" />,
+    tone: "bg-accent/10 text-accent",
+  },
   settings_invalid: {
     icon: <CircleX aria-hidden />,
     tone: "bg-danger/10 text-danger",

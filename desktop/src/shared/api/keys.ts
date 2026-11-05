@@ -13,4 +13,5 @@ export const queryKeys = {
   // Not under ["projects"], so run events don't refetch the spec while it is edited.
   spec: (project: string) => ["spec", project] as const,
   templates: ["templates"] as const,
+  job: (id: string) => ["jobs", id] as const,
 };

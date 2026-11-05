@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Security
 
-from spoolhq.api.schemas.templates import TemplateView
+from spoolhq.api.schemas.templates import TemplateCommandsView, TemplateView
 from spoolhq.api.security import bearer_scheme
 from spoolhq.services.templates import builtin_contracts
 
@@ -12,6 +12,11 @@ router = APIRouter(prefix="/api/templates", dependencies=[Security(bearer_scheme
 @router.get("")
 def list_templates() -> list[TemplateView]:
     return [
-        TemplateView(name=name, description=contract.description, summary=contract.summary)
+        TemplateView(
+            name=name,
+            description=contract.description,
+            summary=contract.summary,
+            commands=TemplateCommandsView(**contract.commands.gates()),
+        )
         for name, contract in builtin_contracts()
     ]

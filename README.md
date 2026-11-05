@@ -28,8 +28,11 @@ Or generate a new repository from a template that already passes its own gates, 
 ```sh
 uv run --directory daemon spool templates list
 uv run --directory daemon spool init my-app --repo ~/code/my-app --template fastapi-react
+uv run --directory daemon spool init api --repo ~/code/api --template gh:me/tpl --template-ref v2 --branch dev
 uv run --directory daemon spool templates check fastapi-react   # generate in a temp folder, run install/lint/test
 ```
+
+`spool init` options: `--template` (a built-in name, a local folder or a git URL; the app offers only the built-in ones), `--template-ref` (a git template's branch, tag or commit), `--branch` (a template or empty repo's first branch, default `main`; an existing repo keeps its checked-out branch, so `--branch` is refused there), `--source`, `--install`/`--lint`/`--test` (a template's own commands fill any you leave out), `--remote`, `--merge-preset`, `--clickup-list`.
 
 Write the spec in the workspace's `CONTEXT.md`, then let the planner draft the tickets, review them and approve ([planner](docs/planner.md)). Nothing runs until you approve:
 

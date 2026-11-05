@@ -1,6 +1,7 @@
 import type { ProjectSummary } from "./queries";
 
 export type ProjectStatusKind =
+  | "creating"
   | "settings_invalid"
   | "running"
   | "paused_limit"
@@ -34,6 +35,10 @@ export function settingsErrorLine(project: ProjectSummary): string | null {
 /** The project's state in a few words, most urgent first. Never "unknown". */
 export function projectState(project: ProjectSummary): ProjectState {
   const run = project.run;
+  if (project.run_state === "creating") {
+    // A creation job holds it; its project.yaml is half written, so it isn't read.
+    return { kind: "creating", label: "Creating…" };
+  }
   if (project.settings_error) {
     return { kind: "settings_invalid", label: "Settings invalid" };
   }

@@ -60,6 +60,8 @@ class Step:
     title: str
     state: StepState = "pending"
     duration_s: float | None = None
+    passed: list[str] = field(default_factory=list)
+    """For ``commands``: the gates that passed so far, in order."""
     message: str | None = None
     """For a failure: a fixed message, never request text."""
     output: str | None = None
@@ -140,6 +142,9 @@ class Runner:
         self.job, self.checked, self.projects_dir = job, checked, projects_dir
         self.cancel, self.lock = cancel, lock
         self.created: Created = []
+        self.template_ref = checked.template_ref
+        self.template_name = checked.request.template
+        """For a git template, the commit step 1 read, so step 2 renders the same one."""
 
     def _set(self, step: Step, **changes: object) -> None:
         with self.lock:
@@ -198,11 +203,14 @@ class Runner:
         template, description = None, None
         if request.template is not None:
             try:
-                with open_template(request.template) as found:
+                with open_template(request.template, self.template_ref) as found:
                     contract = load_contract(found.root, found.label)
             except TemplateError as exc:
                 raise _Failed("Couldn't read the template", "template", str(exc)) from exc
-            template = {"name": request.template, "source": found.source, "ref": found.ref}
+            if found.kind == "git":
+                self.template_ref = found.ref
+            template = {"name": contract.name, "source": found.source, "ref": found.ref}
+            self.template_name = contract.name
             description = contract.description
         try:
             result = init_project(
@@ -239,13 +247,15 @@ class Runner:
             self.created.append((repo, "path"))
         if request.source == "empty":
             try:
-                run_git(["init", "--quiet", "--initial-branch=main"], repo).check()
+                run_git(
+                    ["init", "--quiet", f"--initial-branch={self.checked.branch}"], repo
+                ).check()
             except GitError as exc:
                 raise _Failed("git init failed", "repo_path", str(exc)) from exc
             return False
         assert request.template is not None  # noqa: S101 - checked by check_request
         try:
-            with open_template(request.template) as template:
+            with open_template(request.template, self.template_ref) as template:
                 check_safe(template.root, template.label)
                 render(template, repo, request.name)
         except TemplateError as exc:
@@ -255,6 +265,7 @@ class Runner:
     def _commands(self) -> bool:
         if not self.checked.commands:
             return True
+        step = self.job.steps[2]
         for gate, command in self.checked.commands.items():
             name: GateName = gate  # type: ignore[assignment]  # keys are gate names
             result = try_command(name, command, self.checked.repo, TIMEOUTS_S[name], self.cancel)
@@ -263,6 +274,7 @@ class Runner:
             if result.status is not GateStatus.PASSED:
                 message = GATE_MESSAGES[result.status].format(gate=gate)
                 raise _Failed(message, f"commands.{gate}", result.excerpt)
+            self._set(step, passed=[*step.passed, gate])
         return False
 
     def _commit(self) -> bool:
@@ -273,8 +285,8 @@ class Runner:
             if request.source == "empty":
                 commit_staged(repo, EMPTY_COMMIT_MESSAGE, allow_empty=True)
             else:
-                message = f"chore: generate from {request.template} {spoolhq.__version__}"
-                init_repo(repo, "main", message)
+                message = f"chore: generate from {self.template_name} {spoolhq.__version__}"
+                init_repo(repo, self.checked.branch, message)
         except GitError as exc:
             raise _Failed("Couldn't make the initial commit", "repo_path", str(exc)) from exc
         return False

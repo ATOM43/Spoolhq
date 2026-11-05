@@ -2,7 +2,9 @@
 
 The repo path comes from the desktop app's webview, so it is untrusted: it is resolved
 and refused when it is the disk root, the home folder, inside SpoolHQ's own folders or
-a symlink. Templates are only the built-in names, since a Copier template can run code.
+a symlink. Templates are only the built-in names, since a Copier template can run code;
+``spool init`` (the user at a terminal) may also pass ``Local`` options: a template from
+a folder or git URL, its ref, and the new repo's branch.
 """
 
 import re
@@ -18,6 +20,7 @@ from spoolhq.services.git import (
     GitError,
     ensure_clean,
     has_local_branch,
+    is_branch_name,
     is_work_tree,
     run_git,
 )
@@ -79,6 +82,16 @@ class CreationError(Exception):
 
 
 @dataclass(frozen=True)
+class Local:
+    """What only ``spool init`` may ask for; the API never builds one (DECISIONS 345)."""
+
+    template_ref: str | None = None
+    """A git template's branch, tag or commit."""
+    branch: str | None = None
+    """A template or empty repo's first branch (default ``main``)."""
+
+
+@dataclass(frozen=True)
 class Checked:
     """A request that passed every check."""
 
@@ -89,6 +102,7 @@ class Checked:
     branch: str
     commands: dict[str, str]
     """The commands that are set, in gate order."""
+    template_ref: str | None = None
 
     def settings(self) -> dict[str, Any]:
         """The ``merge_policy`` and ``tracker`` settings the request asks for."""
@@ -173,25 +187,45 @@ def _check_new(repo: Path) -> bool:
     return True
 
 
+def _check_branch(branch: str, repo: Path) -> str:
+    if not is_branch_name(repo.parent, branch):
+        raise CreationError("branch", f"{branch!r} is not a valid branch name")
+    return branch
+
+
 def check_request(
-    request: CreateProject, *, projects_dir: Path, worktrees_dir: Path, home: Path
+    request: CreateProject,
+    *,
+    projects_dir: Path,
+    worktrees_dir: Path,
+    home: Path,
+    local: Local | None = None,
 ) -> Checked:
-    """Every check, in field order; CreationError names the first field that fails."""
+    """Every check, in field order; CreationError names the first field that fails.
+    With ``local`` (``spool init`` only), ``template`` may also be a folder or git URL."""
     if not NAME_RE.fullmatch(request.name):
         raise CreationError("name", NAME_RULE)
     workspace = project_dir(request.name, projects_dir)
     if workspace.exists() or workspace.is_symlink():
         raise CreationError("name", "A project with this name already exists")
     if request.source == "template":
-        if request.template not in builtin_names():
+        if local is None and request.template not in builtin_names():
             raise CreationError("template", "Choose one of the templates the app lists")
+        if request.template is None or not request.template.strip():
+            raise CreationError("template", "Choose a template")
     elif request.template is not None:
         raise CreationError("template", "Only a template project takes a template")
+    if local is not None and local.template_ref is not None and request.source != "template":
+        raise CreationError("template_ref", "Only a git template takes a ref")
+    branch = local.branch if local is not None else None
+    if branch is not None and request.source == "existing":
+        raise CreationError("branch", "An existing repo uses its checked-out branch")
     repo = _safe_path(request.repo_path, [projects_dir, worktrees_dir, home])
     if request.source == "existing":
         existed, branch = True, _check_existing(repo)
     else:
-        existed, branch = _check_new(repo), "main"
+        existed = _check_new(repo)
+        branch = "main" if branch is None else _check_branch(branch, repo)
     commands = _commands(request)
     if request.git_remote is not None:
         try:
@@ -202,4 +236,5 @@ def check_request(
             ) from exc
     if request.clickup_list_id is not None and not request.clickup_list_id.strip():
         raise CreationError("clickup_list_id", "Enter the ClickUp list id")
-    return Checked(request, repo, existed, branch, commands)
+    ref = local.template_ref if local is not None else None
+    return Checked(request, repo, existed, branch, commands, ref)

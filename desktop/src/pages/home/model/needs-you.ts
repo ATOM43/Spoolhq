@@ -36,8 +36,8 @@ export function needsYouCards(
 ): NeedsYouCard[] {
   const cards: NeedsYouCard[] = [];
   for (const project of projects) {
-    if (project.settings_error) {
-      continue; // the project card already says what to fix
+    if (project.settings_error || project.run_state === "creating") {
+      continue; // the project card already says what to fix, or that it's being made
     }
     const run = project.run;
     // The project's latest run explains its ticket, when it is that ticket's.

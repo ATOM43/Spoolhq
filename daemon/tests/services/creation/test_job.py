@@ -91,6 +91,7 @@ def test_from_a_template(tmp_path: Path, projects_dir: Path, home: Path) -> None
         commands=PASS,
     )
     assert (job.state, states(job), job.rollback) == ("succeeded", ["passed"] * 4, None)
+    assert job.steps[2].passed == ["install", "lint", "test"]
     assert run_git(repo, "log", "--format=%s").splitlines() == [
         f"chore: generate from fixture {spoolhq.__version__}"
     ]
@@ -216,6 +217,7 @@ def test_a_failing_test_command_names_its_field(
     assert states(job) == ["passed", "passed", "failed", "pending"]
     step = job.steps[2]
     assert (step.message, step.field) == ("The test command failed", "commands.test")
+    assert step.passed == ["install", "lint"]
     assert step.output is not None
     assert "FAILED tests/test_math.py::test_add" in step.output
     assert not (projects_dir / "demo").exists()

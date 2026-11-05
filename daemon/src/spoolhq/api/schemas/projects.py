@@ -38,7 +38,8 @@ class ProjectSummary(BaseModel):
     total: int
     """Valid tickets of the plan."""
     run_state: str
-    """The active run's status (``running``, ``paused``), else ``idle``."""
+    """The active run's status (``running``, ``paused``), ``creating`` while a creation
+    job holds the project (see ``job_id``), else ``idle``."""
     needs_you: int
     """Tickets waiting for a person: ``awaiting_approval`` or ``blocked``."""
     latest_seq: int = 0
@@ -62,6 +63,9 @@ class ProjectSummary(BaseModel):
     usage: UsageTotal = Field(default_factory=UsageTotal)
     settings_error: SettingsProblem | None = None
     """Set when ``project.yaml`` doesn't load; the project is listed anyway."""
+    job_id: str | None = None
+    """While ``run_state`` is ``creating``: the creation job. Nothing else is read then,
+    so the other fields keep their defaults."""
 
 
 class IdleView(BaseModel):
