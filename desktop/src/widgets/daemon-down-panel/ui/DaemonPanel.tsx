@@ -7,8 +7,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
   CopyCommand,
@@ -30,7 +28,7 @@ export function DaemonDownPanel({
     <PanelCard
       icon={<CircleX aria-hidden className="size-5 text-danger" />}
       title="The daemon isn't running"
-      description={`SpoolHQ needs its daemon${where}. Start it in a terminal, then retry. The app also checks again every 3 seconds.`}
+      description={`SpoolHQ needs its daemon${where}. Your projects appear here once it is running; the app checks again every 3 seconds.`}
       onRetry={onRetry}
       checking={checking}
     >
@@ -73,6 +71,7 @@ export function DaemonConnectingPanel() {
   );
 }
 
+/** V1 · Daemon not running: a red alert with Retry, then the command to start it. */
 function PanelCard({
   icon,
   title,
@@ -87,29 +86,32 @@ function PanelCard({
   children: ReactNode;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle
-          className="flex items-center gap-2"
-          role="heading"
-          aria-level={2}
-        >
-          {icon}
-          {title}
-        </CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      {children === null ? null : <CardContent>{children}</CardContent>}
-      <CardFooter>
-        <Button onClick={onRetry} disabled={checking}>
+    <>
+      <div className="flex items-start gap-3 rounded-lg bg-danger/10 px-4 py-3">
+        <span className="mt-0.5 shrink-0">{icon}</span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <h2 className="font-semibold">{title}</h2>
+          <p className="text-sm text-ink-muted">{description}</p>
+        </div>
+        <Button onClick={onRetry} disabled={checking} className="shrink-0">
           <RotateCw
             aria-hidden
             className={checking ? "animate-spin" : undefined}
           />
           Retry
         </Button>
-      </CardFooter>
-    </Card>
+      </div>
+      {children === null ? null : (
+        <Card>
+          <CardContent className="flex flex-col gap-3">
+            <p className="text-sm text-ink-muted">
+              Or start it yourself in a terminal, then press Retry:
+            </p>
+            {children}
+          </CardContent>
+        </Card>
+      )}
+    </>
   );
 }
 

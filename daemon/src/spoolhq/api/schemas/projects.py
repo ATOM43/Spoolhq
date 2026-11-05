@@ -4,7 +4,28 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, Field
 
+from spoolhq.api.schemas.runs import RunView
 from spoolhq.services.gates import check_gate_command
+
+
+class SettingsProblem(BaseModel):
+    """The first problem of a ``project.yaml`` that doesn't load."""
+
+    file: str
+    """The file's absolute path."""
+    field: str | None
+    """The dotted path of the setting, like ``merge_policy.max_diff_lines``; null for a
+    problem with the whole file (unreadable, not YAML, empty)."""
+    message: str
+
+
+class UsageTotal(BaseModel):
+    """Usage over every attempt of the project, planner included."""
+
+    tokens: int = 0
+    """Tokens of the attempts that reported no cost (subscription backends)."""
+    cost_usd: float | None = None
+    """The summed cost of the attempts that reported one (API-key backends); null if none."""
 
 
 class ProjectSummary(BaseModel):
@@ -20,6 +41,24 @@ class ProjectSummary(BaseModel):
     latest_seq: int = 0
     """The newest stored event's ``seq`` (0 if none), read before the rest of this answer:
     subscribe with ``since=latest_seq`` to get every later change without a replay."""
+    draft: int = 0
+    """Tickets in status ``draft``: the plan waits for approval."""
+    remaining_h: float = 0
+    """Estimated hours of the tickets not done (0 for an invalid plan)."""
+    has_spec: bool = False
+    """``CONTEXT.md`` exists and isn't blank."""
+    template: str | None = None
+    """The stack template the repository was generated from; null for an existing repo."""
+    run: RunView | None = None
+    """The active run, else the latest one; null before the first run or while
+    ``settings_error`` is set."""
+    run_step: str | None = None
+    """The phase ``run`` is on or ended in (``implement``, ``gates``, ``review``, …)."""
+    last_activity: str | None = None
+    """When the latest event was written; null before the first one."""
+    usage: UsageTotal = Field(default_factory=UsageTotal)
+    settings_error: SettingsProblem | None = None
+    """Set when ``project.yaml`` doesn't load; the project is listed anyway."""
 
 
 class IdleView(BaseModel):
@@ -39,8 +78,9 @@ class IdleView(BaseModel):
 
 
 class ProjectDetail(ProjectSummary):
-    repo: str
-    default_branch: str
+    repo: str | None
+    """Null while ``settings_error`` is set (as are ``default_branch`` and ``remote``)."""
+    default_branch: str | None
     remote: str | None
     invalid_tickets: int
     """Ticket files that don't load (``spool plan check`` lists them)."""
@@ -48,8 +88,6 @@ class ProjectDetail(ProjectSummary):
     """The ticket ``run/next`` would start; null when none can run (see ``idle``)."""
     idle: IdleView | None = None
     """Why nothing can run; null when ``next_ticket`` is set or there are no tickets."""
-    remaining_h: float = 0
-    """Estimated hours of the tickets not done (0 for an invalid plan)."""
 
 
 class CreateProject(BaseModel):

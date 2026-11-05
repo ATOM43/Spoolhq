@@ -871,10 +871,34 @@ export interface components {
              * @default 0
              */
             latest_seq: number;
+            /**
+             * Draft
+             * @default 0
+             */
+            draft: number;
+            /**
+             * Remaining H
+             * @default 0
+             */
+            remaining_h: number;
+            /**
+             * Has Spec
+             * @default false
+             */
+            has_spec: boolean;
+            /** Template */
+            template?: string | null;
+            run?: components["schemas"]["RunView"] | null;
+            /** Run Step */
+            run_step?: string | null;
+            /** Last Activity */
+            last_activity?: string | null;
+            usage?: components["schemas"]["UsageTotal"];
+            settings_error?: components["schemas"]["SettingsProblem"] | null;
             /** Repo */
-            repo: string;
+            repo: string | null;
             /** Default Branch */
-            default_branch: string;
+            default_branch: string | null;
             /** Remote */
             remote: string | null;
             /** Invalid Tickets */
@@ -882,11 +906,6 @@ export interface components {
             /** Next Ticket */
             next_ticket?: string | null;
             idle?: components["schemas"]["IdleView"] | null;
-            /**
-             * Remaining H
-             * @default 0
-             */
-            remaining_h: number;
         };
         /** ProjectSummary */
         ProjectSummary: {
@@ -905,6 +924,30 @@ export interface components {
              * @default 0
              */
             latest_seq: number;
+            /**
+             * Draft
+             * @default 0
+             */
+            draft: number;
+            /**
+             * Remaining H
+             * @default 0
+             */
+            remaining_h: number;
+            /**
+             * Has Spec
+             * @default false
+             */
+            has_spec: boolean;
+            /** Template */
+            template?: string | null;
+            run?: components["schemas"]["RunView"] | null;
+            /** Run Step */
+            run_step?: string | null;
+            /** Last Activity */
+            last_activity?: string | null;
+            usage?: components["schemas"]["UsageTotal"];
+            settings_error?: components["schemas"]["SettingsProblem"] | null;
         };
         /** Reject */
         Reject: {
@@ -1004,6 +1047,18 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * SettingsProblem
+         * @description The first problem of a ``project.yaml`` that doesn't load.
+         */
+        SettingsProblem: {
+            /** File */
+            file: string;
+            /** Field */
+            field: string | null;
+            /** Message */
+            message: string;
+        };
         /** SpecFile */
         SpecFile: {
             /** Content */
@@ -1066,6 +1121,19 @@ export interface components {
             meta: components["schemas"]["TicketMeta"];
             /** Body */
             body: string;
+        };
+        /**
+         * UsageTotal
+         * @description Usage over every attempt of the project, planner included.
+         */
+        UsageTotal: {
+            /**
+             * Tokens
+             * @default 0
+             */
+            tokens: number;
+            /** Cost Usd */
+            cost_usd?: number | null;
         };
         /** Version */
         Version: {

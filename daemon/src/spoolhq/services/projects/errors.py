@@ -22,6 +22,14 @@ class ProjectValidationError(ProjectError):
         self.errors = errors
 
 
+def split_error(line: str) -> tuple[str | None, str]:
+    """``project.yaml: a.b: message`` -> ``("a.b", "message")``; ``(None, message)`` for a
+    line about the whole file."""
+    rest = line.removeprefix(f"{FILE_NAME}: ")
+    field, sep, message = rest.partition(": ")
+    return (field, message) if sep else (None, rest)
+
+
 def dotted_path(loc: tuple[int | str, ...]) -> str:
     """``("merge_policy", "protected_paths", 0)`` -> ``merge_policy.protected_paths[0]``."""
     path = ""

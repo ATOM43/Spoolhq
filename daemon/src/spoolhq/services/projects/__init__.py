@@ -1,6 +1,6 @@
 """Projects: creating, listing and loading SpoolHQ projects."""
 
-from spoolhq.services.projects.errors import ProjectError, ProjectValidationError
+from spoolhq.services.projects.errors import ProjectError, ProjectValidationError, split_error
 from spoolhq.services.projects.files import EditConflict, etag_of, read_with_etag, write_if_match
 from spoolhq.services.projects.model import (
     DEFAULT_PROTECTED_PATHS,
@@ -21,6 +21,7 @@ from spoolhq.services.projects.model import (
 from spoolhq.services.projects.workspace import (
     CONTEXT_FILE,
     InitResult,
+    has_spec,
     init_project,
     list_workspaces,
     load_project,
@@ -53,11 +54,13 @@ __all__ = [
     "ProjectValidationError",
     "TemplateInfo",
     "Tracker",
+    "has_spec",
     "init_project",
     "list_workspaces",
     "load_project",
     "parse_project",
     "project_dir",
     "save_project",
+    "split_error",
     "template_description",
 ]

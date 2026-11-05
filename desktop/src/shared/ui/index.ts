@@ -8,7 +8,7 @@ export {
   CardHeader,
   CardTitle,
 } from "./card";
-export { CopyCommand } from "./copy-command";
+export { CopyButton, CopyCommand } from "./copy-command";
 export { Dialog } from "./dialog";
 export { EmptyState } from "./empty-state";
 export { Field } from "./field";

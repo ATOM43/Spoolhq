@@ -2836,12 +2836,97 @@
             "title": "Latest Seq",
             "default": 0
           },
+          "draft": {
+            "type": "integer",
+            "title": "Draft",
+            "default": 0
+          },
+          "remaining_h": {
+            "type": "number",
+            "title": "Remaining H",
+            "default": 0
+          },
+          "has_spec": {
+            "type": "boolean",
+            "title": "Has Spec",
+            "default": false
+          },
+          "template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Step"
+          },
+          "last_activity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageTotal"
+          },
+          "settings_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettingsProblem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "repo": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Repo"
           },
           "default_branch": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Default Branch"
           },
           "remote": {
@@ -2879,11 +2964,6 @@
                 "type": "null"
               }
             ]
-          },
-          "remaining_h": {
-            "type": "number",
-            "title": "Remaining H",
-            "default": 0
           }
         },
         "type": "object",
@@ -2926,6 +3006,77 @@
             "type": "integer",
             "title": "Latest Seq",
             "default": 0
+          },
+          "draft": {
+            "type": "integer",
+            "title": "Draft",
+            "default": 0
+          },
+          "remaining_h": {
+            "type": "number",
+            "title": "Remaining H",
+            "default": 0
+          },
+          "has_spec": {
+            "type": "boolean",
+            "title": "Has Spec",
+            "default": false
+          },
+          "template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Step"
+          },
+          "last_activity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageTotal"
+          },
+          "settings_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettingsProblem"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -3288,6 +3439,37 @@
         ],
         "title": "SettingsFile"
       },
+      "SettingsProblem": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "title": "File"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "field",
+          "message"
+        ],
+        "title": "SettingsProblem",
+        "description": "The first problem of a ``project.yaml`` that doesn't load."
+      },
       "SpecFile": {
         "properties": {
           "content": {
@@ -3457,6 +3639,29 @@
           "body"
         ],
         "title": "TicketView"
+      },
+      "UsageTotal": {
+        "properties": {
+          "tokens": {
+            "type": "integer",
+            "title": "Tokens",
+            "default": 0
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          }
+        },
+        "type": "object",
+        "title": "UsageTotal",
+        "description": "Usage over every attempt of the project, planner included."
       },
       "Version": {
         "properties": {

@@ -213,4 +213,4 @@ Home subscribes to every listed project, the project panel to its project. A fir
 
 ### Untrusted text
 
-Spec, ticket and agent text is untrusted. Markdown goes through `shared/ui` `Markdown` (react-markdown with `skipHtml` and its default URL transform, so raw HTML is dropped and `javascript:` links are emptied; links never navigate the webview). Everything else is rendered as React text. ESLint bans `dangerouslySetInnerHTML`. A disabled control is a `ReasonButton`: its reason is a tooltip and the button's accessible description.
+Spec, ticket and agent text is untrusted. Markdown goes through `shared/ui` `Markdown` (react-markdown with `skipHtml` and its default URL transform, so raw HTML is dropped and `javascript:` links are emptied; links never navigate the webview). Everything else is rendered as React text. ESLint bans `dangerouslySetInnerHTML`. A disabled control is a `ReasonButton`: muted, with its reason in a CSS-only tooltip on hover and keyboard focus and as the button's accessible description.

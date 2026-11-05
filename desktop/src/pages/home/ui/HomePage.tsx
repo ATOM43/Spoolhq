@@ -1,11 +1,10 @@
 import { useDaemonStatus } from "@/features/daemon-status";
-import { SettingsDialog } from "@/features/settings";
-import { NewProjectButton } from "@/features/project-create";
 import {
   DaemonConnectingPanel,
   DaemonDownPanel,
   DaemonErrorPanel,
 } from "@/widgets/daemon-down-panel";
+import { TopBar } from "@/widgets/top-bar";
 
 import { ProjectsSection } from "./ProjectsSection";
 
@@ -13,32 +12,32 @@ export function HomePage() {
   const { status, checking, retry } = useDaemonStatus();
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Home</h1>
-        <div className="flex items-center gap-2">
-          <SettingsDialog firstRun />
-          {status.state === "ok" ? <NewProjectButton /> : null}
-        </div>
-      </div>
-
+    <div className="flex min-h-full flex-col">
+      <TopBar />
       {status.state === "ok" ? (
-        // Mounted only while the daemon answers, so its queries refetch when it is back.
-        <ProjectsSection />
-      ) : status.state === "down" ? (
-        <DaemonDownPanel
-          port={status.port}
-          onRetry={retry}
-          checking={checking}
-        />
-      ) : status.state === "error" ? (
-        <DaemonErrorPanel
-          error={status.error}
-          onRetry={retry}
-          checking={checking}
-        />
+        <div className="flex flex-col gap-8 px-6 py-8">
+          <h1 className="text-2xl font-semibold tracking-tight">Home</h1>
+          {/* Mounted only while the daemon answers, so its queries refetch when it is back. */}
+          <ProjectsSection />
+        </div>
       ) : (
-        <DaemonConnectingPanel />
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-16">
+          {status.state === "down" ? (
+            <DaemonDownPanel
+              port={status.port}
+              onRetry={retry}
+              checking={checking}
+            />
+          ) : status.state === "error" ? (
+            <DaemonErrorPanel
+              error={status.error}
+              onRetry={retry}
+              checking={checking}
+            />
+          ) : (
+            <DaemonConnectingPanel />
+          )}
+        </div>
       )}
     </div>
   );

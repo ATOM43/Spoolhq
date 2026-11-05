@@ -25,25 +25,33 @@ from spoolhq.api.schemas.projects import (
     ProjectDetail,
     ProjectSummary,
     SettingsFile,
+    SettingsProblem,
     SpecFile,
+    UsageTotal,
 )
+from spoolhq.api.schemas.runs import RunView
 from spoolhq.api.security import bearer_scheme
 from spoolhq.services.gates import try_command
 from spoolhq.services.projects import (
     CONTEXT_FILE,
     EditConflict,
     InitResult,
+    Project,
+    ProjectError,
+    ProjectValidationError,
+    has_spec,
     init_project,
     list_workspaces,
     load_project,
     parse_project,
     read_with_etag,
     save_project,
+    split_error,
     write_if_match,
 )
 from spoolhq.services.projects.yaml_io import write_atomic
 from spoolhq.services.runloop import RunLoop, RunLoopError
-from spoolhq.services.runs import RunLogError
+from spoolhq.services.runs import RunLogError, latest_phase, project_totals
 from spoolhq.services.scheduler import PlanError, explain_idle, next_ready, remaining_hours
 from spoolhq.services.templates import TemplateError, init_from_template
 from spoolhq.services.tickets import TicketListing, list_tickets
@@ -54,21 +62,48 @@ NEEDS_YOU = ("awaiting_approval", "blocked")
 COMMAND_TEST_TIMEOUT_S = 90.0
 
 
-def _summary(request: Request, name: str) -> tuple[ProjectSummary, TicketListing]:
+def _load(
+    folder: Path, name: str, request: Request
+) -> tuple[Project | None, SettingsProblem | None]:
+    """The project's settings, or the first problem of its ``project.yaml``."""
+    try:
+        return load_project(name, projects_dir=settings(request).projects_dir), None
+    except ProjectValidationError as exc:
+        field, message = split_error(exc.errors[0])
+    except ProjectError as exc:
+        field, message = None, str(exc)
+    return None, SettingsProblem(file=str(folder / "project.yaml"), field=field, message=message)
+
+
+def _summary(request: Request, name: str) -> tuple[ProjectSummary, TicketListing, Project | None]:
+    folder = workspace(request, name)
     # Read first: an event written while the rest is read is then replayed after it.
     try:
-        latest_seq = run_log(request, name).last_event_id()
+        log = run_log(request, name)
+        latest_seq = log.last_event_id()
+        totals = project_totals(log)
     except (RunLogError, sqlite3.Error):
-        latest_seq = 0
+        log, latest_seq, totals = None, 0, None
     with service_errors():
         listing = list_tickets(name, projects_dir=settings(request).projects_dir)
     statuses = [ticket.meta.status for ticket in listing.tickets]
-    loop: RunLoop = request.app.state.runloop
+    project, problem = _load(folder, name, request)
+    run, step, run_state = None, None, "idle"
+    if project is not None:
+        loop: RunLoop = request.app.state.runloop
+        try:
+            current = loop.current(name)
+        except RunLoopError:
+            current = None
+        if current is not None and current.run is not None:
+            run = RunView.of(current.run)
+            step = latest_phase(log, current.run.id) if log is not None else None
+            run_state = current.run.status.value if current.active else "idle"
     try:
-        current = loop.current(name)
-        run_state = current.run.status.value if current.active and current.run else "idle"
-    except RunLoopError:
-        run_state = "unknown"
+        remaining = remaining_hours(listing.tickets)
+    except PlanError:
+        remaining = 0.0
+    cost = totals.cost_micro_usd if totals else None
     summary = ProjectSummary(
         name=name,
         done=statuses.count("done"),
@@ -76,8 +111,20 @@ def _summary(request: Request, name: str) -> tuple[ProjectSummary, TicketListing
         run_state=run_state,
         needs_you=sum(status in NEEDS_YOU for status in statuses),
         latest_seq=latest_seq,
+        draft=statuses.count("draft"),
+        remaining_h=remaining,
+        has_spec=has_spec(name, projects_dir=settings(request).projects_dir),
+        template=project.template.name if project and project.template else None,
+        run=run,
+        run_step=step,
+        last_activity=totals.last_activity if totals else None,
+        usage=UsageTotal(
+            tokens=totals.tokens if totals else 0,
+            cost_usd=None if cost is None else cost / 1_000_000,
+        ),
+        settings_error=problem,
     )
-    return summary, listing
+    return summary, listing, project
 
 
 @router.get("")
@@ -124,11 +171,8 @@ def create_project(body: CreateProject, request: Request) -> ProjectCreated:
 
 @router.get("/{name}")
 def get_project(name: ProjectName, request: Request) -> ProjectDetail:
-    workspace(request, name)
-    summary, listing = _summary(request, name)
-    with service_errors():
-        project = load_project(name, projects_dir=settings(request).projects_dir)
-    tickets, next_ticket, idle, remaining = listing.tickets, None, None, 0.0
+    summary, listing, project = _summary(request, name)
+    tickets, next_ticket, idle = listing.tickets, None, None
     try:
         if tickets:
             ready, reason = next_ready(tickets), explain_idle(tickets)
@@ -137,18 +181,16 @@ def get_project(name: ProjectName, request: Request) -> ProjectDetail:
                 idle = IdleView(
                     code=reason.code, ticket_ids=list(reason.ticket_ids), message=reason.message
                 )
-            remaining = remaining_hours(tickets)
     except PlanError as exc:
         idle = IdleView(code="invalid_plan", ticket_ids=[], message=str(exc))
     return ProjectDetail(
         **summary.model_dump(),
-        repo=str(project.repo),
-        default_branch=project.default_branch,
-        remote=project.git.remote,
+        repo=str(project.repo) if project else None,
+        default_branch=project.default_branch if project else None,
+        remote=project.git.remote if project else None,
         invalid_tickets=len(listing.invalid),
         next_ticket=next_ticket,
         idle=idle,
-        remaining_h=remaining,
     )
 
 

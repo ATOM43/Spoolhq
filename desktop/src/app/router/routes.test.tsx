@@ -163,7 +163,7 @@ describe("app shell", () => {
     expect(
       await screen.findByRole("tab", { name: "Spec", selected: true }),
     ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("tab", { name: "Tickets (0)" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Tickets 0" }));
     expect(screen.getByText("Coming in T21")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Run" }));
     expect(screen.getByText("Coming in T22")).toBeInTheDocument();

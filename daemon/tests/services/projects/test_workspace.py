@@ -11,6 +11,7 @@ from spoolhq.services.projects import (
     Project,
     ProjectError,
     ProjectValidationError,
+    has_spec,
     init_project,
     load_project,
     save_project,
@@ -667,3 +668,14 @@ def test_missing_git_is_reported(
         init_project("demo", git_repo, projects_dir=projects_dir)
     assert excinfo.value.errors == ["repo: git not found on PATH"]
     assert not projects_dir.exists()
+
+
+def test_has_spec_ignores_a_blank_or_untouched_starter(workspace: Path, projects_dir: Path) -> None:
+    assert not has_spec("demo", projects_dir=projects_dir)  # init's starter outline
+    spec = workspace / "CONTEXT.md"
+    spec.write_text("  \n", encoding="utf-8")
+    assert not has_spec("demo", projects_dir=projects_dir)
+    spec.write_text("# Objective\nShip it.\n", encoding="utf-8")
+    assert has_spec("demo", projects_dir=projects_dir)
+    spec.unlink()
+    assert not has_spec("demo", projects_dir=projects_dir)

@@ -5,18 +5,38 @@ import { Button } from "./button";
 
 type CopyState = "idle" | "copied" | "failed";
 
-/** A shell command shown in monospace with a Copy button. */
-export function CopyCommand({ command }: { command: string }) {
+function useCopy(text: string) {
   const [state, setState] = useState<CopyState>("idle");
-
   async function copy() {
     try {
-      await navigator.clipboard.writeText(command);
+      await navigator.clipboard.writeText(text);
       setState("copied");
     } catch {
       setState("failed");
     }
   }
+  return { state, copy };
+}
+
+/** A small icon button that copies `text` (a path, a branch). */
+export function CopyButton({ text, label }: { text: string; label: string }) {
+  const { state, copy } = useCopy(text);
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label={state === "failed" ? `${label} (select and copy)` : label}
+      title={state === "copied" ? "Copied" : label}
+      onClick={() => void copy()}
+    >
+      {state === "copied" ? <Check aria-hidden /> : <Copy aria-hidden />}
+    </Button>
+  );
+}
+
+/** A shell command shown in monospace with a Copy button. */
+export function CopyCommand({ command }: { command: string }) {
+  const { state, copy } = useCopy(command);
 
   return (
     <div className="flex items-center justify-between gap-4 rounded-md border bg-surface-sunken py-1 pr-1 pl-4">

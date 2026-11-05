@@ -53,8 +53,12 @@ from spoolhq.services.runs.pulls import open_pull_requests, set_pull_request
 from spoolhq.services.runs.recovery import INTERRUPTED_REASON, recover_interrupted
 from spoolhq.services.runs.registry import RunRegistry, WorkspaceRuns
 from spoolhq.services.runs.rows import MAX_PAYLOAD_BYTES
+from spoolhq.services.runs.totals import Totals, latest_phase, project_totals
 
 __all__ = [
+    "Totals",
+    "latest_phase",
+    "project_totals",
     "RunPage",
     "decode_cursor",
     "encode_cursor",

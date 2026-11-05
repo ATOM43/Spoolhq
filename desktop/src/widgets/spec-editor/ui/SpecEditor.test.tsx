@@ -35,6 +35,8 @@ const PROJECT: ProjectDetail = {
   run_state: "idle",
   needs_you: 0,
   latest_seq: 0,
+  draft: 0,
+  has_spec: false,
   repo: "/code/demo",
   default_branch: "main",
   remote: null,
@@ -242,5 +244,55 @@ describe("Spec tab", () => {
     expect(preview.querySelector("h1")).toHaveTextContent("Title");
     expect(preview.querySelector("script")).toBeNull();
     expect(preview.querySelector("a")?.getAttribute("href") ?? "").toBe("");
+  });
+
+  it("shows the word count next to the save state", async () => {
+    show();
+    expect(await screen.findByText("4 words")).toBeInTheDocument();
+    await type("one");
+    expect(screen.getByText("1 word")).toBeInTheDocument();
+  });
+
+  const importMd = async (text: string) => {
+    const file = new File([text], "task.md", { type: "text/markdown" });
+    await userEvent.upload(
+      await screen.findByLabelText("Markdown file to import"),
+      file,
+    );
+  };
+
+  it("imports a .md into an empty spec without asking", async () => {
+    disk = "";
+    show();
+    await importMd("# Imported\nText.");
+    await waitFor(async () => {
+      expect(await source()).toHaveValue("# Imported\nText.");
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("asks before an import replaces a spec that isn't empty", async () => {
+    show();
+    await importMd("# Imported");
+    await screen.findByRole("dialog", {
+      name: "Replace the spec with task.md?",
+    });
+    expect(await source()).toHaveValue("# Objective\nShip it.");
+    await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(await source()).toHaveValue("# Objective\nShip it.");
+
+    await importMd("# Imported");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Replace spec" }),
+    );
+    expect(await source()).toHaveValue("# Imported");
+    await afterAutosave();
+    await waitFor(() => {
+      expect(PUT).toHaveBeenCalledWith(
+        "/api/projects/{name}/spec",
+        expect.objectContaining({ body: { content: "# Imported" } }),
+      );
+    });
   });
 });

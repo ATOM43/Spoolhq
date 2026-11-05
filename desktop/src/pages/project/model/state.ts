@@ -1,5 +1,6 @@
 import type { ProjectDetail } from "@/entities/project";
 import type { CurrentRun } from "@/entities/run";
+import { formatTokens, formatUsage as formatProjectUsage } from "@/shared/lib";
 
 export type Tab = "spec" | "tickets" | "run";
 
@@ -50,6 +51,9 @@ export function panelState(
   current: CurrentRun | undefined,
   specEmpty: boolean,
 ): PanelState {
+  if (project.settings_error) {
+    return { kind: "idle", reason: "Fix project.yaml first", tab: "spec" };
+  }
   const run = current?.run;
   if (current?.active && run) {
     if (run.status === "paused") {
@@ -84,19 +88,39 @@ export function panelState(
   };
 }
 
-/** "182k tokens", or "$0.84" when the backend reports a cost. */
+/** The current run's usage: "182k tokens", or "$0.84" when the backend reports a cost. */
 export function formatUsage(current: CurrentRun | undefined): string | null {
   if (!current?.run) {
     return null;
   }
-  if (current.cost_micro_usd != null) {
-    return `$${(current.cost_micro_usd / 1_000_000).toFixed(2)}`;
-  }
   const tokens = current.input_tokens + current.output_tokens;
-  if (tokens >= 1_000_000) {
-    return `${(tokens / 1_000_000).toFixed(1)}M tokens`;
+  return current.cost_micro_usd != null
+    ? `$${(current.cost_micro_usd / 1_000_000).toFixed(2)}`
+    : formatTokens(tokens);
+}
+
+/** Header row 2: what to do next, by the project's state (screens spec, section 8), or
+ * the progress once the plan is approved. */
+export function guidance(project: ProjectDetail, state: PanelState): string {
+  if (project.settings_error) {
+    return "Settings invalid · fix project.yaml, then Reload";
   }
-  return tokens >= 1000
-    ? `${String(Math.round(tokens / 1000))}k tokens`
-    : `${String(tokens)} tokens`;
+  if (state.kind === "idle" && state.reason === "Planner is running") {
+    return "Planning · the planner is drafting tickets";
+  }
+  if (project.total === 0) {
+    return project.has_spec
+      ? "No plan yet · write the spec, then generate a plan"
+      : "No spec yet · write the spec first";
+  }
+  if (project.draft > 0) {
+    return `Draft · ${String(project.total)} tickets · ${String(project.remaining_h)} h`;
+  }
+  return [
+    `${String(project.done)} of ${String(project.total)} done`,
+    project.remaining_h > 0 ? `${String(project.remaining_h)} h left` : null,
+    formatProjectUsage(project.usage?.tokens ?? 0, project.usage?.cost_usd),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }

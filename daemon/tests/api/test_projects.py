@@ -38,6 +38,15 @@ def test_list_and_get_projects(run_client: TestClient, token: str, run_project: 
             "run_state": "idle",
             "needs_you": 0,
             "latest_seq": 0,
+            "draft": 0,
+            "remaining_h": 1.0,
+            "has_spec": False,
+            "template": None,
+            "run": None,
+            "run_step": None,
+            "last_activity": None,
+            "usage": {"tokens": 0, "cost_usd": None},
+            "settings_error": None,
         }
     ]
     detail = run_client.get("/api/projects/demo", headers=auth(token)).json()
@@ -269,3 +278,50 @@ def test_try_a_command_needs_the_token_and_a_project(run_client: TestClient, tok
     assert missing.status_code == 404
     bad_gate = try_command(run_client, token, "just lint", gate="deploy")
     assert error(bad_gate)["field"] == "gate"
+
+
+def test_an_invalid_project_yaml_is_listed_with_its_first_problem(
+    run_client: TestClient, token: str, run_project: Path, projects_dir: Path
+) -> None:
+    other = projects_dir / "zeta"
+    other.mkdir()
+    settings = (run_project / "project.yaml").read_text(encoding="utf-8")
+    (other / "project.yaml").write_text(
+        settings.replace("name: demo", "name: zeta") + "unknown_key: 1\n", encoding="utf-8"
+    )
+    listed = run_client.get("/api/projects", headers=auth(token)).json()
+    assert [project["name"] for project in listed] == ["demo", "zeta"]
+    assert listed[0]["settings_error"] is None  # the other project still loads
+    problem = listed[1]["settings_error"]
+    assert problem["file"] == str(other / "project.yaml")
+    assert problem["field"] == "unknown_key"
+    assert problem["message"] == "unknown key"
+    assert listed[1]["run_state"] == "idle"
+
+    detail = run_client.get("/api/projects/zeta", headers=auth(token))
+    assert detail.status_code == 200
+    assert detail.json()["settings_error"] == problem
+    assert detail.json()["repo"] is None
+
+    (other / "project.yaml").write_text("", encoding="utf-8")
+    empty = run_client.get("/api/projects/zeta", headers=auth(token)).json()["settings_error"]
+    assert (empty["field"], empty["message"]) == (None, "the file is empty")
+
+
+def test_summary_sums_usage_and_reports_the_latest_activity(
+    run_client: TestClient, token: str, run_project: Path
+) -> None:
+    from spoolhq.services.runs import AttemptKind, EventKind
+
+    log = run_client.app.state.runs.open(run_project).run_log  # type: ignore[attr-defined]
+    priced = log.start_attempt(log.start_run("T01").id, AttemptKind.INITIAL)
+    log.record_usage(priced.id, 1000, 500, 2_500_000)
+    run = log.start_run("T02")
+    log.record_usage(log.start_attempt(run.id, AttemptKind.INITIAL).id, 150, 50)
+    log.append_event(run.id, EventKind.RUN_PHASE, {"phase": "gates", "text": "T02 · gates"})
+
+    summary = run_client.get("/api/projects", headers=auth(token)).json()[0]
+    assert summary["usage"] == {"tokens": 200, "cost_usd": 2.5}
+    assert summary["last_activity"] == log.events_since(0)[-1].ts
+    assert summary["run"]["ticket_id"] == "T02"
+    assert summary["run_step"] == "gates"

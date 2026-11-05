@@ -7,7 +7,7 @@ import type { ProjectDetail } from "@/entities/project";
 import type { CurrentRun } from "@/entities/run";
 import { api } from "@/shared/api";
 
-import { formatUsage, panelState } from "../model/state";
+import { formatUsage, guidance, panelState } from "../model/state";
 import { RunControls } from "./RunControls";
 
 vi.mock("@/shared/api", async (importOriginal) => {
@@ -28,6 +28,8 @@ function project(extra: Partial<ProjectDetail> = {}): ProjectDetail {
     run_state: "idle",
     needs_you: 0,
     latest_seq: 0,
+    draft: 0,
+    has_spec: true,
     repo: "/code/demo",
     default_branch: "main",
     remote: null,
@@ -232,5 +234,59 @@ describe("the tab a project opens on", () => {
       "tickets",
     );
     expect(panelState(project(), current({}), false).tab).toBe("run");
+  });
+});
+
+describe("the guidance line", () => {
+  const line = (detail: ProjectDetail, run = current(null, false)) =>
+    guidance(detail, panelState(detail, run, false));
+
+  it("follows each state of the state table (screens spec, section 8)", () => {
+    expect(line(project({ total: 0, has_spec: false }))).toBe(
+      "No spec yet · write the spec first",
+    );
+    expect(line(project({ total: 0 }))).toBe(
+      "No plan yet · write the spec, then generate a plan",
+    );
+    expect(
+      line(
+        project({ total: 0 }),
+        current({ kind: "plan", ticket_id: "plan" }, false),
+      ),
+    ).toBe("Planning · the planner is drafting tickets");
+    expect(line(project({ total: 18, draft: 18, remaining_h: 38.5 }))).toBe(
+      "Draft · 18 tickets · 38.5 h",
+    );
+  });
+
+  it("shows progress and usage once the plan is approved", () => {
+    const approved = project({
+      done: 14,
+      total: 26,
+      remaining_h: 31,
+      next_ticket: "T15",
+      usage: { tokens: 1_200_000, cost_usd: null },
+    });
+    expect(line(approved)).toBe("14 of 26 done · 31 h left · 1.2M tokens");
+    expect(line(approved, current({}))).toBe(
+      "14 of 26 done · 31 h left · 1.2M tokens",
+    );
+    expect(line(project({ done: 26, total: 26, remaining_h: 0 }))).toBe(
+      "26 of 26 done",
+    );
+  });
+
+  it("asks to fix project.yaml while it is invalid", () => {
+    const broken = project({
+      repo: null,
+      settings_error: { file: "/w/project.yaml", field: "a", message: "b" },
+    });
+    expect(line(broken)).toBe(
+      "Settings invalid · fix project.yaml, then Reload",
+    );
+    expect(panelState(broken, undefined, false)).toMatchObject({
+      kind: "idle",
+      reason: "Fix project.yaml first",
+    });
   });
 });

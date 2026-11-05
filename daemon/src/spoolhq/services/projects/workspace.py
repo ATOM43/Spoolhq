@@ -106,6 +106,17 @@ def _validate(data: Any, *, folder_name: str | None, prefix: str | None) -> Proj
         raise ProjectValidationError(format_errors(exc, Project, prefix=prefix)) from exc
 
 
+def has_spec(name: str, *, projects_dir: Path) -> bool:
+    """``CONTEXT.md`` holds a spec: it isn't blank, and isn't the starter ``init`` wrote."""
+    try:
+        text = (project_dir(name, projects_dir) / CONTEXT_FILE).read_text(
+            encoding="utf-8", errors="replace"
+        )
+    except OSError:
+        return False
+    return text.strip() not in ("", CONTEXT_TEMPLATE.format(name=name).strip())
+
+
 def parse_project(name: str, data: Any) -> Project:
     """Validate settings for the project ``name`` (ProjectValidationError listing every
     problem); fields not in ``data`` stay unset, so ``save_project`` leaves them out."""

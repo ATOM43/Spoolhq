@@ -17,4 +17,10 @@ export {
   useSpec,
   type SpecFile,
 } from "./model/spec";
+export {
+  projectState,
+  settingsErrorLine,
+  type ProjectState,
+  type ProjectStatusKind,
+} from "./model/status";
 export { ProjectStatus } from "./ui/ProjectStatus";

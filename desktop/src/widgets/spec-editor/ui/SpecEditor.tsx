@@ -2,12 +2,13 @@ import {
   CircleAlert,
   CircleCheck,
   CircleX,
+  FileUp,
   LoaderCircle,
   PencilLine,
   RotateCw,
   TriangleAlert,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import {
   SPEC_FILE,
@@ -16,9 +17,10 @@ import {
   type SpecFile,
 } from "@/entities/project";
 import type { CurrentRun } from "@/entities/run";
-import { Button, Markdown } from "@/shared/ui";
+import { Button, ConfirmDialog, Markdown } from "@/shared/ui";
 
 import { useSpecAutosave, type SaveState } from "../model/autosave";
+import { wordCount } from "../model/words";
 import { planBlocker, planState, useGeneratePlan } from "../model/plan";
 import { PlanButton, PlanFailure } from "./PlanBar";
 
@@ -109,15 +111,34 @@ function Editor({
   const start = () => {
     generate.mutate();
   };
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState<{
+    name: string;
+    text: string;
+  } | null>(null);
+  // Read in the webview: no file-system permission, and the text goes through autosave.
+  const importFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      if (draft.text.trim() === "") {
+        draft.setText(text);
+      } else {
+        setImporting({ name: file.name, text });
+      }
+    };
+    reader.readAsText(file);
+  };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-wrap items-center gap-3 border-b px-6 py-2">
         <code className="font-mono text-sm">{SPEC_FILE}</code>
         <span className="flex items-center gap-1.5 text-sm [&_svg]:size-4">
           <span aria-hidden>{look.icon}</span>
           {look.label}
         </span>
+        <span className="text-sm text-ink-muted">{wordCount(draft.text)}</span>
         <div
           role="group"
           aria-label="View"
@@ -137,6 +158,31 @@ function Editor({
             </Button>
           ))}
         </div>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".md,text/markdown"
+          aria-label="Markdown file to import"
+          tabIndex={-1}
+          className="sr-only"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) {
+              importFile(file);
+            }
+            event.target.value = ""; // the same file can be picked again
+          }}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            fileInput.current?.click();
+          }}
+        >
+          <FileUp aria-hidden />
+          Import .md
+        </Button>
         <PlanButton
           project={project}
           plan={plan}
@@ -146,43 +192,68 @@ function Editor({
           onViewPlan={onViewPlan}
         />
       </div>
-      {plan.planning && plan.progress ? (
-        <p className="text-sm text-ink-muted">{plan.progress}</p>
-      ) : null}
+      <ConfirmDialog
+        open={importing !== null}
+        title={`Replace the spec with ${importing?.name ?? "the file"}?`}
+        consequence={`${SPEC_FILE} is replaced by the imported file and saved. The current text is lost.`}
+        action="Replace spec"
+        onCancel={() => {
+          setImporting(null);
+        }}
+        onConfirm={() => {
+          if (importing) {
+            draft.setText(importing.text);
+          }
+          setImporting(null);
+        }}
+      />
+      <div className="flex flex-col gap-2 px-6 py-2 empty:hidden">
+        {plan.planning && plan.progress ? (
+          <p className="text-sm text-ink-muted">{plan.progress}</p>
+        ) : null}
 
-      {draft.conflict ? (
-        <div
-          role="alert"
-          className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm"
-        >
-          <TriangleAlert aria-hidden className="size-4 shrink-0 text-warning" />
-          <span className="flex-1">{SPEC_FILE} changed on disk</span>
-          <Button variant="outline" size="sm" onClick={draft.reload}>
-            Reload
-          </Button>
-          <Button variant="outline" size="sm" onClick={draft.keepMine}>
-            Keep mine
-          </Button>
-        </div>
-      ) : null}
-      {draft.error ? (
-        <p role="alert" className="flex items-center gap-2 text-sm text-danger">
-          <CircleAlert aria-hidden className="size-4" />
-          Couldn't save: {draft.error}. Edit again or press Ctrl+S to retry.
-        </p>
-      ) : null}
-      {failure ? (
-        <PlanFailure reason={failure} blocker={blocker} onRetry={start} />
-      ) : null}
+        {draft.conflict ? (
+          <div
+            role="alert"
+            className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm"
+          >
+            <TriangleAlert
+              aria-hidden
+              className="size-4 shrink-0 text-warning"
+            />
+            <span className="flex-1">{SPEC_FILE} changed on disk</span>
+            <Button variant="outline" size="sm" onClick={draft.reload}>
+              Reload
+            </Button>
+            <Button variant="outline" size="sm" onClick={draft.keepMine}>
+              Keep mine
+            </Button>
+          </div>
+        ) : null}
+        {draft.error ? (
+          <p
+            role="alert"
+            className="flex items-center gap-2 text-sm text-danger"
+          >
+            <CircleAlert aria-hidden className="size-4" />
+            Couldn't save: {draft.error}. Edit again or press Ctrl+S to retry.
+          </p>
+        ) : null}
+        {failure ? (
+          <PlanFailure reason={failure} blocker={blocker} onRetry={start} />
+        ) : null}
 
-      {draft.text === "" ? (
-        <p className="text-sm text-ink-muted">
-          Paste an existing task description or start from this outline.
-        </p>
-      ) : null}
+        {draft.text === "" ? (
+          <p className="text-sm text-ink-muted">
+            Paste an existing task description or start from this outline.
+          </p>
+        ) : null}
+      </div>
       <div
         className={
-          view === "split" ? "grid min-h-96 grid-cols-2 gap-3" : "grid min-h-96"
+          view === "split"
+            ? "grid min-h-0 flex-1 grid-cols-2"
+            : "grid min-h-0 flex-1"
         }
       >
         {view !== "preview" ? (
@@ -200,13 +271,13 @@ function Editor({
                 draft.saveNow();
               }
             }}
-            className="min-h-96 resize-none rounded-md border bg-surface p-3 font-mono text-sm outline-none placeholder:text-ink-muted/60 focus-visible:ring-[3px] focus-visible:ring-accent/50"
+            className="h-full min-h-0 resize-none overflow-auto border-r bg-surface px-6 py-4 font-mono text-sm outline-none placeholder:text-ink-muted/60 focus-visible:ring-[3px] focus-visible:ring-accent/50 focus-visible:ring-inset"
           />
         ) : null}
         {view !== "source" ? (
           <section
             aria-label="Preview"
-            className="min-h-96 overflow-auto rounded-md border bg-surface p-3"
+            className="h-full min-h-0 overflow-auto bg-surface px-8 py-4"
           >
             {draft.text.trim() === "" ? (
               <p className="text-sm text-ink-muted">Nothing to preview yet.</p>

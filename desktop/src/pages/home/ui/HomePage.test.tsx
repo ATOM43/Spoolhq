@@ -47,6 +47,26 @@ function project(name: string, extra: Partial<Project> = {}): Project {
     run_state: "idle",
     needs_you: 0,
     latest_seq: 0,
+    draft: 0,
+    remaining_h: 0,
+    has_spec: true,
+    ...extra,
+  };
+}
+
+type Run = NonNullable<Project["run"]>;
+
+function run(extra: Partial<Run> = {}): Run {
+  return {
+    id: 1,
+    kind: "ticket",
+    ticket_id: "T01",
+    status: "running",
+    reason: null,
+    started_at: "2026-11-05T10:00:00Z",
+    ended_at: null,
+    reset_at: null,
+    progress_note: null,
     ...extra,
   };
 }
@@ -176,66 +196,169 @@ describe("Home", () => {
     expect(await screen.findByText("demo")).toBeInTheDocument();
   });
 
-  it("lists projects with progress and status, and opens one", async () => {
+  it("lists projects as cards with progress, status, activity and usage", async () => {
     projects = [
-      project("alpha", { done: 1, total: 4, run_state: "running" }),
-      project("beta", { done: 2, total: 2 }),
-      project("gamma", { total: 0 }),
+      project("alpha", {
+        done: 13,
+        total: 18,
+        remaining_h: 12,
+        run_state: "running",
+        run: run({ ticket_id: "T15" }),
+        run_step: "implement",
+        template: "fastapi-react",
+        usage: { tokens: 0, cost_usd: 9.852 },
+      }),
+      project("beta", {
+        done: 2,
+        total: 2,
+        last_activity: new Date(Date.now() - 12 * 60_000).toISOString(),
+        usage: { tokens: 182_000, cost_usd: null },
+      }),
+      project("gamma", { total: 0, has_spec: false }),
     ];
     renderHome();
     const alpha = await screen.findByRole("link", { name: /alpha/ });
-    expect(alpha).toHaveTextContent("1 of 4 tickets done");
-    expect(alpha).toHaveTextContent("Running");
+    expect(alpha).toHaveTextContent("13 of 18 done · 12 h left");
+    expect(alpha).toHaveTextContent("Running T15 · Implement");
+    expect(alpha).toHaveTextContent("fastapi-react");
+    expect(alpha).toHaveTextContent("Active now · $9.85");
     expect(alpha.querySelector("svg")).not.toBeNull();
-    expect(screen.getByRole("link", { name: /beta/ })).toHaveTextContent(
-      "Done",
-    );
-    expect(screen.getByRole("link", { name: /gamma/ })).toHaveTextContent(
-      "No plan yet",
-    );
+    const beta = screen.getByRole("link", { name: /beta/ });
+    expect(beta).toHaveTextContent("All done");
+    expect(beta).toHaveTextContent("existing repo");
+    expect(beta).toHaveTextContent("12 min ago · 182k tokens");
+    const gamma = screen.getByRole("link", { name: /gamma/ });
+    expect(gamma).toHaveTextContent("No tickets yet");
+    expect(gamma).toHaveTextContent("No spec yet");
+    expect(screen.getByText("3 projects")).toBeInTheDocument();
     await userEvent.click(alpha);
     expect(await screen.findByText("Project panel")).toBeInTheDocument();
   });
 
-  it("lists each kind of 'Needs you' once, linking to its project", async () => {
+  it("shows Settings invalid with the first error, never Unknown", async () => {
     projects = [
-      project("alpha", { needs_you: 2 }),
-      project("beta", { needs_you: 1, run_state: "paused" }),
-      project("gamma"),
+      project("broken", {
+        run_state: "unknown",
+        settings_error: {
+          file: "/w/broken/project.yaml",
+          field: "merge_policy.max_diff_lines",
+          message: "must be greater than 0",
+        },
+      }),
+      project("fine"),
+    ];
+    renderHome();
+    const card = await screen.findByRole("link", { name: /broken/ });
+    expect(card).toHaveTextContent("Settings invalid");
+    expect(card).toHaveTextContent(
+      "project.yaml: merge_policy.max_diff_lines: must be greater than 0",
+    );
+    expect(screen.getByRole("link", { name: /fine/ })).toHaveTextContent(
+      "Idle",
+    );
+    expect(screen.queryByText(/Unknown/)).toBeNull();
+  });
+
+  it("shows a 'Needs you' card for each kind, with its action", async () => {
+    projects = [
+      project("alpha", {
+        needs_you: 2,
+        run: run({
+          ticket_id: "T10",
+          status: "blocked",
+          reason: "gates failed 3 times",
+          ended_at: new Date(Date.now() - 12 * 60_000).toISOString(),
+        }),
+      }),
+      project("beta", { draft: 24, total: 24, remaining_h: 61 }),
+      project("gamma", {
+        run: run({
+          ticket_id: "T04",
+          status: "interrupted",
+          reason: "the daemon stopped",
+        }),
+      }),
+      project("delta", {
+        run_state: "paused",
+        run: run({
+          ticket_id: "T02",
+          status: "paused",
+          reset_at: "2026-11-05T14:30:00Z",
+        }),
+      }),
+      project("epsilon"),
     ];
     tickets = {
       alpha: [
-        ticket("T01", "Parse slugs", "blocked"),
-        ticket("T02", "Add login", "awaiting_approval"),
+        ticket("T10", "Context pack", "blocked"),
+        ticket("T12", "Reviewer agent", "awaiting_approval"),
         ticket("T03", "Done one", "done"),
       ],
-      beta: [ticket("T04", "Fix cache", "blocked")],
+      gamma: [ticket("T04", "Fix cache", "running")],
     };
+    POST.mockImplementation(() => ok({}));
     renderHome();
-    const section = await screen.findByRole("region", { name: "Needs you" });
-    await within(section).findByText("T01 · Parse slugs");
-    for (const name of ["Blocked", "Awaiting approval", "Paused runs"]) {
-      expect(within(section).getAllByRole("heading", { name })).toHaveLength(1);
-    }
-    expect(within(section).getByText("T04 · Fix cache")).toBeInTheDocument();
-    expect(within(section).getByText("Run paused")).toBeInTheDocument();
-    expect(within(section).queryByText(/Done one/)).toBeNull();
-    const links = within(section).getAllByRole("link");
-    expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/p/alpha",
-      "/p/beta",
-      "/p/alpha",
-      "/p/beta",
-    ]);
+    const section = await screen.findByRole("region", { name: /Needs you/ });
+    const card = (name: RegExp) =>
+      within(section).getByRole("article", { name });
+    await within(section).findByText("Context pack");
+
+    const blocked = card(/Blocked: alpha T10/);
+    expect(blocked).toHaveTextContent("Gates failed 3 times");
+    expect(blocked).toHaveTextContent("12 min ago");
     expect(
-      GET.mock.calls.filter(([path]) => path.endsWith("/tickets")),
-    ).toHaveLength(2); // gamma needs nothing, so its tickets aren't fetched
+      within(blocked).getByRole("link", { name: "Unblock" }),
+    ).toHaveAttribute("href", "/p/alpha?tab=tickets&ticket=T10");
+    expect(
+      within(card(/Needs approval: alpha T12/)).getByRole("link", {
+        name: "Review",
+      }),
+    ).toHaveAttribute("href", "/p/alpha?tab=tickets&ticket=T12");
+    const plan = card(/Plan ready: beta/);
+    expect(plan).toHaveTextContent("Planner finished: 24 tickets · 61 h");
+    expect(
+      within(plan).getByRole("link", { name: "Review plan" }),
+    ).toHaveAttribute("href", "/p/beta?tab=tickets");
+    expect(
+      within(card(/Paused · usage limit: delta T02/)).getByRole("link", {
+        name: "Open run",
+      }),
+    ).toHaveAttribute("href", "/p/delta?tab=run&ticket=T02");
+    const interrupted = card(/Interrupted: gamma T04/);
+    expect(interrupted).toHaveTextContent("Fix cache");
+    await userEvent.click(
+      within(interrupted).getByRole("button", { name: "Resume" }),
+    );
+    expect(POST).toHaveBeenCalledWith(
+      "/api/projects/{name}/run/ticket/{ticket_id}",
+      { params: { path: { name: "gamma", ticket_id: "T04" } } },
+    );
+    await userEvent.click(
+      within(interrupted).getByRole("button", { name: "Discard" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Discard run" }));
+    expect(POST).toHaveBeenCalledWith(
+      "/api/projects/{name}/tickets/{ticket_id}/discard",
+      { params: { path: { name: "gamma", ticket_id: "T04" } } },
+    );
+    expect(within(section).getAllByRole("article")).toHaveLength(5);
+    expect(within(section).queryByText(/Done one/)).toBeNull();
+  });
+
+  it("hides 'Needs you' when nothing needs the user", async () => {
+    projects = [
+      project("alpha"),
+      project("beta", { run_state: "paused", run: run({ status: "paused" }) }),
+    ];
+    renderHome();
+    await screen.findByRole("link", { name: /alpha/ });
+    expect(screen.queryByRole("region", { name: /Needs you/ })).toBeNull();
   });
 
   it("updates progress from a run event without a refetch loop", async () => {
     projects = [project("demo", { done: 0, total: 3 })];
     renderHome();
-    expect(await screen.findByText("0 of 3 tickets done")).toBeInTheDocument();
+    expect(await screen.findByText("0 of 3 done")).toBeInTheDocument();
     expect(subscribeEvents).toHaveBeenCalledTimes(1);
     const [options, onEvent] = vi.mocked(subscribeEvents).mock.calls[0] ?? [];
     expect(options?.project).toBe("demo");
@@ -255,7 +378,7 @@ describe("Home", () => {
       onEvent?.(event(11, "run.status"));
       onEvent?.(event(12, "integrate"));
     });
-    expect(await screen.findByText("1 of 3 tickets done")).toBeInTheDocument();
+    expect(await screen.findByText("1 of 3 done")).toBeInTheDocument();
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(projectCalls()).toBe(2); // the first load and one refetch, no polling
     expect(subscribeEvents).toHaveBeenCalledTimes(1);
