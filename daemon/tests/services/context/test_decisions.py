@@ -26,8 +26,12 @@ def entry(number: int) -> str:
 def write_split(repo: Path, numbers: range, *, area: str = AREA) -> None:
     (repo / "docs" / "decisions").mkdir(parents=True, exist_ok=True)
     index = [f"{n:03d} · Decision {n} · {area}" for n in numbers]
-    (repo / "DECISIONS.md").write_text("# Decisions\n\nHow to use.\n\n" + "\n".join(index) + "\n")
-    (repo / area).write_text("# Core\n\n" + "\n".join(entry(n) for n in numbers) + "\n")
+    (repo / "DECISIONS.md").write_text(
+        "# Decisions\n\nHow to use.\n\n" + "\n".join(index) + "\n", encoding="utf-8"
+    )
+    (repo / area).write_text(
+        "# Core\n\n" + "\n".join(entry(n) for n in numbers) + "\n", encoding="utf-8"
+    )
 
 
 def decisions_block(repo: Path) -> str:
@@ -42,8 +46,10 @@ def test_split_layout_gives_the_last_20_entries_in_full_and_in_order(tmp_path: P
     write_split(tmp_path, range(1, 26))
     # Entries spread over two area files, listed in number order in the index.
     other = "docs/decisions/agents.md"
-    (tmp_path / other).write_text(entry(26) + "\n  continued on an indented line.\n\nNot part.\n")
-    with (tmp_path / "DECISIONS.md").open("a") as file:
+    (tmp_path / other).write_text(
+        entry(26) + "\n  continued on an indented line.\n\nNot part.\n", encoding="utf-8"
+    )
+    with (tmp_path / "DECISIONS.md").open("a", encoding="utf-8") as file:
         file.write(f"026 · Decision 26 · {other}\n")
 
     text = decisions_block(tmp_path)
@@ -56,7 +62,9 @@ def test_split_layout_gives_the_last_20_entries_in_full_and_in_order(tmp_path: P
 def test_entries_follow_number_order_not_index_order(tmp_path: Path) -> None:
     write_split(tmp_path, range(1, 4))
     index = tmp_path / "DECISIONS.md"
-    index.write_text("\n".join(reversed(index.read_text().splitlines())) + "\n")
+    index.write_text(
+        "\n".join(reversed(index.read_text(encoding="utf-8").splitlines())) + "\n", encoding="utf-8"
+    )
 
     docs = read_repo_docs(tmp_path, 2)
 
@@ -86,9 +94,11 @@ def test_missing_area_file_and_entry_keep_the_title_with_one_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     write_split(tmp_path, range(1, 4))
-    with (tmp_path / "DECISIONS.md").open("a") as file:
+    with (tmp_path / "DECISIONS.md").open("a", encoding="utf-8") as file:
         file.write("004 · Decision 4 · docs/decisions/gone.md\n")
-    (tmp_path / AREA).write_text(entry(1) + "\n" + entry(3) + "\n")  # 2 is missing
+    (tmp_path / AREA).write_text(
+        entry(1) + "\n" + entry(3) + "\n", encoding="utf-8"
+    )  # 2 is missing
 
     with caplog.at_level(logging.WARNING):
         docs = read_repo_docs(tmp_path, 20)
@@ -119,10 +129,10 @@ def test_paths_outside_the_repo_are_never_read(
     repo.mkdir()
     write_split(repo, range(1, 2))
     secret = tmp_path / "secret.md"
-    secret.write_text("1. **Secret** do not read.\n")
+    secret.write_text("1. **Secret** do not read.\n", encoding="utf-8")
     paths = outside_paths(repo, secret)
     index = "".join(f"{n:03d} · Decision {n} · {p}\n" for n, p in enumerate(paths, start=2))
-    with (repo / "DECISIONS.md").open("a") as file:
+    with (repo / "DECISIONS.md").open("a", encoding="utf-8") as file:
         file.write(index)
 
     read: list[Path] = []
