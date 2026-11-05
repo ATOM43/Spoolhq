@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
@@ -12,6 +13,7 @@ from pathlib import Path
 from spoolhq.services.gates.command import gate_env, resolve_program, split_command
 from spoolhq.services.gates.model import (
     GATE_NAMES,
+    GATE_OK,
     DoneWhenCheck,
     GateName,
     GateResult,
@@ -31,7 +33,7 @@ _DONE_WHEN_RE = re.compile(r"`([^`]+)`\s+passes\b")
 
 def run_gates(
     worktree: Path,
-    commands: Mapping[str, str],
+    commands: Mapping[str, str | None],
     timeouts: Mapping[str, float],
     log_dir: Path,
     *,
@@ -41,14 +43,15 @@ def run_gates(
     ``<log_dir>/<gate>.log``.
 
     If install doesn't pass, lint and test are skipped. Lint and test both run even
-    if lint fails, so one retry sees every error.
+    if lint fails, so one retry sees every error. A command that isn't set is skipped.
     """
     log_dir.mkdir(parents=True, exist_ok=True)
     env = gate_env(os.environ, platform=sys.platform)
     results: list[GateResult] = []
     for name in GATE_NAMES:
-        command = commands[name]
-        if results and results[0].status is not GateStatus.PASSED:
+        command = commands.get(name) or ""
+        install_failed = results and results[0].status not in GATE_OK
+        if not command or install_failed:
             results.append(_not_run(name, command, GateStatus.SKIPPED, ""))
             continue
         results.append(
@@ -65,11 +68,18 @@ def run_gates(
     return GateRun(tuple(results))
 
 
-def try_command(name: GateName, command: str, cwd: Path, timeout_s: float) -> GateResult:
+def try_command(
+    name: GateName,
+    command: str,
+    cwd: Path,
+    timeout_s: float,
+    cancel: threading.Event | None = None,
+) -> GateResult:
     """Run one command as its gate would, once (the app's **Test** button).
 
-    The log goes to a temp folder that is removed afterwards, so ``log_path`` is
-    ``None``; ``excerpt`` is the trimmed output whether or not the command passed.
+    Setting ``cancel`` stops it like a timeout. The log goes to a temp folder that is
+    removed afterwards, so ``log_path`` is ``None``; ``excerpt`` is the trimmed output
+    whether or not the command passed.
     """
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
         log_path = Path(folder) / f"{name}.log"
@@ -81,6 +91,7 @@ def try_command(name: GateName, command: str, cwd: Path, timeout_s: float) -> Ga
             timeout_s=timeout_s,
             log_path=log_path,
             cap_bytes=TRY_CAP_BYTES,
+            cancel=cancel,
         )
         if result.status is GateStatus.PASSED:
             output = clean(log_path.read_bytes().decode("utf-8", errors="replace"))
@@ -101,6 +112,7 @@ def _run_gate(
     timeout_s: float,
     log_path: Path,
     cap_bytes: int,
+    cancel: threading.Event | None = None,
 ) -> GateResult:
     try:
         argv = split_command(command)
@@ -120,6 +132,7 @@ def _run_gate(
             timeout_s=timeout_s,
             log_path=log_path,
             cap_bytes=cap_bytes,
+            cancel=cancel,
         )
     except OSError as exc:
         message = f"gate '{name}': couldn't start '{argv[0]}': {exc.strerror or exc}"
@@ -153,7 +166,7 @@ def _run_gate(
 
 
 def check_done_when(
-    done_when_lines: Iterable[str], commands: Mapping[str, str], run: GateRun
+    done_when_lines: Iterable[str], commands: Mapping[str, str | None], run: GateRun
 ) -> tuple[DoneWhenCheck, ...]:
     """Map items like `` `just test` passes `` to that gate's result.
 
@@ -161,7 +174,7 @@ def check_done_when(
     as ``not_a_gate`` and never run, because ticket text is untrusted. Items without a
     backticked command followed by "passes" are left out.
     """
-    by_command = {command: name for name, command in reversed(list(commands.items()))}
+    by_command = {command: name for name, command in reversed(list(commands.items())) if command}
     statuses: dict[str, GateStatus] = {result.name: result.status for result in run.results}
     checks: list[DoneWhenCheck] = []
     for item in done_when_lines:

@@ -7,7 +7,7 @@ import pytest
 import spoolhq
 from spoolhq.services.templates import (
     TemplateError,
-    builtin_descriptions,
+    builtin_contracts,
     builtin_names,
     is_git_url,
     open_template,
@@ -23,8 +23,11 @@ from tests.conftest import (
 
 def test_fastapi_react_is_built_in() -> None:
     assert "fastapi-react" in builtin_names()
-    descriptions = dict(builtin_descriptions())
-    assert "FastAPI backend and a React frontend" in descriptions["fastapi-react"]
+    contract = dict(builtin_contracts())["fastapi-react"]
+    assert "FastAPI backend and a React frontend" in contract.description
+    assert contract.summary == (
+        "FastAPI · SQLAlchemy · pytest · React · Vite · TypeScript · justfile · CI"
+    )
 
 
 def test_a_built_in_records_the_package_version() -> None:

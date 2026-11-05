@@ -104,6 +104,7 @@
       },
       "post": {
         "summary": "Create Project",
+        "description": "Check the request (422 with its field) and start the creation job.",
         "operationId": "create_project_api_projects_post",
         "requestBody": {
           "content": {
@@ -116,12 +117,12 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectCreated"
+                  "$ref": "#/components/schemas/JobStarted"
                 }
               }
             }
@@ -472,6 +473,101 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CommandTestResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "summary": "Get Job",
+        "operationId": "get_job_api_jobs__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$",
+              "description": "Job id.",
+              "title": "Job Id"
+            },
+            "description": "Job id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/cancel": {
+      "post": {
+        "summary": "Cancel Job",
+        "description": "Stop the job and roll back; answers once the rollback is done (at most 15 s).",
+        "operationId": "cancel_job_api_jobs__job_id__cancel_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$",
+              "description": "Job id.",
+              "title": "Job Id"
+            },
+            "description": "Job id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
                 }
               }
             }
@@ -2325,35 +2421,29 @@
         "properties": {
           "name": {
             "type": "string",
-            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+            "maxLength": 64,
             "title": "Name"
           },
-          "repo": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "template",
+              "existing",
+              "empty"
+            ],
+            "title": "Source"
+          },
+          "repo_path": {
             "type": "string",
             "maxLength": 4096,
             "minLength": 1,
-            "title": "Repo"
-          },
-          "branch": {
-            "type": "string",
-            "title": "Branch",
-            "default": "main"
-          },
-          "remote": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Remote"
+            "title": "Repo Path"
           },
           "template": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 200
               },
               {
                 "type": "null"
@@ -2361,25 +2451,53 @@
             ],
             "title": "Template"
           },
-          "template_ref": {
+          "commands": {
+            "$ref": "#/components/schemas/StackCommands"
+          },
+          "git_remote": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 2048
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Template Ref"
+            "title": "Git Remote"
+          },
+          "merge_preset": {
+            "type": "string",
+            "enum": [
+              "direct_unless_risky",
+              "always_pr",
+              "always_direct"
+            ],
+            "title": "Merge Preset",
+            "default": "direct_unless_risky"
+          },
+          "clickup_list_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clickup List Id"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "name",
-          "repo"
+          "source",
+          "repo_path"
         ],
         "title": "CreateProject",
-        "description": "What ``spool init`` takes."
+        "description": "``POST /api/projects`` and ``spool init``: a new project and where its repo comes from."
       },
       "CurrentRun": {
         "properties": {
@@ -2674,7 +2792,8 @@
               "blocked",
               "waiting",
               "plan_not_approved",
-              "invalid_plan"
+              "invalid_plan",
+              "no_commands"
             ],
             "title": "Code"
           },
@@ -2719,6 +2838,77 @@
           "errors"
         ],
         "title": "InvalidTicketView"
+      },
+      "JobStarted": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "title": "JobStarted"
+      },
+      "JobView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "template",
+              "existing",
+              "empty"
+            ],
+            "title": "Source"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "title": "State"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepView"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "rollback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RollbackView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project",
+          "source",
+          "state",
+          "steps",
+          "rollback"
+        ],
+        "title": "JobView"
       },
       "MergedView": {
         "properties": {
@@ -2832,32 +3022,6 @@
         ],
         "title": "PolicyView",
         "description": "The run's latest merge-policy decision."
-      },
-      "ProjectCreated": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "path": {
-            "type": "string",
-            "title": "Path"
-          },
-          "missing_notes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Missing Notes"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "path",
-          "missing_notes"
-        ],
-        "title": "ProjectCreated"
       },
       "ProjectDetail": {
         "properties": {
@@ -3149,6 +3313,30 @@
         },
         "type": "object",
         "title": "Reject"
+      },
+      "RollbackView": {
+        "properties": {
+          "removed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removed"
+          },
+          "left": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Left"
+          }
+        },
+        "type": "object",
+        "required": [
+          "removed",
+          "left"
+        ],
+        "title": "RollbackView"
       },
       "RuleHitView": {
         "properties": {
@@ -3553,6 +3741,133 @@
         ],
         "title": "SpecFile"
       },
+      "StackCommands": {
+        "properties": {
+          "install": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Install"
+          },
+          "lint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lint"
+          },
+          "test": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "StackCommands"
+      },
+      "StepView": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "workspace",
+              "repo",
+              "commands",
+              "commit"
+            ],
+            "title": "Name"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "passed",
+              "failed",
+              "skipped"
+            ],
+            "title": "State"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "title",
+          "state",
+          "duration_s",
+          "message",
+          "output",
+          "field"
+        ],
+        "title": "StepView"
+      },
       "TemplateView": {
         "properties": {
           "name": {
@@ -3562,6 +3877,17 @@
           "description": {
             "type": "string",
             "title": "Description"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
           }
         },
         "type": "object",

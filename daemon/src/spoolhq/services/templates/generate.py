@@ -6,19 +6,16 @@ user's Copier trust list can't apply either: ``_tasks``, ``_migrations`` and
 any it would run (for example ones pulled in with ``!include``).
 """
 
-import os
-from collections.abc import Callable
 from pathlib import Path
 
 import copier
 from copier.errors import UnsafeTemplateError
 from ruamel.yaml.error import YAMLError
 
-from spoolhq.services.git import GitError, commit_staged, remove_path, run_git
-from spoolhq.services.projects import InitResult, ProjectError, init_project, project_dir
+from spoolhq.services.git import commit_staged, run_git
 from spoolhq.services.projects.yaml_io import dump, loader
-from spoolhq.services.templates.contract import CONTRACT_FILE, TemplateError, load_contract
-from spoolhq.services.templates.sources import ResolvedTemplate, open_template
+from spoolhq.services.templates.contract import CONTRACT_FILE, TemplateError
+from spoolhq.services.templates.sources import ResolvedTemplate
 
 UNSAFE_KEYS = ("_tasks", "_migrations", "_jinja_extensions")
 COPIER_FILES = ("copier.yml", "copier.yaml")
@@ -88,77 +85,3 @@ def init_repo(repo: Path, branch: str, message: str | None) -> None:
     run_git(["add", "--all"], repo).check()
     if message is not None:
         commit_staged(repo, message)
-
-
-def check_target(repo: Path) -> bool:
-    """Whether ``repo`` already exists; refuses anything but a missing or empty folder."""
-    if repo.is_symlink() or (repo.exists() and not repo.is_dir()):
-        raise TemplateError(f"--repo must be a new or empty folder: {repo} is not a folder")
-    if not repo.exists():
-        return False
-    with os.scandir(repo) as entries:
-        if next(entries, None) is not None:
-            raise TemplateError(
-                f"--repo must be a new or empty folder: {repo} is not empty "
-                "(spool init never generates over existing work)"
-            )
-    return True
-
-
-def _clean_up(repo: Path, *, existed: bool) -> None:
-    if not existed:
-        remove_path(repo)
-        return
-    for child in repo.iterdir():
-        remove_path(child)
-
-
-def init_from_template(
-    name: str,
-    repo: Path,
-    source: str,
-    *,
-    projects_dir: Path,
-    ref: str | None = None,
-    branch: str = "main",
-    remote: str | None = None,
-    on_resolved: Callable[[ResolvedTemplate], None] | None = None,
-) -> InitResult:
-    """Generate a new repository from a template and create its workspace.
-
-    ``repo`` must not exist or be empty. ``on_resolved`` is called with the source and
-    resolved commit before anything is generated. Any failure removes the repository
-    files and the workspace (``init_project`` is all or nothing) before raising.
-    """
-    target = project_dir(name, projects_dir)
-    if target.exists() or target.is_symlink():
-        raise ProjectError(f"project folder already exists: {target}")
-    repo = repo.expanduser().absolute()
-    existed = check_target(repo)
-    with open_template(source, ref) as template:
-        if on_resolved is not None:
-            on_resolved(template)
-        contract = load_contract(template.root, template.label)
-        check_safe(template.root, template.label)
-        try:
-            render(template, repo, name)
-            init_repo(repo, branch, f"chore: apply template {contract.name}")
-            return init_project(
-                name,
-                repo,
-                projects_dir=projects_dir,
-                branch=branch,
-                remote=remote,
-                commands=contract.commands.gates(),
-                template={"name": contract.name, "source": template.source, "ref": template.ref},
-                template_description=contract.description,
-            )
-        except (TemplateError, ProjectError, GitError, OSError) as exc:
-            generated = repo.is_dir() and any(repo.iterdir())
-            _clean_up(repo, existed=existed)
-            if not generated:
-                raise
-            raise TemplateError(f"{exc}\nremoved what was generated in {repo}") from exc
-        except BaseException:
-            _clean_up(repo, existed=existed)
-            raise

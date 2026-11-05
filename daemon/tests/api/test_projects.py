@@ -89,33 +89,6 @@ def test_unknown_or_invalid_project_names(run_client: TestClient, token: str) ->
     assert error(invalid)["field"] == "name"
 
 
-def test_create_project_like_spool_init(
-    client: TestClient, token: str, git_repo: Path, projects_dir: Path
-) -> None:
-    body = {"name": "fresh", "repo": str(git_repo)}
-    created = client.post("/api/projects", json=body, headers=auth(token))
-    assert created.status_code == 201
-    assert created.json()["name"] == "fresh"
-    assert (projects_dir / "fresh" / "project.yaml").is_file()
-
-    again = client.post("/api/projects", json=body, headers=auth(token))
-    assert again.status_code == 409
-    assert error(again)["message"].startswith("project folder already exists")
-    no_template = client.post(
-        "/api/projects", json={**body, "name": "x", "template_ref": "v1"}, headers=auth(token)
-    )
-    assert (no_template.status_code, error(no_template)["field"]) == (422, "template_ref")
-
-
-def test_create_project_from_an_unknown_template(
-    client: TestClient, token: str, tmp_path: Path
-) -> None:
-    body = {"name": "gen", "repo": str(tmp_path / "new"), "template": "no-such-template"}
-    response = client.post("/api/projects", json=body, headers=auth(token))
-    assert response.status_code == 409
-    assert error(response)["code"] == "template_error"
-
-
 def test_spec_edit_with_etags(run_client: TestClient, token: str, run_project: Path) -> None:
     spec = run_project / "CONTEXT.md"
     got = run_client.get("/api/projects/demo/spec", headers=auth(token))

@@ -5,6 +5,7 @@ from spoolhq.services.projects.files import EditConflict, etag_of, read_with_eta
 from spoolhq.services.projects.model import (
     DEFAULT_PROTECTED_PATHS,
     LOCKFILES,
+    NO_TEST_COMMAND,
     Agents,
     BackendSettings,
     Budget,
@@ -48,6 +49,7 @@ __all__ = [
     "DEFAULT_PROTECTED_PATHS",
     "LOCKFILES",
     "MergePolicy",
+    "NO_TEST_COMMAND",
     "Project",
     "Role",
     "ProjectError",

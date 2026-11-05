@@ -4,11 +4,12 @@ Newest entries at the bottom. One entry per merged ticket.
 
 ## What exists
 
-Built: T01–T20, T27–T34. Older entries are in [docs/progress-archive.md](docs/progress-archive.md); code layout in [docs/architecture.md](docs/architecture.md).
+Built: T01–T20, T27–T35. Older entries are in [docs/progress-archive.md](docs/progress-archive.md); code layout in [docs/architecture.md](docs/architecture.md).
 
 - **Tooling and CI**: monorepo (`daemon/`, `desktop/`, `templates/`, `docs/`), `justfile` (`install`, `lint`, `test`, `dev`), CI on Linux, macOS and Windows; ruff, mypy strict, import-linter, ESLint boundaries, 500-line limit, 85% daemon coverage.
 - **Core** (`core/`): config from `config.toml` and `SPOOLHQ_*`, bearer token, JSON logs, single-instance lock, ticket ids and `slugify`, the agent environment allowlist.
-- **Projects** (`services/projects/`): workspaces under `~/spoolhq-projects/`, `spool init`, `project.yaml` validated by Pydantic, invalid settings reported per project.
+- **Projects** (`services/projects/`): workspaces under `~/spoolhq-projects/`, `project.yaml` validated by Pydantic (stack commands optional), invalid settings reported per project.
+- **Creation** (`services/creation/`): a job that creates a project from a built-in template, an existing repo or an empty repo (workspace → repo → check commands → initial commit), refuses unsafe paths first and rolls back only what it created; `spool init` and `POST /api/projects` share it.
 - **Tickets** (`services/tickets/`): Markdown tickets with frontmatter, byte-exact round trip, `spool tickets`, "Done when" parsing.
 - **Scheduler** (`services/scheduler/`): dependency graph, status transitions, `next_ready`, cycles, critical path, `spool plan check`.
 - **Run log** (`services/runs/`): SQLite per workspace (schema 7), append-only events, event bus, crash recovery, integration journal, usage totals.
@@ -23,21 +24,10 @@ Built: T01–T20, T27–T34. Older entries are in [docs/progress-archive.md](doc
 - **GitHub** (`services/github/`): direct push or pull requests per project and ticket, token from env or keychain.
 - **Code graph** (`services/codegraph/`): optional offline Graphify map in implementer and planner prompts; this repo commits its own graph in `graphify-out/`.
 - **Secrets** (`services/secrets/`): Anthropic, GitHub and ClickUp secrets in the OS keychain, write-only over the API; each can be tested with one read-only call to its provider.
-- **API** (`api/`): REST for projects, tickets, spec, settings, runs, plan, agents, templates, secrets; one error format; ETags; WebSocket events with replay.
+- **API** (`api/`): REST for projects, creation jobs, tickets, spec, settings, runs, plan, agents, templates, secrets; one error format; ETags; WebSocket events with replay.
 - **CLI** (`cli/`): `spool serve`, `init`, `project`, `tickets`, `plan`, `run`, `runs`, `review`, `gates`, `prompt`, `templates`, `agents`, `worktrees`, `github`, `secrets`.
 - **Desktop** (`desktop/`): Tauri 2 + React, token kept in Rust, event bridge, Home with Needs you, New project, Settings (also from the panel), project panel with run controls and the Spec tab.
-- **Not built yet**: tracker sync (T24; `services/tracker/` is empty), Tickets tab (T21), Run tab (T22), New project flow (T35), packaging (T23), dogfood (T25), release docs (T26).
-
-## T32 · Settings, project panel and Spec tab
-
-- Step 0: the frontend line limit already existed (`scripts/check_line_limit.py`, 500 lines, tests exempt, `schema.gen.ts` allowed) and was kept. Replay started from 0: the project and current-run answers now carry `latest_seq`, and `useProjectEvents` subscribes after it (DECISIONS 310, 313).
-- Daemon: `ProjectDetail` gained `next_ticket`, `idle` and `remaining_h`; `CurrentRun` gained `cost_micro_usd`. `websockets` 17.2 added: `spool serve` could not serve the event WebSocket before (401), found in the real app run.
-- Settings dialog (`features/settings`): Agents (version, login status and how to log in, Graphify), Accounts (write-only Anthropic, GitHub and ClickUp secrets, Set/Replace/Remove, value never kept), General (folders) and About; opens by itself on Home when no backend is ready and can't be closed until one is.
-- Project panel (`pages/project`): header with repo copy, branch, remote, progress and usage; run controls for every state (Run next/Run all, Pause, Resume, Cancel through a confirm, usage-limit pause with its reset time), each disabled control with its reason; tabs Spec, Tickets, Run (the last two are placeholders until T21/T22), opening on the section-8 tab; loading, error, unknown-project and daemon-missing states.
-- Spec tab (`widgets/spec-editor`): source / split / preview, autosave after 1 s and Ctrl/Cmd+S with If-Match, conflict bar with Reload and Keep mine, save state as icon + label, starter outline, Generate plan / Re-plan with reasons, progress and a failure bar with Retry.
-- Untrusted text: `Markdown` (react-markdown 10.1.0, raw HTML skipped, unsafe URLs emptied); ESLint bans `dangerouslySetInnerHTML`.
-- Tests: daemon (subscribe from `latest_seq` gets the event written in between and no history; readiness fields; WebSocket under real `spool serve`), Vitest (replay with a mocked bridge, Settings in every state and both first-run cases, the secret absent from the DOM and caches, run controls per state, autosave/412/Keep mine/Reload/Generate plan, inert markdown).
-- Docs: `architecture.md`, `api.md`, `CLAUDE.md` layout; DECISIONS 313–322.
+- **Not built yet**: tracker sync (T24; `services/tracker/` is empty), Tickets tab (T21), Run tab (T22), New project dialog (T36; the old dialog is adapted to the job API meanwhile), packaging (T23), dogfood (T25), release docs (T26).
 
 ## T33 · Home and project panel polish
 
@@ -75,3 +65,15 @@ Built: T01–T20, T27–T34. Older entries are in [docs/progress-archive.md](doc
 - ruff: `PLW1514` enabled (preview rule, explicit) and `scripts/` now linted; no findings, 0 files changed.
 - Tests: daemon (each provider's 200, 401, 403, 500, timeout, network error, redirect not followed, not set makes no call, env value used, no token 401, unknown name 422, secret absent from every answer and log record), Vitest (tabs, ✕, Done, first run both ways, SDK neutral and Details collapsed, amber only when blocking, value gone after Save, Test disabled when not set, each result with its icon and gone after closing, gear with invalid settings, Open Settings opens Agents).
 - Docs: `api.md` (testing a secret), `context.md` (split `DECISIONS.md`); DECISIONS 332–336.
+
+## T35 · Project creation job
+
+- Plan: T35 split into T35 (this, 2 h) and T36 · New project dialog (2 h); T21 and T23 depend on T36; 35 tickets, 84.5 h; critical path T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T23 → T26 (36 h).
+- `services/creation/`: request model and checks (name `^[a-z][a-z0-9-]{0,39}$`, built-in templates only, untrusted path refused if root, home, inside SpoolHQ's folders or a symlink; existing repo clean; duplicate name), four steps with state, duration, fixed message, trimmed output and the request field, rollback of recorded paths newest first without following symlinks, in-memory jobs kept 1 h.
+- API: `POST /api/projects` → 202 `{"job_id"}` or 422 with the field; `GET /api/jobs/{id}`, `POST /api/jobs/{id}/cancel`; `GET /api/templates` adds `summary`; the project detail reports `idle.code = "no_commands"`. TS client regenerated.
+- `spool init` runs the same job in the foreground (`--source`, `--install/--lint/--test`, `--merge-preset`, `--clickup-list`); `--branch`, `--template-ref` and folder/URL templates are gone from it (`spool templates check` keeps them). `init_from_template` removed.
+- Stack commands optional in `project.yaml`; without `test` the run loop and planner refuse with "Set the stack commands in project.yaml first". Unset gates are skipped. `try_command`/`run_process` take a cancel event.
+- Merge presets: `direct_unless_risky` = defaults, `always_pr` = `protected_paths: ['**']`, `always_direct` = `max_diff_lines: 100000` + `protected_paths: []`.
+- Desktop: the old dialog's model adapted to the job API (UI unchanged until T36); the panel shows the `no_commands` reason.
+- Tests: each source end to end, a forced failure after every step for every source (tree and git state unchanged), an empty folder kept, symlinks not followed, cancel during commands, a failing test command (`commands.test`, first failure line), path, template and name refusals with no job, presets and their decisions, CLI and API workspaces identical, 1 h retention.
+- Docs: `api.md` (creating a project, rollback, presets), `templates.md`, `project-yaml.md`, `architecture.md`, README, `task.md`; DECISIONS 337–344.

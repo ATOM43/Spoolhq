@@ -5,7 +5,10 @@ from typing import Annotated, Any, Literal
 from pydantic import AfterValidator, BaseModel, Field
 
 from spoolhq.api.schemas.runs import RunView
+from spoolhq.services.creation import CreateProject, StackCommands
 from spoolhq.services.gates import check_gate_command
+
+__all__ = ["CreateProject", "StackCommands"]  # the request model lives in the service
 
 
 class SettingsProblem(BaseModel):
@@ -72,6 +75,7 @@ class IdleView(BaseModel):
         "waiting",
         "plan_not_approved",
         "invalid_plan",
+        "no_commands",
     ]
     ticket_ids: list[str]
     message: str
@@ -90,24 +94,9 @@ class ProjectDetail(ProjectSummary):
     """Why nothing can run; null when ``next_ticket`` is set or there are no tickets."""
 
 
-class CreateProject(BaseModel):
-    """What ``spool init`` takes."""
-
-    name: str = Field(pattern=r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
-    repo: str = Field(min_length=1, max_length=4096)
-    """An existing git repository; with ``template``, a new or empty folder to generate into."""
-    branch: str = "main"
-    remote: str | None = None
-    template: str | None = None
-    """A built-in template name, a folder or a git URL."""
-    template_ref: str | None = None
-
-
-class ProjectCreated(BaseModel):
-    name: str
-    path: str
-    missing_notes: list[str]
-    """Code-facing notes the repository doesn't have (SpoolHQ never writes them)."""
+class JobStarted(BaseModel):
+    job_id: str
+    """Poll ``GET /api/jobs/{job_id}`` while it runs."""
 
 
 class SettingsFile(BaseModel):

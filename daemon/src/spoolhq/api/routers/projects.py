@@ -21,7 +21,7 @@ from spoolhq.api.schemas.projects import (
     CommandTestResult,
     CreateProject,
     IdleView,
-    ProjectCreated,
+    JobStarted,
     ProjectDetail,
     ProjectSummary,
     SettingsFile,
@@ -31,16 +31,16 @@ from spoolhq.api.schemas.projects import (
 )
 from spoolhq.api.schemas.runs import RunView
 from spoolhq.api.security import bearer_scheme
+from spoolhq.services.creation import CreationError, CreationJobs
 from spoolhq.services.gates import try_command
 from spoolhq.services.projects import (
     CONTEXT_FILE,
+    NO_TEST_COMMAND,
     EditConflict,
-    InitResult,
     Project,
     ProjectError,
     ProjectValidationError,
     has_spec,
-    init_project,
     list_workspaces,
     load_project,
     parse_project,
@@ -53,7 +53,6 @@ from spoolhq.services.projects.yaml_io import write_atomic
 from spoolhq.services.runloop import RunLoop, RunLoopError
 from spoolhq.services.runs import RunLogError, latest_phase, project_totals
 from spoolhq.services.scheduler import PlanError, explain_idle, next_ready, remaining_hours
-from spoolhq.services.templates import TemplateError, init_from_template
 from spoolhq.services.tickets import TicketListing, list_tickets
 
 router = APIRouter(prefix="/api/projects", dependencies=[Security(bearer_scheme)])
@@ -134,39 +133,15 @@ def list_projects(request: Request) -> list[ProjectSummary]:
     ]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-def create_project(body: CreateProject, request: Request) -> ProjectCreated:
-    projects_dir, repo = settings(request).projects_dir, Path(body.repo)
-    result: InitResult
-    with service_errors():
-        try:
-            if body.template is None:
-                if body.template_ref is not None:
-                    raise ApiError(
-                        422, "validation_error", "template_ref needs template", field="template_ref"
-                    )
-                result = init_project(
-                    body.name,
-                    repo,
-                    projects_dir=projects_dir,
-                    branch=body.branch,
-                    remote=body.remote,
-                )
-            else:
-                result = init_from_template(
-                    body.name,
-                    repo,
-                    body.template,
-                    ref=body.template_ref,
-                    projects_dir=projects_dir,
-                    branch=body.branch,
-                    remote=body.remote,
-                )
-        except TemplateError as exc:
-            raise ApiError(409, "template_error", str(exc)) from exc
-    return ProjectCreated(
-        name=result.project.name, path=str(result.path), missing_notes=result.missing_notes
-    )
+@router.post("", status_code=status.HTTP_202_ACCEPTED)
+def create_project(body: CreateProject, request: Request) -> JobStarted:
+    """Check the request (422 with its field) and start the creation job."""
+    jobs: CreationJobs = request.app.state.creation
+    try:
+        job = jobs.start(body)
+    except CreationError as exc:
+        raise ApiError(422, "validation_error", exc.message, field=exc.field) from exc
+    return JobStarted(job_id=job.id)
 
 
 @router.get("/{name}")
@@ -183,6 +158,9 @@ def get_project(name: ProjectName, request: Request) -> ProjectDetail:
                 )
     except PlanError as exc:
         idle = IdleView(code="invalid_plan", ticket_ids=[], message=str(exc))
+    if project is not None and project.commands.test is None:
+        next_ticket = None
+        idle = IdleView(code="no_commands", ticket_ids=[], message=NO_TEST_COMMAND)
     return ProjectDetail(
         **summary.model_dump(),
         repo=str(project.repo) if project else None,

@@ -15,7 +15,7 @@ from spoolhq.cli.gates import print_run
 from spoolhq.services.templates import (
     ResolvedTemplate,
     TemplateError,
-    builtin_descriptions,
+    builtin_contracts,
     check_template,
 )
 
@@ -41,12 +41,12 @@ def describe_source(template: ResolvedTemplate) -> str:
 def list_command() -> None:
     """Show the built-in templates with their descriptions."""
     try:
-        templates = builtin_descriptions()
+        templates = builtin_contracts()
     except TemplateError as exc:
         fail(f"error: {exc}")
-    for name, description in templates:
+    for name, contract in templates:
         typer.echo(name)
-        for line in description.strip().splitlines():
+        for line in contract.description.strip().splitlines():
             typer.echo(f"  {line}")
 
 

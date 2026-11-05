@@ -72,6 +72,8 @@ DEFAULT_PROTECTED_PATHS = (
 
 # Set as validation context by load_project, so `name` must match the folder name.
 FOLDER_NAME_CONTEXT = "folder_name"
+# Set by the creation job's first step, which writes the workspace before the repo exists.
+SKIP_REPO_CONTEXT = "skip_repo_check"
 
 
 def check_slug(value: str) -> str:
@@ -103,15 +105,21 @@ class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+NO_TEST_COMMAND = "Set the stack commands in project.yaml first"
+"""Why a project without a ``test`` command can't plan or run tickets."""
+
+
 class Commands(_Strict):
-    install: GateCommand
-    lint: GateCommand
-    test: GateCommand
+    """Each optional; a project without ``test`` can't run tickets (NO_TEST_COMMAND)."""
+
+    install: GateCommand | None = None
+    lint: GateCommand | None = None
+    test: GateCommand | None = None
 
     def for_implementer(self) -> dict[str, str]:
-        """The commands the implementer may run: all but ``install``, which only the gates
-        run, outside the sandbox (DECISIONS 91)."""
-        return {name: cmd for name, cmd in self.model_dump().items() if name != "install"}
+        """The commands the implementer may run: the set ones but ``install``, which only
+        the gates run, outside the sandbox (DECISIONS 91)."""
+        return {name: cmd for name, cmd in self.model_dump().items() if name != "install" and cmd}
 
 
 class Budget(_Strict):
@@ -268,7 +276,7 @@ class Project(_Strict):
     repo: str
     default_branch: NonEmptyStr = Field(default="main", validate_default=True)
     template: TemplateInfo | None = None
-    commands: Commands
+    commands: Commands = Field(default_factory=Commands)
     agents: Agents = Field(default_factory=Agents)
     limits: Limits = Field(default_factory=Limits)
     merge_policy: MergePolicy = Field(default_factory=MergePolicy)
@@ -294,10 +302,12 @@ class Project(_Strict):
 
     @field_validator("repo")
     @classmethod
-    def _repo_is_work_tree(cls, value: str) -> str:
+    def _repo_is_work_tree(cls, value: str, info: ValidationInfo) -> str:
         path = Path(value).expanduser()
         if not path.is_absolute():
             raise ValueError(f"must be an absolute path (or start with ~), got {value!r}")
+        if (info.context or {}).get(SKIP_REPO_CONTEXT):
+            return value
         if not path.exists():
             raise ValueError(f"path does not exist: {path}")
         if not path.is_dir():
@@ -314,7 +324,7 @@ class Project(_Strict):
     @classmethod
     def _branch_exists(cls, value: str, info: ValidationInfo) -> str:
         repo = info.data.get("repo")
-        if repo is None:
+        if repo is None or (info.context or {}).get(SKIP_REPO_CONTEXT):
             # The repo itself is invalid and already reported.
             return value
         path = Path(repo).expanduser()

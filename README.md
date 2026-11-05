@@ -14,10 +14,12 @@ just install && just test
 
 ## Create a project and look at its tickets
 
-A project is a workspace folder in `~/spoolhq-projects/` for an existing git repository (`SPOOLHQ_PROJECTS_DIR` to use another folder):
+A project is a workspace folder in `~/spoolhq-projects/` for a git repository (`SPOOLHQ_PROJECTS_DIR` to use another folder). `spool init` runs each stack command once before it creates the project, and undoes everything if one fails:
 
 ```sh
-uv run --directory daemon spool init my-app --repo ~/code/my-app   # creates ~/spoolhq-projects/my-app/
+uv run --directory daemon spool init my-app --repo ~/code/my-app \
+  --install "just install" --lint "just lint" --test "just test"   # creates ~/spoolhq-projects/my-app/
+uv run --directory daemon spool init scratch --repo ~/code/scratch --source empty   # a new empty repo
 uv run --directory daemon spool project validate my-app
 ```
 

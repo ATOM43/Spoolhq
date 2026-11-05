@@ -12,6 +12,10 @@ def test_list_templates(client: TestClient, token: str) -> None:
     assert [template["name"] for template in listed] == builtin_names()
     assert "fastapi-react" in builtin_names()
     assert all(template["description"] for template in listed)
+    by_name = {template["name"]: template for template in listed}
+    assert by_name["fastapi-react"]["summary"] == (
+        "FastAPI · SQLAlchemy · pytest · React · Vite · TypeScript · justfile · CI"
+    )
 
 
 def test_list_templates_needs_the_token(client: TestClient) -> None:

@@ -19,6 +19,7 @@ from spoolhq.services.projects.yaml_io import loader, to_plain
 
 CONTRACT_FILE = "spoolhq-template.yaml"
 MAX_DESCRIPTION = 2_000
+MAX_SUMMARY = 120
 REQUIRED_COMMANDS = ("install", "lint", "test")
 
 
@@ -39,6 +40,14 @@ def _check_description(value: str) -> str:
     if len(value) > MAX_DESCRIPTION:
         raise ValueError(f"must be at most {MAX_DESCRIPTION:,} characters, got {len(value):,}")
     return value
+
+
+def _check_summary(value: str) -> str:
+    if not value.strip() or "\n" in value.strip():
+        raise ValueError("must be one non-empty line")
+    if len(value.strip()) > MAX_SUMMARY:
+        raise ValueError(f"must be at most {MAX_SUMMARY} characters, got {len(value.strip())}")
+    return value.strip()
 
 
 Command = Annotated[str, AfterValidator(_check_command)]
@@ -62,6 +71,8 @@ class TemplateCommands(_Strict):
 class TemplateContract(_Strict):
     name: Annotated[str, AfterValidator(check_slug)]
     description: Annotated[str, AfterValidator(_check_description)]
+    summary: Annotated[str, AfterValidator(_check_summary)] | None = None
+    """One line for the app's template cards."""
     commands: TemplateCommands
 
 

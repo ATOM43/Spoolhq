@@ -1,4 +1,4 @@
-"""Templates: project skeletons that ``spool init --template`` generates a repo from.
+"""Templates: project skeletons a new project's repo is generated from.
 
 A template is a Copier template with a ``spoolhq-template.yaml`` contract (name,
 description for the planner, install/lint/test commands). Sources are built-in names
@@ -20,15 +20,13 @@ from spoolhq.services.templates.contract import (
 )
 from spoolhq.services.templates.generate import (
     check_safe,
-    check_target,
-    init_from_template,
     init_repo,
     render,
     unsafe_message,
 )
 from spoolhq.services.templates.sources import (
     ResolvedTemplate,
-    builtin_descriptions,
+    builtin_contracts,
     builtin_names,
     builtin_root,
     is_git_url,
@@ -43,13 +41,11 @@ __all__ = [
     "TemplateCommands",
     "TemplateContract",
     "TemplateError",
-    "builtin_descriptions",
+    "builtin_contracts",
     "builtin_names",
     "builtin_root",
     "check_safe",
-    "check_target",
     "check_template",
-    "init_from_template",
     "init_repo",
     "is_git_url",
     "load_contract",

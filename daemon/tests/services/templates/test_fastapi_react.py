@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+import spoolhq
 from spoolhq.cli import app
 from spoolhq.services.gates import gate_env
 from spoolhq.services.projects import load_project
@@ -64,9 +65,10 @@ def test_init_generates_one_commit_and_fills_the_commands(
         app, ["init", "demo", "--repo", str(repo), "--template", "fastapi-react"]
     )
     assert result.exit_code == 0, result.output
-    assert "template: fastapi-react (built-in, spoolhq " in result.output
+    for step in ("Create workspace", "Prepare repo", "Check commands", "Initial commit"):
+        assert f"passed   {step}" in result.output
     assert run_git(repo, "log", "--format=%s").splitlines() == [
-        "chore: apply template fastapi-react"
+        f"chore: generate from fastapi-react {spoolhq.__version__}"
     ]
     assert run_git(repo, "status", "--porcelain") == ""
     for path in ("backend/app/main.py", "frontend/src/app/main.tsx", ".copier-answers.yml"):

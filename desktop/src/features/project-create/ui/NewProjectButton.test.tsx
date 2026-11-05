@@ -41,6 +41,7 @@ const TEMPLATES = [
   { name: "fastapi-react", description: "FastAPI and React." },
   { name: "cli-tool", description: "A Python CLI." },
 ];
+const JOB = { id: "j1", project: "demo", state: "succeeded", steps: [] };
 const SETTINGS = {
   name: "demo",
   commands: { install: "just install", lint: "just lint", test: "just test" },
@@ -98,11 +99,14 @@ describe("New project", () => {
       if (path === "/api/projects/{name}/settings") {
         return ok({ settings: SETTINGS }, { ETag: '"etag-1"' });
       }
+      if (path === "/api/jobs/{job_id}") {
+        return ok(JOB);
+      }
       throw new Error(`unexpected GET ${path}`);
     });
     POST.mockImplementation((path) =>
       path === "/api/projects"
-        ? ok({ name: "demo", path: "/w/demo", missing_notes: [] })
+        ? ok({ job_id: "j1" })
         : Promise.reject(new Error(`unexpected POST ${path}`)),
     );
   });
@@ -133,7 +137,14 @@ describe("New project", () => {
     );
     await screen.findByRole("dialog", { name: "Stack commands" });
     expect(POST).toHaveBeenCalledWith("/api/projects", {
-      body: { name: "demo", repo: "/home/me/repo", branch: "main" },
+      body: {
+        name: "demo",
+        source: "existing",
+        repo_path: "/home/me/repo",
+        template: null,
+        commands: SETTINGS.commands,
+        merge_preset: "direct_unless_risky",
+      },
     });
   });
 
@@ -158,9 +169,11 @@ describe("New project", () => {
     expect(POST).toHaveBeenCalledWith("/api/projects", {
       body: {
         name: "demo",
-        repo: "/repos/new",
-        branch: "main",
+        source: "template",
+        repo_path: "/repos/new",
         template: "fastapi-react",
+        commands: SETTINGS.commands,
+        merge_preset: "direct_unless_risky",
       },
     });
   });
@@ -186,7 +199,9 @@ describe("New project", () => {
     });
     expect(name).toHaveAttribute("aria-invalid", "true");
 
-    POST.mockRejectedValueOnce(apiError("repo", "repo: not a git repository"));
+    POST.mockRejectedValueOnce(
+      apiError("repo_path", "repo: not a git repository"),
+    );
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Create project" }),
     );
@@ -207,10 +222,41 @@ describe("New project", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a failed creation step", async () => {
+    GET.mockImplementation((path) =>
+      path === "/api/jobs/{job_id}"
+        ? ok({
+            ...JOB,
+            state: "failed",
+            steps: [
+              {
+                name: "commands",
+                state: "failed",
+                message: "The test command failed",
+                output: "FAILED t.py",
+              },
+            ],
+          })
+        : ok(TEMPLATES),
+    );
+    const dialog = await openDialog();
+    await userEvent.type(within(dialog).getByLabelText("Name"), "demo");
+    await userEvent.type(
+      within(dialog).getByLabelText("Repository folder"),
+      "/r",
+    );
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Create project" }),
+    );
+    expect(
+      await within(dialog).findByText("The test command failed: FAILED t.py"),
+    ).toBeInTheDocument();
+  });
+
   it("tests each stack command and shows pass and fail", async () => {
     POST.mockImplementation((path, init) => {
       if (path === "/api/projects") {
-        return ok({ name: "demo", path: "/w/demo", missing_notes: [] });
+        return ok({ job_id: "j1" });
       }
       const { gate } = (init as { body: { gate: string } }).body;
       return gate === "lint"
@@ -246,7 +292,7 @@ describe("New project", () => {
   it("shows a refused command under its field and a timeout", async () => {
     POST.mockImplementation((path, init) => {
       if (path === "/api/projects") {
-        return ok({ name: "demo", path: "/w/demo", missing_notes: [] });
+        return ok({ job_id: "j1" });
       }
       const { gate } = (init as { body: { gate: string } }).body;
       return gate === "install"

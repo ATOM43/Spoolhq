@@ -133,6 +133,15 @@ describe("run controls", () => {
     expectDisabled("Approve the plan first");
   });
 
+  it("no test command: says to set the stack commands", () => {
+    const message = "Set the stack commands in project.yaml first";
+    show(
+      project({ idle: { code: "no_commands", ticket_ids: [], message } }),
+      current(null, false),
+    );
+    expectDisabled(message);
+  });
+
   it("approved and idle: Run next names the ticket and starts it", async () => {
     show(project({ next_ticket: "T11" }), current(null, false));
     expect(button("Run all")).toBeEnabled();

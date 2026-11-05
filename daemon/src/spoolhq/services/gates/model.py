@@ -18,6 +18,10 @@ class GateStatus(StrEnum):
     """The program wasn't found or couldn't start."""
 
 
+GATE_OK = (GateStatus.PASSED, GateStatus.SKIPPED)
+"""A skipped gate is one whose command isn't set (or install failed, which fails the run)."""
+
+
 class GateFailureData(TypedDict):
     """The fields of T10's ``GateFailure``, so the run loop can build one from it."""
 
@@ -50,7 +54,7 @@ class GateRun:
 
     @property
     def passed(self) -> bool:
-        return all(result.status is GateStatus.PASSED for result in self.results)
+        return all(result.status in GATE_OK for result in self.results)
 
     @property
     def first_failure(self) -> GateResult | None:

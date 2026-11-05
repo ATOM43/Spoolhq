@@ -340,3 +340,11 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 334 · Where the spec won over the D2 PNG · docs/decisions/desktop.md
 335 · Testing a secret · docs/decisions/api.md
 336 · `PLW1514` is on, and `just lint` checks `scripts/` · docs/decisions/core.md
+337 · Project creation is a job that rolls back only what it created · docs/decisions/projects-tickets.md
+338 · A new project's repo path is untrusted · docs/decisions/api.md
+339 · Merge presets map onto the current `merge_policy` keys · docs/decisions/runloop.md
+340 · The app polls a creation job · docs/decisions/api.md
+341 · Stack commands are optional; without `test`, nothing plans or runs · docs/decisions/projects-tickets.md
+342 · `spool init` runs the creation job, with built-in templates only · docs/decisions/projects-tickets.md
+343 · Templates have a one-line `summary` · docs/decisions/projects-tickets.md
+344 · The old New project dialog stays until T36 · docs/decisions/desktop.md

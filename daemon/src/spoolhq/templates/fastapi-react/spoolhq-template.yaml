@@ -1,4 +1,5 @@
 name: fastapi-react
+summary: FastAPI · SQLAlchemy · pytest · React · Vite · TypeScript · justfile · CI
 description: >
   A FastAPI backend and a React frontend in one repository, already set up and passing
   its gates. backend/ is Python with uv: FastAPI, SQLAlchemy 2 on SQLite, Alembic

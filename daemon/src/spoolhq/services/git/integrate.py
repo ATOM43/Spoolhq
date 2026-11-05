@@ -148,13 +148,23 @@ def unresolved_files(worktree: Path, conflicted: Sequence[str]) -> tuple[str, ..
     return tuple(sorted(left))
 
 
-def commit(worktree: Path, message: str) -> str:
+def commit(worktree: Path, message: str, *, allow_empty: bool = False) -> str:
     """Commit what is staged (concluding a merge, even with no change); the new sha.
 
     Hooks are disabled by ``run_git``; ``user.useConfigOnly`` refuses a guessed identity.
     """
+    empty = ["--allow-empty"] if allow_empty else []
     result = run_git(
-        ["-c", "user.useConfigOnly=true", "commit", "--no-verify", "--quiet", "-m", message],
+        [
+            "-c",
+            "user.useConfigOnly=true",
+            "commit",
+            *empty,
+            "--no-verify",
+            "--quiet",
+            "-m",
+            message,
+        ],
         worktree,
     )
     if result.returncode != 0:

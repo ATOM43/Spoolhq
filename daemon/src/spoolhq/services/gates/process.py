@@ -17,6 +17,7 @@ from spoolhq.services.gates.output import clean
 
 OUTPUT_CAP_BYTES = 20_000_000
 STOP_WAIT_S = 5.0
+CANCEL_POLL_S = 0.1
 READ_CHUNK = 64 * 1024
 
 
@@ -85,10 +86,12 @@ def run_process(
     timeout_s: float,
     log_path: Path,
     cap_bytes: int = OUTPUT_CAP_BYTES,
+    cancel: threading.Event | None = None,
 ) -> ProcessResult:
     """Run ``argv`` with stdin closed and stdout and stderr merged into ``log_path``.
 
-    Raises ``OSError`` if the program can't start.
+    Setting ``cancel`` stops it as a timeout would. Raises ``OSError`` if the program
+    can't start.
     """
     options: dict[str, Any] = {}
     if sys.platform != "win32":
@@ -110,7 +113,7 @@ def run_process(
         deadline = time.monotonic() + timeout_s
         timed_out = False
         try:
-            proc.wait(timeout=timeout_s)
+            _wait(proc, deadline, cancel)
         except subprocess.TimeoutExpired:
             timed_out = True
             _stop_tree(proc)
@@ -131,6 +134,22 @@ def run_process(
         output_lines=lines,
         output_truncated=log.truncated,
     )
+
+
+def _wait(proc: "subprocess.Popen[bytes]", deadline: float, cancel: threading.Event | None) -> None:
+    """``proc.wait`` until ``deadline``, raising TimeoutExpired then or once ``cancel`` is set."""
+    if cancel is None:
+        proc.wait(timeout=max(deadline - time.monotonic(), 0))
+        return
+    while True:
+        remaining = deadline - time.monotonic()
+        if cancel.is_set() or remaining <= 0:
+            raise subprocess.TimeoutExpired(proc.args, 0)
+        try:
+            proc.wait(timeout=min(remaining, CANCEL_POLL_S))
+            return
+        except subprocess.TimeoutExpired:
+            continue
 
 
 def _stop_tree(proc: "subprocess.Popen[bytes]") -> None:

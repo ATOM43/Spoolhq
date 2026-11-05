@@ -48,7 +48,10 @@ export interface paths {
         /** List Projects */
         get: operations["list_projects_api_projects_get"];
         put?: never;
-        /** Create Project */
+        /**
+         * Create Project
+         * @description Check the request (422 with its field) and start the creation job.
+         */
         post: operations["create_project_api_projects_post"];
         delete?: never;
         options?: never;
@@ -124,6 +127,43 @@ export interface paths {
          *     environment and a 90 s timeout. It may change the checkout, as the gate would.
          */
         post: operations["try_stack_command_api_projects__name__commands_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Job */
+        get: operations["get_job_api_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Job
+         * @description Stop the job and roll back; answers once the rollback is done (at most 15 s).
+         */
+        post: operations["cancel_job_api_jobs__job_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -676,24 +716,31 @@ export interface components {
         };
         /**
          * CreateProject
-         * @description What ``spool init`` takes.
+         * @description ``POST /api/projects`` and ``spool init``: a new project and where its repo comes from.
          */
         CreateProject: {
             /** Name */
             name: string;
-            /** Repo */
-            repo: string;
             /**
-             * Branch
-             * @default main
+             * Source
+             * @enum {string}
              */
-            branch: string;
-            /** Remote */
-            remote?: string | null;
+            source: "template" | "existing" | "empty";
+            /** Repo Path */
+            repo_path: string;
             /** Template */
             template?: string | null;
-            /** Template Ref */
-            template_ref?: string | null;
+            commands?: components["schemas"]["StackCommands"];
+            /** Git Remote */
+            git_remote?: string | null;
+            /**
+             * Merge Preset
+             * @default direct_unless_risky
+             * @enum {string}
+             */
+            merge_preset: "direct_unless_risky" | "always_pr" | "always_direct";
+            /** Clickup List Id */
+            clickup_list_id?: string | null;
         };
         /** CurrentRun */
         CurrentRun: {
@@ -805,7 +852,7 @@ export interface components {
              * Code
              * @enum {string}
              */
-            code: "all_done" | "running" | "awaiting_approval" | "blocked" | "waiting" | "plan_not_approved" | "invalid_plan";
+            code: "all_done" | "running" | "awaiting_approval" | "blocked" | "waiting" | "plan_not_approved" | "invalid_plan" | "no_commands";
             /** Ticket Ids */
             ticket_ids: string[];
             /** Message */
@@ -817,6 +864,31 @@ export interface components {
             file_name: string;
             /** Errors */
             errors: string[];
+        };
+        /** JobStarted */
+        JobStarted: {
+            /** Job Id */
+            job_id: string;
+        };
+        /** JobView */
+        JobView: {
+            /** Id */
+            id: string;
+            /** Project */
+            project: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "template" | "existing" | "empty";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "running" | "succeeded" | "failed" | "cancelled";
+            /** Steps */
+            steps: components["schemas"]["StepView"][];
+            rollback: components["schemas"]["RollbackView"] | null;
         };
         /** MergedView */
         MergedView: {
@@ -864,15 +936,6 @@ export interface components {
             rules: components["schemas"]["RuleHitView"][];
             /** Summary */
             summary: string;
-        };
-        /** ProjectCreated */
-        ProjectCreated: {
-            /** Name */
-            name: string;
-            /** Path */
-            path: string;
-            /** Missing Notes */
-            missing_notes: string[];
         };
         /** ProjectDetail */
         ProjectDetail: {
@@ -976,6 +1039,13 @@ export interface components {
              * @default
              */
             note: string;
+        };
+        /** RollbackView */
+        RollbackView: {
+            /** Removed */
+            removed: string[];
+            /** Left */
+            left: string[];
         };
         /** RuleHitView */
         RuleHitView: {
@@ -1094,12 +1164,46 @@ export interface components {
             /** Content */
             content: string;
         };
+        /** StackCommands */
+        StackCommands: {
+            /** Install */
+            install?: string | null;
+            /** Lint */
+            lint?: string | null;
+            /** Test */
+            test?: string | null;
+        };
+        /** StepView */
+        StepView: {
+            /**
+             * Name
+             * @enum {string}
+             */
+            name: "workspace" | "repo" | "commands" | "commit";
+            /** Title */
+            title: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "passed" | "failed" | "skipped";
+            /** Duration S */
+            duration_s: number | null;
+            /** Message */
+            message: string | null;
+            /** Output */
+            output: string | null;
+            /** Field */
+            field: string | null;
+        };
         /** TemplateView */
         TemplateView: {
             /** Name */
             name: string;
             /** Description */
             description: string;
+            /** Summary */
+            summary?: string | null;
         };
         /** TicketList */
         TicketList: {
@@ -1430,12 +1534,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectCreated"];
+                    "application/json": components["schemas"]["JobStarted"];
                 };
             };
             /** @description An error. */
@@ -1646,6 +1750,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommandTestResult"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_job_api_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Job id. */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobView"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_job_api_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Job id. */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobView"];
                 };
             };
             /** @description An error. */

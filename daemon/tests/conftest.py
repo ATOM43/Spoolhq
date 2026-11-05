@@ -523,3 +523,15 @@ def write_hook(bare: Path, name: str, script: str) -> None:
     hook = bare / "hooks" / name
     hook.write_text(f"#!/bin/sh\n{script}\n", encoding="utf-8", newline="\n")
     hook.chmod(0o755)
+
+
+@pytest.fixture
+def builtin_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """``make_template`` (passing ``fake_tool.py`` commands) as the only built-in
+    template, ``fixture``, so a test never installs the real ones."""
+    from spoolhq.services.templates import sources
+
+    root = tmp_path / "builtins"
+    make_template(root / "fixture")
+    monkeypatch.setattr(sources, "builtin_root", lambda: root)
+    return "fixture"

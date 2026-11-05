@@ -43,6 +43,8 @@ function idleReason(project: ProjectDetail, specEmpty: boolean): string {
       return `${idle.message} — finish those first`;
     case "invalid_plan":
       return `The plan has a problem: ${idle.message}`;
+    case "no_commands":
+      return idle.message;
   }
 }
 

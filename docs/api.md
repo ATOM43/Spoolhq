@@ -13,7 +13,9 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/health` | `{"status": "ok"}`, no token |
 | `GET /api/version` | the daemon's version |
 | `GET /api/projects` | each project: `name`, `done`/`total`/`draft` tickets, `remaining_h`, `run_state` (`running`, `paused` or `idle`), `needs_you` (tickets `awaiting_approval` or `blocked`), `latest_seq` (see [Starting from REST](#event-websocket)), `has_spec` (`CONTEXT.md` isn't blank or init's starter), `template` (null for an existing repo), `run` (the active, else latest run) and `run_step` (its latest phase), `last_activity` (the latest event's time), `usage` (`tokens` of attempts without a cost, `cost_usd` summed over those with one), and `settings_error` (`{file, field, message}`, the first problem of a `project.yaml` that doesn't load; the project is listed anyway) |
-| `POST /api/projects` | create a project like `spool init`: `{"name", "repo", "branch", "remote", "template", "template_ref"}` (201) |
+| `POST /api/projects` | start a [creation job](#creating-a-project), like `spool init`: 202 `{"job_id"}`, or 422 with the field before any job starts |
+| `GET /api/jobs/{job_id}` | the creation job: `state` and its `steps`, plus `rollback` after a failure or cancel |
+| `POST /api/jobs/{job_id}/cancel` | stop the job and roll back; answers when the rollback is done (at most 15 s) |
 | `POST /api/projects/{name}/commands/test` | `{"gate", "command"}`: run one stack command once in the project's repository, [as its gate would](#trying-a-stack-command) |
 | `GET /api/projects/{name}` | the summary plus `repo`, `default_branch`, `remote` (all three null while `settings_error` is set), `invalid_tickets`, and what can run: `next_ticket` (what `run/next` would start, else null) and `idle` (`{code, ticket_ids, message}` when nothing can: `all_done`, `running`, `awaiting_approval`, `blocked`, `waiting`, `plan_not_approved` or `invalid_plan`; null with no tickets) |
 | `GET`, `PUT /api/projects/{name}/settings` | `project.yaml` as `{"settings": {...}}`, validated by the project model; [ETag](#etags-and-edit-conflicts) |
@@ -30,7 +32,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/projects/{name}/runs/{run_id}` | one run with its `attempts` (number, kind, status — the verdict —, backend, tokens, times) |
 | `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/{artifact}` | an attempt's file as stored; `artifact` is `transcript`, `gates`, `diff` or `review` (422 for anything else) |
 | `POST /api/projects/{name}/github/sync` | check open pull requests now |
-| `GET /api/templates` | the built-in templates: `name` (what `POST /api/projects` takes as `template`) and `description` |
+| `GET /api/templates` | the built-in templates: `name` (what `POST /api/projects` takes as `template`), `description` and `summary` (one line of at most 120 characters, for a card; null if the template has none) |
 | `GET /api/agents` | what `spool agents` shows: each backend (installed, version, login, policy parts) and Graphify |
 | `GET /api/settings` | the daemon's settings, and for each secret (`anthropic`, `github`, `clickup`) only `{"set", "source": "keychain" \| "env" \| null}` |
 | `PUT`, `DELETE /api/settings/secrets/{name}` | store `{"value"}` in the OS keychain, or remove it (204) |
@@ -40,6 +42,48 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 An artifact is read from the attempt folder the run log names, by a fixed file name per `artifact`; the folder must resolve inside the workspace's `runs/`, and the file must not be a symlink and must resolve inside the folder, else 404.
 
 A secret's value is write-only: it goes to the OS keychain (service `spoolhq`, through `keyring`) and is never returned, logged or written to a file. An environment variable (`ANTHROPIC_API_KEY`, `SPOOLHQ_GITHUB_TOKEN`, `SPOOLHQ_CLICKUP_TOKEN`) wins over the keychain, as it does where the secret is used. Without a usable keychain the answer is 409 `keychain_unavailable`.
+
+## Creating a project
+
+`POST /api/projects` takes:
+
+| Field | |
+| --- | --- |
+| `name` | `^[a-z][a-z0-9-]{0,39}$` ("Use lowercase letters, digits and hyphens, starting with a letter"); no project of that name may exist |
+| `source` | `template`, `existing` or `empty` |
+| `repo_path` | absolute. `existing`: a git repository with a branch checked out and no uncommitted changes (they are listed); otherwise a folder that doesn't exist yet (its parent must) or is empty |
+| `template` | `template` only: a name from `GET /api/templates`. No git URLs or local paths, since a Copier template can run code |
+| `commands` | `install`, `lint`, `test`; each required unless `source` is `empty`, same no-shell rule as `project.yaml` |
+| `git_remote`, `merge_preset`, `clickup_list_id` | optional; `merge_preset` is `direct_unless_risky` (default), `always_pr` or `always_direct` ([below](#merge-presets)) |
+
+The path comes from the webview, so it is untrusted: it is resolved, and refused when it is the disk root, the home folder itself, inside the projects folder, the worktrees folder or `~/.spoolhq`, or a symlink. Every check runs before the job starts; a refusal is 422 with `field` (`name`, `repo_path`, `template`, `commands.test`, …) and no job.
+
+The job then runs four steps, each `pending`, `running`, `passed`, `failed` or `skipped`, with `duration_s`:
+
+1. **Create workspace** (`workspace`): `<projects>/<name>/` with `project.yaml`, the starter `CONTEXT.md`, `tickets/` and `runs/` (and `TEMPLATE.md` for a template).
+2. **Prepare repo** (`repo`): Copier generates the template into `repo_path` (no trust, [templates](templates.md#no-trust)); `existing` is only checked again, never written to; `empty` creates the folder if needed and runs `git init -b main`.
+3. **Check commands** (`commands`): install (600 s), then lint and test (300 s each), once each in the repo through the gates code (no shell, scrubbed environment). An unset command is skipped; with none the step is `skipped`. For `existing` they run in your checkout, as a gate would.
+4. **Initial commit** (`commit`): `chore: generate from <template> <ref>` for a template, `git commit --allow-empty -m "Initial commit (SpoolHQ)"` for `empty` (hooks and signing off, your git identity required); skipped for `existing`.
+
+A failed step has a fixed `message` ("The test command failed"), the trimmed `output` and the request `field` that caused it (`commands.test`, `repo_path`, `template`). The job's `state` is `running`, then `succeeded`, `failed` or `cancelled`. Jobs live in the daemon's memory for an hour after they end; a restart forgets them. The app polls `GET /api/jobs/{job_id}` every 500 ms only while a job runs, since no project event stream exists before the project does.
+
+### Rollback
+
+On a failure or cancel the job deletes exactly the paths it created, newest first, and records the result in `rollback`: `removed` (each deleted path) and `left` (any it couldn't delete; empty when the rollback is complete). It never deletes or changes anything that existed before: a folder that existed empty stays, emptied of what the job wrote, and an existing repository is never touched. Deleting never follows a symlink. The projects folder is removed only if the job created it and it is still empty.
+
+### Merge presets
+
+Each preset is written as `project.yaml` [`merge_policy`](merge-policy.md) keys:
+
+| Preset | `merge_policy` |
+| --- | --- |
+| `direct_unless_risky` | nothing written: the defaults |
+| `always_pr` | `protected_paths: ['**']`: every change matches, so every ticket needs you (a pull request with a remote) |
+| `always_direct` | `max_diff_lines: 100000`, `protected_paths: []`: the diff-size and protected-path rules are off; `review_required` and a reviewer's `needs_human` still send the ticket to you |
+
+### Projects without commands
+
+Stack commands are optional in `project.yaml`. Without a `test` command a project can't plan or run tickets: `run/next` and `plan/generate` answer 409 "Set the stack commands in project.yaml first", and the project detail's `idle` has code `no_commands` with that message.
 
 ## Testing a secret
 

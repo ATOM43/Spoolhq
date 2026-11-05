@@ -18,7 +18,12 @@ from typing import Literal
 
 import spoolhq
 from spoolhq.services.git import GitError, remove_path, run_git
-from spoolhq.services.templates.contract import CONTRACT_FILE, TemplateError, load_contract
+from spoolhq.services.templates.contract import (
+    CONTRACT_FILE,
+    TemplateContract,
+    TemplateError,
+    load_contract,
+)
 
 BUILTIN_DIR = "templates"
 CLONE_TIMEOUT_S = 300.0
@@ -50,11 +55,9 @@ def builtin_names() -> list[str]:
     return sorted(p.name for p in root.iterdir() if (p / CONTRACT_FILE).is_file())
 
 
-def builtin_descriptions() -> list[tuple[str, str]]:
-    """Each built-in template's name and description, by name."""
-    return [
-        (name, load_contract(builtin_root() / name, name).description) for name in builtin_names()
-    ]
+def builtin_contracts() -> list[tuple[str, TemplateContract]]:
+    """Each built-in template's name and contract, by name."""
+    return [(name, load_contract(builtin_root() / name, name)) for name in builtin_names()]
 
 
 def is_git_url(source: str) -> bool:

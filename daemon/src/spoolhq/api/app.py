@@ -16,6 +16,7 @@ from spoolhq.api.routers import (
     events,
     github,
     health,
+    jobs,
     plan,
     projects,
     runs,
@@ -29,6 +30,7 @@ from spoolhq.api.security import LocalOnlyMiddleware
 from spoolhq.api.worktrees import check_git, recover_all_integrations, recover_all_worktrees
 from spoolhq.core.auth import load_or_create_token
 from spoolhq.core.config import Settings, ensure_home, home_dir
+from spoolhq.services.creation import CreationJobs
 from spoolhq.services.runloop import Agents, GitHubPoller, Integrator, PlanJobs, RunLoop
 from spoolhq.services.runs import RunRegistry
 
@@ -95,9 +97,15 @@ def create_app(
                 home=home_dir(),
                 runner=(agents.planner or agents.implementer) if agents else None,
             )
+            app.state.creation = CreationJobs(
+                projects_dir=settings.projects_dir,
+                worktrees_dir=settings.worktrees_dir,
+                home=home_dir(),
+            )
             try:
                 yield
             finally:
+                app.state.creation.close()
                 app.state.streams.close_all()
                 app.state.plans.close()
                 app.state.github.close()
@@ -119,6 +127,7 @@ def create_app(
         health,
         version,
         projects,
+        jobs,
         tickets,
         runs,
         plan,

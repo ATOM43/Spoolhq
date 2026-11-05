@@ -404,7 +404,7 @@ describe("Home", () => {
   it("shows a created project in the list without a reload", async () => {
     POST.mockImplementation(() => {
       projects = [project("fresh", { total: 0 })];
-      return ok({ name: "fresh", path: "/w/fresh", missing_notes: [] });
+      return ok({ job_id: "j1" });
     });
     renderHome();
     await screen.findByText("No projects yet");
@@ -425,7 +425,9 @@ describe("Home", () => {
         ? ok(projects)
         : path === "/api/projects/{name}/settings"
           ? ok({ settings: { commands: {} } })
-          : ok([]),
+          : path === "/api/jobs/{job_id}"
+            ? ok({ id: "j1", project: "fresh", state: "succeeded", steps: [] })
+            : ok([]),
     );
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Create project" }),

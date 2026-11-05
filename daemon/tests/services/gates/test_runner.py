@@ -1,6 +1,7 @@
 """``run_gates`` and ``check_done_when`` end to end with ``fake_tool.py``."""
 
 import dataclasses
+import threading
 import time
 from pathlib import Path
 
@@ -242,3 +243,24 @@ def test_try_command_reports_a_failure_and_a_timeout(tmp_path: Path) -> None:
     assert failed.failing_tests == ("tests/test_math.py::test_add", "tests/test_math.py::test_sub")
     timed_out = try_command("lint", fake_tool_cmd("sleep"), tmp_path, 0.5)
     assert (timed_out.status, timed_out.exit_code) == (GateStatus.TIMED_OUT, None)
+
+
+def test_an_unset_command_is_skipped_and_the_run_still_passes(tmp_path: Path) -> None:
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    run = run_gates(worktree, {"install": None, "test": PASS}, DEFAULT_TIMEOUTS, tmp_path / "l")
+    assert [r.status for r in run.results] == [
+        GateStatus.SKIPPED,
+        GateStatus.SKIPPED,
+        GateStatus.PASSED,
+    ]
+    assert run.passed
+
+
+def test_try_command_stops_when_cancelled(tmp_path: Path) -> None:
+    cancel = threading.Event()
+    threading.Timer(0.5, cancel.set).start()
+    started = time.monotonic()
+    result = try_command("test", fake_tool_cmd("sleep"), tmp_path, 60, cancel)
+    assert result.status is GateStatus.TIMED_OUT
+    assert time.monotonic() - started < 20

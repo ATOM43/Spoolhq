@@ -1,12 +1,12 @@
 # Templates
 
-A template is a project skeleton that `spool init --template` generates a new repository from. The generated repo already installs, lints and tests clean, so the planner starts from real work instead of setup. Templates are [Copier](https://copier.readthedocs.io/) templates with one extra file, `spoolhq-template.yaml`, that tells SpoolHQ the template's name, a description for the planner and the gate commands.
+A template is a project skeleton a new project's repository is generated from (`spool init --template`, or the app's New project). The generated repo already installs, lints and tests clean, so the planner starts from real work instead of setup. Templates are [Copier](https://copier.readthedocs.io/) templates with one extra file, `spoolhq-template.yaml`, that tells SpoolHQ the template's name, a description for the planner and the gate commands.
 
-The code is `services/templates/`: the contract in `contract.py`, sources in `sources.py`, the Copier call, git init and first commit in `generate.py`, and the contract check in `check.py`. It may import `services.projects`, `services.gates` and `services.git` (an import-linter contract forbids the rest). `spool init` (in `cli/main.py`) and `spool templates list|check` (in `cli/templates.py`) call it directly.
+The code is `services/templates/`: the contract in `contract.py`, sources in `sources.py`, the Copier call and `git init` in `generate.py`, and the contract check in `check.py`. It may import `services.projects`, `services.gates` and `services.git` (an import-linter contract forbids the rest). The creation job (`services/creation/`) and `spool templates list|check` (in `cli/templates.py`) call it.
 
 ## Sources
 
-`--template` (and `spool templates check`) take one of:
+`spool templates check` takes one of these; creating a project (`spool init --template`, `POST /api/projects`) takes **only a built-in name**, since a template can run code:
 
 | Source | Looks like | `template.ref` in `project.yaml` |
 | --- | --- | --- |
@@ -16,13 +16,13 @@ The code is `services/templates/`: the contract in `contract.py`, sources in `so
 
 Built-ins ship inside the package, under `daemon/src/spoolhq/templates/<name>/` (package data, like the prompt templates). `spool templates list` shows them with their descriptions. An unknown name is refused with `unknown template 'x'; spool templates list shows the built-in ones`.
 
-For a git URL, or a local folder that is a git repository, SpoolHQ clones it once with its own git runner (hooks disabled), resolves `--template-ref` (a branch, tag or commit; without it, the repository's default branch) to a commit, and prints the source and commit **before generating**:
+For a git URL, or a local folder that is a git repository, SpoolHQ clones it once with its own git runner (hooks disabled), resolves `--ref` (a branch, tag or commit; without it, the repository's default branch) to a commit, and prints the source and commit **before generating**:
 
 ```text
 template: https://github.com/me/tpl.git at commit 3f2a…
 ```
 
-SpoolHQ checks that commit out into a temp folder and removes its `.git`, so Copier renders exactly that commit as a plain folder and never runs git itself: Copier's own clone would use the user's global git config, including a `core.hooksPath` with checkout hooks. The answers file then records the git URL as `_src_path` and the commit as `_commit`, not the temp folder. `--template-ref` with anything but a git URL or a local git repository is an error. Clones (and every fetch and push) run ssh with `BatchMode=yes`, so a passphrase-protected key without an agent fails at once; a `GIT_SSH_COMMAND`, `GIT_SSH` or `core.sshCommand` of your own is kept, with one warning that a passphrase prompt could hang until the timeout.
+SpoolHQ checks that commit out into a temp folder and removes its `.git`, so Copier renders exactly that commit as a plain folder and never runs git itself: Copier's own clone would use the user's global git config, including a `core.hooksPath` with checkout hooks. The answers file then records the git URL as `_src_path` and the commit as `_commit`, not the temp folder. `--ref` with anything but a git URL or a local git repository is an error. Clones (and every fetch and push) run ssh with `BatchMode=yes`, so a passphrase-protected key without an agent fails at once; a `GIT_SSH_COMMAND`, `GIT_SSH` or `core.sshCommand` of your own is kept, with one warning that a passphrase prompt could hang until the timeout.
 
 ## The contract: `spoolhq-template.yaml`
 
@@ -71,16 +71,12 @@ Copier's own unsafe check runs too, so tasks or extensions pulled in through `!i
 ## What `spool init --template` does
 
 ```sh
-spool init <name> --repo <path> --template <source> [--template-ref REF] [--branch main] [--remote URL]
+spool init <name> --repo <path> --template <built-in> [--install CMD --lint CMD --test CMD] [--remote URL]
 ```
 
-1. Checks the name and that the workspace doesn't exist. `--repo` must not exist or be an empty folder; anything else is refused and left untouched (`--repo must be a new or empty folder: … is not empty`).
-2. Resolves the source (printing it, with the commit for git), reads the contract and refuses unsafe features. Nothing has been written yet.
-3. Runs Copier non-interactively with the template's defaults and `project_name` set to the project name.
-4. `git init --initial-branch=<branch>`, stages everything and makes the first commit `chore: apply template <name>` through the integration commit helper: hooks and signing disabled, nothing written to any git config. The commit needs your git identity (`user.name`/`user.email`, or the `GIT_AUTHOR_*`/`GIT_COMMITTER_*` variables). Copier's answers file, `.copier-answers.yml`, is committed, so `copier update` can work later (SpoolHQ doesn't run it).
-5. Creates the workspace like `spool init` does, with `commands` from the contract, a `template` block (`name`, `source`, `ref`; see [project-yaml](project-yaml.md)) and the description in `TEMPLATE.md`.
+It runs the [creation job](api.md#creating-a-project), the same one as the app: the workspace, then Copier non-interactively with the template's defaults and `project_name` set to the project name, then the stack commands (the template's own unless given) once each, then `git init --initial-branch=main`, stage everything and commit `chore: generate from <template> <ref>` through the integration commit helper (hooks and signing disabled, nothing written to any git config; your git identity is needed). Copier's answers file, `.copier-answers.yml`, is committed, so `copier update` can work later (SpoolHQ doesn't run it). `project.yaml` gets the commands, a `template` block (`name`, `source`, `ref`; see [project-yaml](project-yaml.md)), and the description goes to `TEMPLATE.md`.
 
-Any failure after generation started removes what was generated (the folder if SpoolHQ created it, its contents if it was empty before) and reports what failed, followed by `removed what was generated in <path>`; the workspace is created all or nothing, so none is left behind.
+`--repo` must not exist (its parent must) or be an empty folder. Any failed step [rolls back](api.md#rollback) what was created: the folder if SpoolHQ created it, its contents if it was empty before, and the workspace.
 
 ## The contract check
 

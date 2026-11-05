@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from types import FrameType
@@ -9,6 +10,7 @@ from typing import Annotated
 
 import typer
 import uvicorn
+from pydantic import ValidationError
 
 import spoolhq
 from spoolhq.api import create_app
@@ -23,21 +25,26 @@ from spoolhq.cli.prompt import prompt_app
 from spoolhq.cli.review import review_command
 from spoolhq.cli.run import run_app
 from spoolhq.cli.runs import runs_app
-from spoolhq.cli.templates import describe_source, templates_app
+from spoolhq.cli.templates import templates_app
 from spoolhq.cli.tickets import tickets_app
 from spoolhq.cli.worktrees import worktrees_app
 from spoolhq.core.auth import load_or_create_token, token_path
-from spoolhq.core.config import Settings, ensure_home
+from spoolhq.core.config import Settings, ensure_home, home_dir
 from spoolhq.core.daemon_lock import DaemonAlreadyRunning, acquire_daemon_lock
 from spoolhq.core.logs import configure_logging
-from spoolhq.services.github import github_token
-from spoolhq.services.projects import (
-    ProjectError,
-    ProjectValidationError,
-    init_project,
-    load_project,
+from spoolhq.services.creation import (
+    CreateProject,
+    CreationError,
+    Job,
+    Runner,
+    StackCommands,
+    check_request,
 )
-from spoolhq.services.templates import TemplateError, init_from_template
+from spoolhq.services.creation.request import MergePreset, Source
+from spoolhq.services.github import github_token
+from spoolhq.services.projects import ProjectError, load_project
+from spoolhq.services.projects.workspace import REPO_NOTES
+from spoolhq.services.templates import builtin_names, load_contract, open_template
 
 app = typer.Typer(
     name="spool",
@@ -134,67 +141,90 @@ def version() -> None:
         _fail(f"error: {exc}")
 
 
+CommandOption = Annotated[
+    str | None, typer.Option(help="Stack command; required unless --source empty.")
+]
+
+
 @app.command()
 def init(
     name: Annotated[str, typer.Argument(help="Project name: lowercase letters, digits, hyphens.")],
     repo: Annotated[
         Path,
         typer.Option(
-            help="The existing git repository to work on; with --template, a new or "
-            "empty folder to generate into."
+            help="The existing git repository; for a template or empty repo, a new or empty folder."
         ),
     ],
-    branch: Annotated[str, typer.Option(help="Branch that tickets merge into.")] = "main",
+    source: Annotated[
+        Source | None,
+        typer.Option(help="template, existing or empty (default: template with --template)."),
+    ] = None,
+    template: Annotated[
+        str | None, typer.Option(help="A built-in template (spool templates list).")
+    ] = None,
+    install: CommandOption = None,
+    lint: CommandOption = None,
+    test: CommandOption = None,
     remote: Annotated[
         str | None, typer.Option(help="GitHub URL of the repository (optional).")
     ] = None,
-    template: Annotated[
-        str | None,
-        typer.Option(help="Generate the repo from a template: built-in name, folder or git URL."),
-    ] = None,
-    template_ref: Annotated[
-        str | None,
-        typer.Option(help="Branch, tag or commit of a git template (URL or local repository)."),
+    merge_preset: Annotated[
+        MergePreset, typer.Option(help="When a ticket needs you before it merges.")
+    ] = "direct_unless_risky",
+    clickup_list: Annotated[
+        str | None, typer.Option(help="ClickUp list id to sync tickets with (optional).")
     ] = None,
 ) -> None:
-    """Create a project workspace for an existing git repository, or generate the
-    repository from a template first."""
+    """Create a project: generate its repo from a template, use an existing git
+    repository or start an empty one, check the stack commands and make the first
+    commit. A failed step undoes what was created. Same service as POST /api/projects."""
     settings = _settings()
-    if template_ref is not None and template is None:
-        _fail("error: --template-ref needs --template")
+    commands = {"install": install, "lint": lint, "test": test}
+    if template is not None and template in builtin_names():
+        # The template's own commands, unless given: what the app's dialog pre-fills.
+        with open_template(template) as found:
+            defaults = load_contract(found.root, found.label).commands.gates()
+        commands = {gate: value or defaults[gate] for gate, value in commands.items()}
     try:
-        if template is None:
-            result = init_project(
-                name, repo, projects_dir=settings.projects_dir, branch=branch, remote=remote
-            )
-        else:
-            result = init_from_template(
-                name,
-                repo,
-                template,
-                ref=template_ref,
-                projects_dir=settings.projects_dir,
-                branch=branch,
-                remote=remote,
-                on_resolved=lambda resolved: typer.echo(describe_source(resolved)),
-            )
-    except ProjectValidationError as exc:
-        _fail("\n".join(f"error: {line}" for line in exc.errors))
-    except (ProjectError, TemplateError) as exc:
-        _fail("\n".join(f"error: {line}" for line in str(exc).splitlines()))
-    if template is not None:
-        typer.echo(f"Generated {result.project.repo_path} (one commit on {branch})")
-    typer.echo(f"Created project '{result.project.name}' at {result.path}")
-    if result.missing_notes:
-        missing = ", ".join(result.missing_notes)
-        typer.echo(f"note: {result.project.repo_path} has no {missing} (agents read them there)")
-    if template is not None:
-        typer.echo(f"Next: write your spec in {result.path / 'CONTEXT.md'}.")
-        return
-    typer.echo(
-        f"Next: write your spec in {result.path / 'CONTEXT.md'}, "
-        "and check the commands in project.yaml."
-    )
+        request = CreateProject(
+            name=name,
+            source=source or ("template" if template is not None else "existing"),
+            repo_path=str(repo.expanduser().absolute()),
+            template=template,
+            commands=StackCommands(**commands),
+            git_remote=remote,
+            merge_preset=merge_preset,
+            clickup_list_id=clickup_list,
+        )
+        checked = check_request(
+            request,
+            projects_dir=settings.projects_dir,
+            worktrees_dir=settings.worktrees_dir,
+            home=home_dir(),
+        )
+    except ValidationError as exc:
+        _fail("\n".join(f"error: {error['msg']}" for error in exc.errors()))
+    except CreationError as exc:
+        _fail(f"error: {exc.field}: {exc.message}")
+    job = Job(id="cli", project=name, source=request.source)
+    lock, cancel = threading.Lock(), threading.Event()
+    Runner(job, checked, projects_dir=settings.projects_dir, cancel=cancel, lock=lock).run()
+    for step in job.steps:
+        typer.echo(f"{step.state:<8} {step.title}")
+    if job.state != "succeeded":
+        failed = next(step for step in job.steps if step.state == "failed")
+        lines = [f"error: {failed.field or failed.name}: {failed.message}"]
+        lines += (failed.output or "").splitlines()
+        if job.rollback is not None:
+            lines += [f"removed {path}" for path in job.rollback.removed]
+            lines += [f"error: couldn't remove {path}" for path in job.rollback.left]
+        _fail("\n".join(lines))
+    workspace = settings.projects_dir / name
+    typer.echo(f"Created project '{name}' at {workspace}")
+    missing = [note for note in REPO_NOTES if not (checked.repo / note).exists()]
+    if missing:
+        typer.echo(f"note: {checked.repo} has no {', '.join(missing)} (agents read them there)")
+    typer.echo(f"Next: write your spec in {workspace / 'CONTEXT.md'}.")
 
 
 @project_app.command("validate")

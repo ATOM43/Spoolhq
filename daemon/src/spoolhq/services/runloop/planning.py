@@ -21,7 +21,7 @@ from spoolhq.services.planner import (
     load_existing,
     read_spec,
 )
-from spoolhq.services.projects import Project, load_project, project_dir
+from spoolhq.services.projects import NO_TEST_COMMAND, Project, load_project, project_dir
 from spoolhq.services.runloop.model import NotFoundError, RunActiveError, RunLoopError, user_errors
 from spoolhq.services.runloop.prompting import planner_code_map
 from spoolhq.services.runs import (
@@ -77,6 +77,8 @@ class PlanJobs:
         workspace = self._workspace(project)
         with user_errors():
             settings = load_project(project, projects_dir=self.projects_dir)
+        if settings.commands.test is None:
+            raise RunLoopError(NO_TEST_COMMAND)
         runner = self.runner or settings.agents.runner_for("planner")
         try:
             read_spec(workspace)

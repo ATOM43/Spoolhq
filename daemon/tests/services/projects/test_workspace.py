@@ -18,6 +18,7 @@ from spoolhq.services.projects import (
     template_description,
 )
 from spoolhq.services.projects import workspace as workspace_module
+from spoolhq.services.projects.yaml_io import parse
 from tests.conftest import AGENT_FIXTURES, FakeBackend
 
 KNOWN_BACKENDS = "expected one of: claude-code-cli, codex-cli, claude-agent-sdk"
@@ -141,10 +142,24 @@ def test_repo_with_tilde_is_expanded(
     assert project.repo_path == git_repo
 
 
-@pytest.mark.parametrize(
-    "field",
-    ["name", "repo", "commands.install", "commands.lint", "commands.test", "tracker.list_id"],
-)
+def test_stack_commands_are_optional(projects_dir: Path, git_repo: Path) -> None:
+    data = valid_data(git_repo)
+    del data["commands"]
+    write_project(projects_dir, data)
+    project = load_project("demo", projects_dir=projects_dir)
+    assert project.commands.model_dump() == {"install": None, "lint": None, "test": None}
+    assert project.commands.for_implementer() == {}
+
+
+def test_a_workspace_can_be_written_before_its_repo(projects_dir: Path, tmp_path: Path) -> None:
+    repo = tmp_path / "not-yet"
+    result = init_project("demo", repo, projects_dir=projects_dir, commands={}, check_repo=False)
+    data = parse((result.path / "project.yaml").read_text(encoding="utf-8"))
+    assert "commands" not in data
+    assert data["repo"] == str(repo.resolve())
+
+
+@pytest.mark.parametrize("field", ["name", "repo", "tracker.list_id"])
 def test_missing_required_field_is_named(projects_dir: Path, git_repo: Path, field: str) -> None:
     data = valid_data(git_repo)
     del_path(data, field)
@@ -338,11 +353,9 @@ def test_default_branch_git_error_is_reported(projects_dir: Path, git_repo: Path
 
 def test_all_errors_are_reported_at_once(projects_dir: Path, git_repo: Path) -> None:
     data = valid_data(git_repo)
-    del data["commands"]["test"]
     data["limits"] = {"gate_retries": 99}
     data["git"] = {"remote": "nope"}
     assert errors_for(projects_dir, data) == [
-        "project.yaml: commands.test: field required",
         "project.yaml: limits.gate_retries: must be at most 10",
         "project.yaml: git.remote: not a GitHub URL",
     ]

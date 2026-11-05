@@ -1,7 +1,7 @@
 # SpoolHQ — Task
 
 Name: SpoolHQ (package `spoolhq`, CLI `spool`).
-Status: building. Ticket plan: "Agent Orchestrator — Ticket Plan" (30 tickets, 6 phases, ~76 h).
+Status: building. The ticket plan is in Plan.md.
 
 This file is the root context for the project. It states what to build and why. The ticket plan states the order to build it in. Once SpoolHQ reaches milestone M1, this file becomes the `CONTEXT.md` it reads while implementing its own remaining tickets.
 
@@ -234,7 +234,7 @@ Planned as later phases, with v1 interfaces designed so they slot in:
 - Docker execution, with the worktree bind-mounted so code changes stay on the host.
 - Several agents working on independent tickets in parallel, with a merge queue.
 - Two-way tracker sync, a Jira adapter, webhook intake.
-- Further agent backends (Aider and others), and Antigravity CLI (replaces Gemini CLI, closed source; check its headless mode and sandbox first).
+- Further agent backends (Aider and others), and Antigravity CLI (closed source; check its headless mode and sandbox first).
 - A shared template registry.
 - Multi-user accounts, hosted service, authentication beyond the local token.
 
@@ -267,6 +267,7 @@ Planned as later phases, with v1 interfaces designed so they slot in:
 - Tracker: ClickUp first (simpler API than Jira), one-way.
 - Order: CLI and run loop before UI, so SpoolHQ can build itself from Phase 3.
 - Review: binary verdict per acceptance criterion, not a numeric score.
+- Licence: Apache-2.0.
 
 ## Open questions
 
@@ -275,4 +276,3 @@ Planned as later phases, with v1 interfaces designed so they slot in:
 - Default reviewer backend: same as the implementer, or a different model by default to reduce shared blind spots?
 - Do each vendor's terms allow driving its CLI from a third-party tool with a subscription login? To check before release.
 - **Release blocker:** Confirm OpenAI's terms allow driving Codex with a ChatGPT login from a third-party tool, before v0.1.0 (DECISIONS 272: unclear).
-- Licence: Apache-2.0 assumed; AGPL would keep forks open but may slow adoption.

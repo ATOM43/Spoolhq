@@ -17,7 +17,7 @@ from typing import Literal
 from spoolhq.services.gates import run_gates
 from spoolhq.services.git import GitError, Worktree, WorktreeManager, ensure_clean
 from spoolhq.services.git import ensure_no_operation_in_progress as ensure_no_operation
-from spoolhq.services.projects import Project, load_project, project_dir
+from spoolhq.services.projects import NO_TEST_COMMAND, Project, load_project, project_dir
 from spoolhq.services.runloop import approval
 from spoolhq.services.runloop.delivery import Delivery
 from spoolhq.services.runloop.integration import last_merged
@@ -264,6 +264,8 @@ class RunLoop:
     def start(self, project: str, mode: Mode = "next", ticket_id: str | None = None) -> Run:
         """Start a run of ``ticket_id`` or the next ready ticket (``all``: then the next…)."""
         settings, workspace, run_log = self._project(project)
+        if settings.commands.test is None:
+            raise RunLoopError(NO_TEST_COMMAND)
         with self._mutex:
             self._check_free(project)
             lock = take_run_lock(workspace, project)

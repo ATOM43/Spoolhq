@@ -22,7 +22,13 @@ from spoolhq.services.projects.errors import (
     ProjectValidationError,
     format_errors,
 )
-from spoolhq.services.projects.model import FOLDER_NAME_CONTEXT, SLUG_RE, SLUG_RULE, Project
+from spoolhq.services.projects.model import (
+    FOLDER_NAME_CONTEXT,
+    SKIP_REPO_CONTEXT,
+    SLUG_RE,
+    SLUG_RULE,
+    Project,
+)
 
 CONTEXT_FILE = "CONTEXT.md"
 # The applied template's description, which the planner reads (docs/templates.md).
@@ -94,12 +100,16 @@ def list_workspaces(projects_dir: Path) -> list[Path]:
     )
 
 
-def _validate(data: Any, *, folder_name: str | None, prefix: str | None) -> Project:
+def _validate(
+    data: Any, *, folder_name: str | None, prefix: str | None, check_repo: bool = True
+) -> Project:
     if data is None:
         raise ProjectValidationError([f"{FILE_NAME}: the file is empty"])
     if not isinstance(data, Mapping):
         raise ProjectValidationError([f"{FILE_NAME}: expected a mapping of settings"])
-    context = {FOLDER_NAME_CONTEXT: folder_name} if folder_name is not None else None
+    context: dict[str, Any] = {SKIP_REPO_CONTEXT: not check_repo}
+    if folder_name is not None:
+        context[FOLDER_NAME_CONTEXT] = folder_name
     try:
         return Project.model_validate(yaml_io.to_plain(data), context=context)
     except ValidationError as exc:
@@ -170,8 +180,13 @@ def template_description(name: str, *, projects_dir: Path) -> str | None:
 def _initial_yaml(project: Project) -> str:
     doc = yaml_io.to_node(project.model_dump(mode="json", exclude_none=True))
     doc.yaml_set_start_comment(YAML_HEADER)
-    comment = TEMPLATE_COMMANDS_COMMENT if project.template else COMMANDS_COMMENT
-    doc.yaml_set_comment_before_after_key("commands", before=comment)
+    commands = project.commands.model_dump(exclude_none=True)
+    if not commands:
+        del doc["commands"]
+    elif project.template:
+        doc.yaml_set_comment_before_after_key("commands", before=TEMPLATE_COMMANDS_COMMENT)
+    elif commands == PLACEHOLDER_COMMANDS:
+        doc.yaml_set_comment_before_after_key("commands", before=COMMANDS_COMMENT)
     return yaml_io.dump(doc)
 
 
@@ -193,9 +208,11 @@ def init_project(
     projects_dir: Path,
     branch: str = "main",
     remote: str | None = None,
-    commands: Mapping[str, str] | None = None,
+    commands: Mapping[str, str | None] | None = None,
     template: Mapping[str, str | None] | None = None,
     template_description: str | None = None,
+    extra: Mapping[str, Any] | None = None,
+    check_repo: bool = True,
 ) -> InitResult:
     """Create the workspace for a new project on an existing git repository.
 
@@ -204,18 +221,25 @@ def init_project(
     The name, repo, branch and remote are checked first; nothing is created if any is
     invalid. The workspace is built in a temp folder next to the target and renamed
     into place, so a failure leaves nothing behind. The repository is never modified.
+    ``extra`` adds settings (``merge_policy``, ``tracker``); ``check_repo=False`` skips
+    the repository checks, for the creation job that makes the repo afterwards.
     """
     data: dict[str, Any] = {
         "name": name,
         "repo": str(repo.expanduser().resolve()),
         "default_branch": branch,
-        "commands": dict(commands if commands is not None else PLACEHOLDER_COMMANDS),
+        "commands": {
+            key: value
+            for key, value in (commands if commands is not None else PLACEHOLDER_COMMANDS).items()
+            if value
+        },
     }
     if template is not None:
         data["template"] = {key: value for key, value in template.items() if value is not None}
     if remote is not None:
         data["git"] = {"remote": remote}
-    project = _validate(data, folder_name=None, prefix=None)
+    data.update(extra or {})
+    project = _validate(data, folder_name=None, prefix=None, check_repo=check_repo)
 
     target = project_dir(project.name, projects_dir)
     if target.exists() or target.is_symlink():

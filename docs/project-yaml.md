@@ -61,9 +61,9 @@ run:
 | `template.name` | with `template` | | The template's `name` from its `spoolhq-template.yaml`. The whole `template` block is written by `spool init --template` ([templates](templates.md)). |
 | `template.source` | with `template` | | What `--template` was given: a built-in name, a local folder or a git URL. |
 | `template.ref` | no | | The resolved commit for a git template (or a local git work tree), SpoolHQ's version for a built-in; left out for a plain folder. |
-| `commands.install` | yes | | Non-empty command the gates run to install dependencies. It runs without a shell ([gates](gates.md#no-shell)): no `&&`, `\|\|`, `\|`, `;`, `>`, `<`, `` ` `` or `$(`; put anything longer in a justfile recipe. |
-| `commands.lint` | yes | | Non-empty lint command; same rules. |
-| `commands.test` | yes | | Non-empty test command; same rules. The planner ends every ticket's "Done when" with `` `<test command>` passes ``. |
+| `commands.install` | no | | Non-empty command the gates run to install dependencies. It runs without a shell ([gates](gates.md#no-shell)): no `&&`, `\|\|`, `\|`, `;`, `>`, `<`, `` ` `` or `$(`; put anything longer in a justfile recipe. |
+| `commands.lint` | no | | Non-empty lint command; same rules. |
+| `commands.test` | no | | Non-empty test command; same rules. Without it the project can't plan or run tickets ("Set the stack commands in project.yaml first"). The planner ends every ticket's "Done when" with `` `<test command>` passes ``. |
 | `agents.default` | no | `claude-code-cli` | A known backend: `claude-code-cli`, `codex-cli` or `claude-agent-sdk` ([agents](agents.md#roles-and-backends)). |
 | `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override; same values as `agents.default`. `agents.planner` is the backend of the [planner](planner.md). `spool agents --project <name>` shows what each role uses. |
 | `agents.backends.<backend>.base_url` | no | | Custom endpoint for that backend, e.g. a local [Ollama](agents.md#local-models-with-ollama). http or https; plain http only for `localhost`, `127.0.0.1` and `::1`; no username or password. A remote one needs its own token ([agents](agents.md#a-custom-endpoint-never-gets-your-login)). |
@@ -85,7 +85,7 @@ run:
 | `tracker.kind` | no | `clickup` | Only `clickup` for now. |
 | `tracker.list_id` | when `tracker` is set | | Non-empty string; quote it (`"901"`) if it is all digits. |
 
-The commands written by `spool init` are placeholders (`just install`, `just lint`, `just test`); check them before the first run. With `--template`, they come from the template's `spoolhq-template.yaml`, and the template's description is saved next to `project.yaml` as `TEMPLATE.md`, which the [planner](planner.md) reads.
+`spool init` and the app's New project write the commands you give, after running each once ([creation job](api.md#creating-a-project)); an empty repo may start with none. With `--template`, they default to the template's `spoolhq-template.yaml`, and the template's description is saved next to `project.yaml` as `TEMPLATE.md`, which the [planner](planner.md) reads.
 
 ## Errors
 
@@ -93,7 +93,7 @@ Every problem is reported at once, one line each, as `project.yaml: <dotted.path
 
 | Problem | Message |
 | --- | --- |
-| A required key is missing | `project.yaml: commands.test: field required` |
+| A required key is missing | `project.yaml: tracker.list_id: field required` |
 | Unknown key | `project.yaml: limits.gate_retires: unknown key (did you mean 'gate_retries'?)` |
 | Bad name | `project.yaml: name: must be 1-63 lowercase letters, digits or hyphens, starting with a letter or digit` |
 | Name differs from the folder | `project.yaml: name: 'other' does not match the project folder name 'demo'` |
@@ -118,7 +118,7 @@ Every problem is reported at once, one line each, as `project.yaml: <dotted.path
 | YAML syntax error | `project.yaml: line 3, column 1: expected the node content, but found '<stream end>'` |
 | Duplicate key | `project.yaml: line 2, column 1: found duplicate key "name" with value "again" (original value: "demo")` |
 
-`spool init` checks its arguments the same way and reports problems without the file prefix, for example `error: repo: not a git work tree: /tmp/x`. It creates nothing unless every check passes.
+`spool init` and `POST /api/projects` check the request first and report the first problem with its request field, for example `error: repo_path: Not a git repository` ([creating a project](api.md#creating-a-project)). They create nothing unless every check passes.
 
 ## How the file is read and written
 
