@@ -14,10 +14,10 @@ from spoolhq.services.context import (
     DependencyView,
     GateFailure,
     PreviousAttempt,
-    RepoDocs,
     ReviewNote,
     TicketView,
     build_implementer_prompt,
+    read_repo_docs,
 )
 from spoolhq.services.git import conflict_files, run_git
 from spoolhq.services.projects import Project
@@ -145,11 +145,7 @@ def implementer_prompt(ctx: RunContext, kind: AttemptKind) -> str:
             review_required=meta.review_required,
         ),
         spec=_read(ctx.workspace / CONTEXT_FILE),
-        repo_docs=RepoDocs(
-            claude_md=_read(repo / "CLAUDE.md"),
-            progress_md=_read(repo / "PROGRESS.md"),
-            decisions_md=_read(repo / "DECISIONS.md"),
-        ),
+        repo_docs=read_repo_docs(repo, ctx.project.context.decisions_lines),
         commands=ctx.project.commands.for_implementer(),
         previous=previous_attempt(ctx, kind),
         max_chars=ctx.project.context.max_chars,

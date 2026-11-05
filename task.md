@@ -200,7 +200,10 @@ Example `project.yaml`:
 name: sim-dashboard
 repo: ~/code/sim-dashboard
 default_branch: main
-template: fastapi-react
+template:                         # set by spool init --template
+  name: fastapi-react
+  source: fastapi-react           # built-in name, local folder or git URL
+  ref: 0.0.0                      # resolved commit (git), SpoolHQ version (built-in)
 commands:
   install: just install
   lint: just lint
@@ -218,7 +221,7 @@ merge_policy:
   max_diff_lines: 400
   protected_paths: ["**/migrations/**", ".github/**", "**/auth/**"]
 git:
-  remote: https://github.com/<owner>/<repo>   # optional
+  remote: https://github.com/example/sim-dashboard   # optional
 tracker:
   kind: clickup                               # optional
   list_id: "<list id>"

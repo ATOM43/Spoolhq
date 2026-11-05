@@ -272,7 +272,11 @@ def _slot_sources(inputs: ContextInputs) -> dict[str, str | None]:
         "claude_md": docs.claude_md,
         "spec": inputs.spec,
         "progress_log": newest_entries(progress, inputs.progress_entries) if progress else progress,
-        "decisions": newest_lines(decisions, inputs.decisions_lines) if decisions else decisions,
+        "decisions": (
+            newest_lines(decisions, inputs.decisions_lines)
+            if decisions and not docs.decisions_selected
+            else decisions
+        ),
         "code_map": inputs.code_map if inputs.code_map_chars else None,
     }
 

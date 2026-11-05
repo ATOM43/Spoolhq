@@ -15,9 +15,9 @@ from spoolhq.services.context import (
     ContextError,
     ContextInputs,
     DependencyView,
-    RepoDocs,
     TicketView,
     build_implementer_prompt,
+    read_repo_docs,
 )
 from spoolhq.services.projects import ProjectError, load_project, project_dir
 from spoolhq.services.tickets import TicketError, list_tickets
@@ -79,11 +79,7 @@ def show_command(
             review_required=ticket.meta.review_required,
         ),
         spec=_read(workspace / CONTEXT_FILE),
-        repo_docs=RepoDocs(
-            claude_md=_read(repo / "CLAUDE.md"),
-            progress_md=_read(repo / "PROGRESS.md"),
-            decisions_md=_read(repo / "DECISIONS.md"),
-        ),
+        repo_docs=read_repo_docs(repo, project_settings.context.decisions_lines),
         commands=project_settings.commands.for_implementer(),
         max_chars=project_settings.context.max_chars,
         progress_entries=project_settings.context.progress_entries,

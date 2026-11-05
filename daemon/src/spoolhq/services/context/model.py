@@ -38,6 +38,8 @@ class RepoDocs:
     claude_md: str | None = None
     progress_md: str | None = None
     decisions_md: str | None = None
+    decisions_selected: bool = False
+    """``decisions_md`` already holds only the newest decisions (an expanded index)."""
 
 
 @dataclass(frozen=True)

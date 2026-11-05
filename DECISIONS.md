@@ -334,3 +334,4 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 328 · Home and Needs you · docs/decisions/desktop.md
 329 · Where the spec won over the PNGs · docs/decisions/desktop.md
 330 · Agent docs are split: an index plus area files · docs/decisions/core.md
+331 · The context pack expands a decisions index · docs/decisions/runloop.md

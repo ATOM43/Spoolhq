@@ -9,6 +9,7 @@ other service package; callers pass plain values in. See ``docs/context.md``.
 
 from spoolhq.core.agent_policy import READ_ONLY_GIT
 from spoolhq.services.context.budget import Trimmed, keep_connected
+from spoolhq.services.context.decisions import read_repo_docs
 from spoolhq.services.context.errors import (
     ContextBudgetError,
     ContextError,
@@ -58,5 +59,6 @@ __all__ = [
     "extract_progress_note",
     "format_progress_entry",
     "keep_connected",
+    "read_repo_docs",
     "render_template",
 ]
