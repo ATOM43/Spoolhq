@@ -1953,6 +1953,56 @@
         }
       }
     },
+    "/api/settings/secrets/{secret}/test": {
+      "post": {
+        "summary": "Check Secret Route",
+        "description": "One read-only call to the provider with the stored secret; the value stays here.",
+        "operationId": "check_secret_route_api_settings_secrets__secret__test_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "secret",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "anthropic",
+                "github",
+                "clickup"
+              ],
+              "type": "string",
+              "title": "Secret"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretTest"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/templates": {
       "get": {
         "summary": "List Templates",
@@ -3379,6 +3429,25 @@
           "progress_note"
         ],
         "title": "RunView"
+      },
+      "SecretTest": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "message"
+        ],
+        "title": "SecretTest",
+        "description": "The outcome of testing a secret against its provider, in fixed words only."
       },
       "SecretValue": {
         "properties": {

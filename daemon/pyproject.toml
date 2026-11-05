@@ -45,8 +45,11 @@ extend-exclude = ["src/spoolhq/templates"]
 
 [tool.ruff.lint]
 # Default rules plus import sorting, pyupgrade, bugbear and the security checks
-# (flake8-bandit) that catch shell=True and similar.
-select = ["E", "F", "W", "I", "UP", "B", "S"]
+# (flake8-bandit) that catch shell=True and similar; PLW1514 (a preview rule, enabled
+# alone) wants an explicit encoding on every open() and read_text()/write_text().
+select = ["E", "F", "W", "I", "UP", "B", "S", "PLW1514"]
+preview = true
+explicit-preview-rules = true
 
 [tool.ruff.lint.per-file-ignores]
 # Plain assert is how pytest tests are written.

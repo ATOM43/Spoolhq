@@ -15,6 +15,8 @@ import {
   subscribeEvents,
 } from "@/shared/api";
 
+import { SET_UP_FIRST } from "@/features/settings";
+
 import { ProjectPage } from "./ProjectPage";
 
 vi.mock("@/shared/api", async (importOriginal) => {
@@ -80,6 +82,14 @@ function showPanel(path = "/p/demo") {
   );
 }
 
+const LOGGED_IN = {
+  name: "claude-code-cli",
+  installed: true,
+  logged_in: true,
+  reason: null,
+};
+let backends: (typeof LOGGED_IN)[] = [];
+
 const projectCalls = () =>
   GET.mock.calls.filter(([path]) => path === "/api/projects/{name}").length;
 
@@ -95,9 +105,19 @@ describe("project panel", () => {
     vi.mocked(getVersion).mockResolvedValue({ version: "0.0.0" });
     vi.mocked(subscribeEvents).mockReturnValue(() => undefined);
     detail = project();
+    backends = [LOGGED_IN];
     GET.mockImplementation((path) => {
       if (path === "/api/projects/{name}") {
         return ok(detail);
+      }
+      if (path === "/api/agents") {
+        return ok({
+          backends,
+          graphify: { installed: false, version: null, tested: false },
+        });
+      }
+      if (path === "/api/settings") {
+        return ok({ secrets: { anthropic: { set: false, source: null } } });
       }
       if (path === "/api/projects/{name}/spec") {
         return ok({ content: "# Objective" });
@@ -188,5 +208,41 @@ describe("project panel", () => {
     await waitFor(() => {
       expect(screen.queryByText(/merge_policy/)).toBeNull();
     });
+  });
+
+  it("opens Settings from the gear, also with an invalid project.yaml", async () => {
+    detail = project({ settings_error: PROBLEM });
+    showPanel();
+    await screen.findByRole("alert");
+    const gear = screen.getByRole("button", { name: "Settings" });
+    expect(gear).toBeEnabled();
+    await userEvent.click(gear);
+    const dialog = screen.getByRole("dialog", { name: "Settings" });
+    expect(
+      within(dialog).getByRole("tab", { name: "Agents", selected: true }),
+    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("links a 'set up an agent' reason to Settings on the Agents tab", async () => {
+    backends = [{ ...LOGGED_IN, logged_in: false }];
+    detail = project({ total: 3, next_ticket: "T01" });
+    showPanel();
+    // Re-rendered disabled once the agents answer, so look it up each time.
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /^Run next/ }),
+      ).toHaveAccessibleDescription(SET_UP_FIRST);
+    });
+    await userEvent.click(
+      screen.getAllByRole("button", {
+        name: "Open Settings",
+      })[0] as HTMLElement,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Settings" });
+    expect(
+      within(dialog).getByRole("tab", { name: "Agents", selected: true }),
+    ).toBeInTheDocument();
   });
 });

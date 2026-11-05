@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { OpenSettingsLink, useAgentBlocker } from "@/features/settings";
 import { ConfirmDialog, ReasonButton } from "@/shared/ui";
 
 import { useRunAction, type RunAction } from "../model/run";
@@ -30,7 +31,9 @@ export function RunControls({
   const [confirmCancel, setConfirmCancel] = useState(false);
   const busy = action.isPending ? "Waiting for the daemon to answer" : null;
   const reason = offline ?? busy;
-  const startReason = offline ?? (state.kind === "idle" ? state.reason : busy);
+  const agent = useAgentBlocker();
+  const startReason =
+    offline ?? (state.kind === "idle" ? state.reason : (agent ?? busy));
   const run = (what: RunAction) => {
     action.mutate(what);
   };
@@ -138,6 +141,7 @@ export function RunControls({
             <Play aria-hidden />
             Run all
           </ReasonButton>
+          <OpenSettingsLink reason={startReason} />
         </>
       )}
       {action.error ? (

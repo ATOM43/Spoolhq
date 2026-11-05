@@ -16,8 +16,8 @@ install:
 
 # Lint, format-check and type-check all packages.
 lint:
-    uv run --directory daemon ruff check
-    uv run --directory daemon ruff format --check
+    uv run --directory daemon ruff check . ../scripts
+    uv run --directory daemon ruff format --check . ../scripts
     uv run --directory daemon mypy
     uv run --directory daemon lint-imports
     uv run --directory daemon python ../scripts/check_line_limit.py

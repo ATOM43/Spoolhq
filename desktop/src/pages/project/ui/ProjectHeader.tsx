@@ -2,11 +2,13 @@ import { Folder, GitBranch, House } from "lucide-react";
 import { Link } from "react-router";
 
 import type { ProjectDetail } from "@/entities/project";
+import { SettingsDialog } from "@/features/settings";
 import { CopyButton } from "@/shared/ui";
 
 import { remoteHost } from "../model/remote";
 
-/** V2 header, row 1: breadcrumb, repo path with copy, branch and remote. */
+/** V2 header, row 1: breadcrumb, repo path with copy, branch and remote; Settings at
+ * the right end, always enabled (also with an invalid project.yaml). */
 export function ProjectHeader({ project }: { project: ProjectDetail }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm">
@@ -43,6 +45,9 @@ export function ProjectHeader({ project }: { project: ProjectDetail }) {
             : "Local git · no remote"}
         </span>
       ) : null}
+      <div className="ml-auto">
+        <SettingsDialog icon />
+      </div>
     </div>
   );
 }

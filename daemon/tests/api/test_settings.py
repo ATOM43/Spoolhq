@@ -88,3 +88,49 @@ def test_no_keychain_is_a_readable_error(
     assert SECRET not in put.text
     delete = client.delete("/api/settings/secrets/github", headers=auth(token))
     assert delete.status_code == 409
+
+
+def test_testing_a_secret_never_returns_or_logs_it(
+    client: TestClient,
+    token: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import functools
+
+    import httpx
+
+    from spoolhq.api.routers import settings as router
+    from spoolhq.services.secrets.check import check_secret
+
+    caplog.set_level(logging.DEBUG)
+    statuses = iter([200, 401, 403, 500])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(next(statuses), text=SECRET, headers={"x-echo": SECRET})
+
+    mocked = functools.partial(check_secret, transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(router, "check_secret", mocked)
+    url = "/api/settings/secrets/anthropic/test"
+
+    unset = client.post(url, headers=auth(token))
+    assert unset.json() == {"ok": False, "message": "Not set"}
+    client.put("/api/settings/secrets/anthropic", json={"value": SECRET}, headers=auth(token))
+    answers = [client.post(url, headers=auth(token)) for _ in range(4)]
+    assert [a.json() for a in answers] == [
+        {"ok": True, "message": "Key works"},
+        {"ok": False, "message": "Rejected (401)"},
+        {"ok": False, "message": "Rejected (403)"},
+        {"ok": False, "message": "Unexpected response (500)"},
+    ]
+    for response in [unset, *answers]:
+        assert SECRET not in response.text
+        assert SECRET not in str(response.headers)
+    assert SECRET not in caplog.text
+    assert all(SECRET not in str(r.__dict__) for r in caplog.records)
+
+
+def test_testing_a_secret_needs_the_token_and_a_known_name(client: TestClient, token: str) -> None:
+    assert client.post("/api/settings/secrets/github/test").status_code == 401
+    unknown = client.post("/api/settings/secrets/aws/test", headers=auth(token))
+    assert (unknown.status_code, unknown.json()["error"]["field"]) == (422, "secret")

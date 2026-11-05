@@ -25,3 +25,10 @@ class DaemonSettings(BaseModel):
 
 class SecretValue(BaseModel):
     value: str = Field(min_length=1, max_length=10_000)
+
+
+class SecretTest(BaseModel):
+    """The outcome of testing a secret against its provider, in fixed words only."""
+
+    ok: bool
+    message: str

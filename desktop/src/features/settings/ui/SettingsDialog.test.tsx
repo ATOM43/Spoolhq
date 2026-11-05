@@ -11,7 +11,7 @@ vi.mock("@/shared/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/shared/api")>();
   return {
     ...actual,
-    api: { GET: vi.fn(), PUT: vi.fn(), DELETE: vi.fn() },
+    api: { GET: vi.fn(), PUT: vi.fn(), POST: vi.fn(), DELETE: vi.fn() },
     getVersion: vi.fn(),
   };
 });
@@ -19,6 +19,9 @@ vi.mock("@/shared/api", async (importOriginal) => {
 type Handler = (path: string, init?: unknown) => unknown;
 const GET = vi.mocked(api.GET) as unknown as ReturnType<typeof vi.fn<Handler>>;
 const PUT = vi.mocked(api.PUT) as unknown as ReturnType<typeof vi.fn<Handler>>;
+const POST = vi.mocked(api.POST) as unknown as ReturnType<
+  typeof vi.fn<Handler>
+>;
 
 type Backend = Schemas["BackendView"];
 type Secret = Schemas["SecretView"];
@@ -155,14 +158,12 @@ describe("Settings", () => {
     const row = within(dialog)
       .getByText("Anthropic API key")
       .closest("li") as HTMLElement;
-    await userEvent.click(within(row).getByRole("button", { name: "Set" }));
+    const field = within(row).getByLabelText(/Anthropic API key/);
     const secret = "sk-ant-very-secret-value";
-    await userEvent.type(
-      within(row).getByLabelText("New Anthropic API key"),
-      secret,
-    );
+    await userEvent.type(field, secret);
     secrets = { ...secrets, anthropic: { set: true, source: "keychain" } };
     await userEvent.click(within(row).getByRole("button", { name: "Save" }));
+    expect(field).toHaveValue("");
 
     await waitFor(() => {
       expect(within(row).getByText("Set (keychain)")).toBeInTheDocument();
@@ -184,7 +185,7 @@ describe("Settings", () => {
         .map((mutation) => mutation.state),
     ]);
     expect(cached).not.toContain(secret);
-    expect(within(row).getByRole("button", { name: "Replace" })).toBeEnabled();
+    expect(within(row).getByRole("button", { name: "Test" })).toBeEnabled();
   });
 
   it("explains why an env secret can't be removed here", async () => {
@@ -208,9 +209,11 @@ describe("Settings", () => {
     expect(
       within(dialog).getByRole("tab", { name: "Agents", selected: true }),
     ).toBeInTheDocument();
-    const close = within(dialog).getByRole("button", { name: "Close" });
-    expect(close).toBeDisabled();
-    expect(close).toHaveAccessibleDescription(SET_UP_FIRST);
+    for (const name of ["Close", "Done"]) {
+      const button = within(dialog).getByRole("button", { name });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription(SET_UP_FIRST);
+    }
     await userEvent.keyboard("{Escape}");
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeVisible();
   });
@@ -225,9 +228,9 @@ describe("Settings", () => {
     });
     expect(screen.queryByRole("dialog")).toBeNull();
     const dialog = await openSettings();
-    const close = within(dialog).getByRole("button", { name: "Close" });
-    expect(close).toBeEnabled();
-    await userEvent.click(close);
+    const done = within(dialog).getByRole("button", { name: "Done" });
+    expect(done).toBeEnabled();
+    await userEvent.click(done);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -243,5 +246,126 @@ describe("Settings", () => {
     expect(
       within(dialog).getByText(/Running on 127.0.0.1:8765/),
     ).toBeInTheDocument();
+  });
+
+  it("has underlined tabs, a ✕ and a footer with Done", async () => {
+    backends = [backend("claude-code-cli")];
+    renderDialog();
+    const dialog = await openSettings();
+    expect(
+      within(dialog)
+        .getAllByRole("tab")
+        .map((tab) => tab.textContent),
+    ).toEqual(["Agents", "Accounts", "General", "About"]);
+    expect(
+      within(dialog).getByText("You can change these any time from Settings"),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Close" }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shows the Agent SDK without a key as neutral, with the raw message under Details", async () => {
+    backends = [
+      backend("claude-code-cli"),
+      backend("codex-cli", { logged_in: false }),
+      backend("claude-agent-sdk", {
+        logged_in: false,
+        reason: "ANTHROPIC_API_KEY is not set",
+      }),
+    ];
+    renderDialog();
+    const dialog = await openSettings();
+    const sdk = await within(dialog).findByText("Needs an API key (optional)");
+    expect(sdk).toHaveClass("text-ink-muted");
+    expect(sdk).not.toHaveClass("text-warning");
+    // A CLI that isn't logged in isn't a warning while another backend is ready.
+    expect(within(dialog).getByText(/Not logged in/)).not.toHaveClass(
+      "text-warning",
+    );
+    const details = within(dialog)
+      .getByText("Details")
+      .closest("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(details).toHaveTextContent("ANTHROPIC_API_KEY is not set");
+  });
+
+  it("warns in amber only when no backend is ready", async () => {
+    backends = [backend("claude-code-cli", { logged_in: false })];
+    renderDialog();
+    const dialog = await openSettings();
+    expect(await within(dialog).findByText(/Not logged in/)).toHaveClass(
+      "text-warning",
+    );
+    expect(within(dialog).getByRole("status")).toHaveTextContent(SET_UP_FIRST);
+  });
+
+  it("can't test a secret that isn't set", async () => {
+    renderDialog();
+    const dialog = await openSettings();
+    await userEvent.click(
+      within(dialog).getByRole("tab", { name: "Accounts" }),
+    );
+    const row = (await within(dialog).findByText("GitHub token")).closest(
+      "li",
+    ) as HTMLElement;
+    const test = within(row).getByRole("button", { name: "Test" });
+    expect(test).toBeDisabled();
+    expect(test).toHaveAccessibleDescription("Save a value first");
+  });
+
+  it.each([
+    [
+      { ok: true, message: "Key works" },
+      "Key works · tested just now",
+      "lucide-circle-check",
+    ],
+    [
+      { ok: false, message: "Rejected (401)" },
+      "Rejected (401)",
+      "lucide-octagon-x",
+    ],
+    [
+      { ok: false, message: "Rejected (403)" },
+      "Rejected (403)",
+      "lucide-octagon-x",
+    ],
+    [{ ok: false, message: "Timed out" }, "Timed out", "lucide-octagon-x"],
+    [
+      { ok: false, message: "Couldn't reach GitHub" },
+      "Couldn't reach GitHub",
+      "lucide-octagon-x",
+    ],
+    [
+      { ok: false, message: "Unexpected response (500)" },
+      "Unexpected response (500)",
+      "lucide-octagon-x",
+    ],
+  ])("shows a test result with its icon: %j", async (result, text, icon) => {
+    secrets.github = { set: true, source: "keychain" };
+    POST.mockImplementation(() => ok(result));
+    renderDialog();
+    const dialog = await openSettings();
+    await userEvent.click(
+      within(dialog).getByRole("tab", { name: "Accounts" }),
+    );
+    const row = (await within(dialog).findByText("GitHub token")).closest(
+      "li",
+    ) as HTMLElement;
+    await userEvent.click(within(row).getByRole("button", { name: "Test" }));
+    const shown = await within(row).findByRole("status");
+    expect(shown).toHaveTextContent(text);
+    expect(shown.querySelector("svg")).toHaveClass(icon);
+    expect(POST).toHaveBeenCalledWith("/api/settings/secrets/{secret}/test", {
+      params: { path: { secret: "github" } },
+    });
+
+    // Not kept: closing the dialog drops it.
+    await userEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+    await openSettings();
+    await userEvent.click(screen.getByRole("tab", { name: "Accounts" }));
+    await screen.findByText("GitHub token");
+    expect(screen.queryByText(text)).toBeNull();
   });
 });

@@ -34,11 +34,24 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/agents` | what `spool agents` shows: each backend (installed, version, login, policy parts) and Graphify |
 | `GET /api/settings` | the daemon's settings, and for each secret (`anthropic`, `github`, `clickup`) only `{"set", "source": "keychain" \| "env" \| null}` |
 | `PUT`, `DELETE /api/settings/secrets/{name}` | store `{"value"}` in the OS keychain, or remove it (204) |
+| `POST /api/settings/secrets/{name}/test` | [try the stored secret](#testing-a-secret) against its provider: `{"ok", "message"}` |
 | `WS /api/projects/{name}/events?since=` | [live events](#event-websocket) |
 
 An artifact is read from the attempt folder the run log names, by a fixed file name per `artifact`; the folder must resolve inside the workspace's `runs/`, and the file must not be a symlink and must resolve inside the folder, else 404.
 
 A secret's value is write-only: it goes to the OS keychain (service `spoolhq`, through `keyring`) and is never returned, logged or written to a file. An environment variable (`ANTHROPIC_API_KEY`, `SPOOLHQ_GITHUB_TOKEN`, `SPOOLHQ_CLICKUP_TOKEN`) wins over the keychain, as it does where the secret is used. Without a usable keychain the answer is 409 `keychain_unavailable`.
+
+## Testing a secret
+
+Settings' **Test** button. `{name}` is `anthropic`, `github` or `clickup` (422 otherwise). The daemon reads the secret the way it uses it (environment first, then the keychain) and makes exactly one read-only HTTPS `GET`:
+
+| Secret | Call |
+| --- | --- |
+| `anthropic` | `https://api.anthropic.com/v1/models` with `x-api-key` and `anthropic-version: 2023-06-01` |
+| `github` | `https://api.github.com/user` with `Authorization: Bearer …` |
+| `clickup` | `https://api.clickup.com/api/v2/user` with `Authorization: …` |
+
+The URLs are fixed in the code (`services/secrets/check.py`); redirects are not followed and the timeout is 10 s. The answer is always 200 with `ok` and one fixed `message`: `Key works` (200), `Not set` (no call made), `Rejected (401)`, `Rejected (403)`, `Timed out`, `Couldn't reach <provider>` (no answer), or `Unexpected response (<status>)` (anything else, a redirect included). The secret, the provider's body and its headers never reach the answer; the log gets one line with the secret's name and the message. The result isn't stored.
 
 ## Trying a stack command
 

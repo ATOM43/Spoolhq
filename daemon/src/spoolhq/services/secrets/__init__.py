@@ -33,16 +33,28 @@ class SecretStatus:
     source: SecretSource | None
 
 
-def secret_status(name: SecretName) -> SecretStatus:
+def _lookup(name: SecretName) -> tuple[str, SecretSource] | None:
     env_var, key = SECRETS[name]
-    if os.environ.get(env_var, "").strip():
-        return SecretStatus(True, "env")
+    from_env = os.environ.get(env_var, "").strip()
+    if from_env:
+        return from_env, "env"
     try:
-        stored = keyring.get_password(KEYRING_SERVICE, key)
+        stored = (keyring.get_password(KEYRING_SERVICE, key) or "").strip()
     except (KeyringError, RuntimeError) as exc:
         logger.warning("cannot read the OS keychain", extra={"error": type(exc).__name__})
-        return SecretStatus(False, None)
-    return SecretStatus(True, "keychain") if (stored or "").strip() else SecretStatus(False, None)
+        return None
+    return (stored, "keychain") if stored else None
+
+
+def secret_status(name: SecretName) -> SecretStatus:
+    found = _lookup(name)
+    return SecretStatus(True, found[1]) if found else SecretStatus(False, None)
+
+
+def read_secret(name: SecretName) -> str | None:
+    """The value the daemon would use (env first), for the daemon's own calls only."""
+    found = _lookup(name)
+    return found[0] if found else None
 
 
 def store_secret(name: SecretName, value: str) -> None:

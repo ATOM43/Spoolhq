@@ -2,12 +2,16 @@ import {
   CircleCheck,
   CircleDashed,
   CircleX,
+  KeyRound,
   LoaderCircle,
   RotateCw,
+  TriangleAlert,
 } from "lucide-react";
 
 import { useAgents, type Agents } from "@/entities/agent";
 import { Button, EmptyState, ReasonButton } from "@/shared/ui";
+
+import { SET_UP_FIRST, useAgentBlocker } from "../model/queries";
 
 type Backend = Agents["backends"][number];
 
@@ -27,7 +31,15 @@ function label(name: string) {
   return LABELS[name] ?? { title: name, login: "log in to it in a terminal" };
 }
 
-function BackendStatus({ backend }: { backend: Backend }) {
+/** Amber only when it blocks the user (no backend ready at all); the optional SDK key
+ * never does. */
+function BackendStatus({
+  backend,
+  blocking,
+}: {
+  backend: Backend;
+  blocking: boolean;
+}) {
   if (!backend.installed) {
     return (
       <span className="flex items-center gap-1.5 text-ink-muted">
@@ -36,9 +48,19 @@ function BackendStatus({ backend }: { backend: Backend }) {
       </span>
     );
   }
+  if (!backend.logged_in && backend.name === "claude-agent-sdk") {
+    return (
+      <span className="flex items-center gap-1.5 text-ink-muted">
+        <KeyRound aria-hidden className="size-4" />
+        Needs an API key (optional)
+      </span>
+    );
+  }
   if (!backend.logged_in) {
     return (
-      <span className="flex items-center gap-1.5 text-warning">
+      <span
+        className={`flex items-center gap-1.5 ${blocking ? "text-warning" : "text-ink-muted"}`}
+      >
         <CircleX aria-hidden className="size-4" />
         Not logged in — {label(backend.name).login}
       </span>
@@ -55,6 +77,7 @@ function BackendStatus({ backend }: { backend: Backend }) {
 /** D2 · Agents: each backend's version and login status, and Graphify. */
 export function AgentsTab() {
   const agents = useAgents();
+  const blocking = useAgentBlocker() !== null;
 
   if (agents.isPending) {
     return (
@@ -84,6 +107,15 @@ export function AgentsTab() {
   const { backends, graphify } = agents.data;
   return (
     <div className="flex flex-col gap-4">
+      {blocking ? (
+        <p
+          role="status"
+          className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning"
+        >
+          <TriangleAlert aria-hidden className="size-4 shrink-0" />
+          {SET_UP_FIRST}
+        </p>
+      ) : null}
       {backends.length === 0 ? (
         <EmptyState
           icon={<CircleDashed aria-hidden />}
@@ -100,9 +132,14 @@ export function AgentsTab() {
                   {backend.version ?? "—"}
                 </span>
               </div>
-              <BackendStatus backend={backend} />
+              <BackendStatus backend={backend} blocking={blocking} />
               {backend.reason ? (
-                <p className="text-xs text-ink-muted">{backend.reason}</p>
+                <details className="text-xs text-ink-muted">
+                  <summary className="cursor-pointer select-none">
+                    Details
+                  </summary>
+                  <p className="mt-1 font-mono break-words">{backend.reason}</p>
+                </details>
               ) : null}
             </li>
           ))}

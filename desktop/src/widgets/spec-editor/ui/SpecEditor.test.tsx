@@ -46,6 +46,12 @@ const PROJECT: ProjectDetail = {
   remaining_h: 0,
 };
 
+// A logged-in CLI, so the agent check never blocks Generate plan here.
+const READY_AGENTS = {
+  backends: [{ name: "claude-code-cli", installed: true, logged_in: true }],
+  graphify: { installed: false, version: null, tested: false },
+};
+
 function conflict(content: string, etag: string) {
   return new DaemonError({
     kind: "api",
@@ -78,7 +84,13 @@ describe("Spec tab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     disk = "# Objective\nShip it.";
-    GET.mockImplementation(() => withEtag({ content: disk }, '"e1"'));
+    GET.mockImplementation((path) =>
+      path === "/api/agents"
+        ? withEtag(READY_AGENTS, "")
+        : path === "/api/settings"
+          ? withEtag({ secrets: {} }, "")
+          : withEtag({ content: disk }, '"e1"'),
+    );
     PUT.mockImplementation(() => withEtag({}, '"e2"'));
     POST.mockImplementation(() => withEtag({ run_id: 1 }, ""));
   });

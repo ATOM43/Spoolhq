@@ -541,6 +541,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/secrets/{secret}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Secret Route
+         * @description One read-only call to the provider with the stored secret; the value stays here.
+         */
+        post: operations["check_secret_route_api_settings_secrets__secret__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/templates": {
         parameters: {
             query?: never;
@@ -1024,6 +1044,16 @@ export interface components {
             /** Pr Url */
             pr_url?: string | null;
             policy?: components["schemas"]["PolicyView"] | null;
+        };
+        /**
+         * SecretTest
+         * @description The outcome of testing a secret against its provider, in fixed words only.
+         */
+        SecretTest: {
+            /** Ok */
+            ok: boolean;
+            /** Message */
+            message: string;
         };
         /** SecretValue */
         SecretValue: {
@@ -2463,6 +2493,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    check_secret_route_api_settings_secrets__secret__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                secret: "anthropic" | "github" | "clickup";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretTest"];
+                };
             };
             /** @description An error. */
             default: {

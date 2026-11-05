@@ -6,7 +6,7 @@ from keyring.errors import KeyringError
 
 from spoolhq.api.errors import ApiError
 from spoolhq.api.params import settings
-from spoolhq.api.schemas.settings import DaemonSettings, SecretValue, SecretView
+from spoolhq.api.schemas.settings import DaemonSettings, SecretTest, SecretValue, SecretView
 from spoolhq.api.security import bearer_scheme
 from spoolhq.services.secrets import (
     SECRETS,
@@ -15,6 +15,7 @@ from spoolhq.services.secrets import (
     secret_status,
     store_secret,
 )
+from spoolhq.services.secrets.check import check_secret
 
 router = APIRouter(prefix="/api/settings", dependencies=[Security(bearer_scheme)])
 
@@ -60,3 +61,10 @@ def delete_secret_route(secret: SecretName) -> None:
         delete_secret(secret)
     except (KeyringError, RuntimeError) as exc:
         raise _keychain_error(exc) from None
+
+
+@router.post("/secrets/{secret}/test")
+def check_secret_route(secret: SecretName) -> SecretTest:
+    """One read-only call to the provider with the stored secret; the value stays here."""
+    result = check_secret(secret)
+    return SecretTest(ok=result.ok, message=result.message)

@@ -335,3 +335,8 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 329 · Where the spec won over the PNGs · docs/decisions/desktop.md
 330 · Agent docs are split: an index plus area files · docs/decisions/core.md
 331 · The context pack expands a decisions index · docs/decisions/runloop.md
+332 · Settings opens from anywhere, and "set up an agent" links to it · docs/decisions/desktop.md
+333 · Settings layout and secret tests · docs/decisions/desktop.md
+334 · Where the spec won over the D2 PNG · docs/decisions/desktop.md
+335 · Testing a secret · docs/decisions/api.md
+336 · `PLW1514` is on, and `just lint` checks `scripts/` · docs/decisions/core.md

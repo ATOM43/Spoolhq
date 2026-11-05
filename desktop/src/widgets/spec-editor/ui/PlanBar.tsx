@@ -2,6 +2,7 @@ import { CircleX, LoaderCircle, RotateCw, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import type { ProjectDetail } from "@/entities/project";
+import { OpenSettingsLink } from "@/features/settings";
 import { Button, ConfirmDialog, ReasonButton } from "@/shared/ui";
 
 import type { PlanState } from "../model/plan";
@@ -52,6 +53,7 @@ export function PlanButton({
         <Sparkles aria-hidden />
         {replan ? "Re-plan" : "Generate plan"}
       </ReasonButton>
+      <OpenSettingsLink reason={pending ? null : blocker} />
       <ConfirmDialog
         open={confirming}
         title="Re-plan from the spec?"
@@ -95,6 +97,7 @@ export function PlanFailure({
         <RotateCw aria-hidden />
         Retry
       </ReasonButton>
+      <OpenSettingsLink reason={blocker} />
     </div>
   );
 }

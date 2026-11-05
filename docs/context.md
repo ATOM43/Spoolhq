@@ -56,6 +56,12 @@ prompts/implementer.md.j2: not allowed in a SpoolHQ template: access to attribut
 
 Before the character budget, the prompt takes only the newest history: the `PROGRESS.md` preamble and its last `context.progress_entries` `## ` entries (default 3), and `DECISIONS.md` from its `context.decisions_lines`-th last non-blank line (default 20) to the end. A file with fewer is taken whole. When either block is in the prompt, one line follows: "Older entries are in PROGRESS.md and DECISIONS.md; grep them when the ticket touches an earlier decision." Most tickets don't need the full history, and every turn re-reads the prompt.
 
+### A split `DECISIONS.md`
+
+A repository can keep `DECISIONS.md` as an index (one `NNN · title · docs/decisions/<area>.md` line per decision, SpoolHQ's own layout) with the entries in area files. `read_repo_docs` (`services/context/decisions.py`) spots index lines and expands them: it takes the newest `context.decisions_lines` numbers (default 20), loads each full entry from its area file (the `N. ` line and its indented continuation lines; the first entry with that number wins) and joins them in number order. That text goes into `<decisions>` as it is, not cut again to the newest lines; the character budget below still applies. A `DECISIONS.md` without index lines is read exactly as before.
+
+The repository is untrusted, so an area path is read only if it is relative, has no `..` (POSIX or Windows) and no drive, and resolves, symlinks followed, to a file inside the repository. A refused or missing file, or a number its file doesn't have, keeps its index line in the prompt, and the prompt build logs one warning listing them.
+
 The whole rendered prompt must fit in `context.max_chars` characters (`project.yaml`, default 120,000, allowed 20,000 to 2,000,000). The budget counts characters, not tokens, so there is no tokenizer.
 
 - **Never trimmed:** the template text, the ticket block, the commands and the previous-attempt block. The one exception is gate output: each excerpt is capped at 8,000 characters, the first 6,000 and the last 2,000 with `[… 42,000 characters cut …]` between them. Failing tests and review notes are never cut.

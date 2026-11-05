@@ -1,11 +1,19 @@
-import { KeyRound, LoaderCircle, RotateCw } from "lucide-react";
+import {
+  CircleCheck,
+  CircleDashed,
+  Info,
+  LoaderCircle,
+  OctagonX,
+  RotateCw,
+} from "lucide-react";
 import { useId, useState, type SyntheticEvent } from "react";
 
-import { Button, describedBy, Field, Input, ReasonButton } from "@/shared/ui";
+import { Button, describedBy, Input, ReasonButton } from "@/shared/ui";
 
 import {
   removeSecret,
   storeSecret,
+  testSecret,
   useDaemonSettings,
   useRefreshSecrets,
   type DaemonSettings,
@@ -16,17 +24,22 @@ const SECRETS: { name: SecretName; label: string; hint: string }[] = [
   {
     name: "anthropic",
     label: "Anthropic API key",
-    hint: "Optional: only the Claude Agent SDK backend needs it.",
+    hint: "Only the Claude Agent SDK backend needs it. Coding CLIs use their own login.",
   },
   {
     name: "github",
     label: "GitHub token",
-    hint: "For pull requests and syncing a project with GitHub.",
+    hint: "Needed to push to GitHub and open pull requests. Local git works without it.",
   },
-  { name: "clickup", label: "ClickUp token", hint: "For the ClickUp tracker." },
+  {
+    name: "clickup",
+    label: "ClickUp token",
+    hint: "Mirrors tickets to a ClickUp list. You can add it later.",
+  },
 ];
 
 type Status = DaemonSettings["secrets"][string];
+type Tested = { ok: boolean; message: string };
 
 function statusLabel(status: Status | undefined): string {
   if (!status?.set) {
@@ -39,7 +52,21 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** One write-only secret: its status, Replace (or Set) and Remove; never its value. */
+function TestResult({ result }: { result: Tested }) {
+  return result.ok ? (
+    <p role="status" className="flex items-center gap-1.5 text-success">
+      <CircleCheck aria-hidden className="size-4" />
+      {result.message} · tested just now
+    </p>
+  ) : (
+    <p role="status" className="flex items-center gap-1.5 text-danger">
+      <OctagonX aria-hidden className="size-4" />
+      {result.message}
+    </p>
+  );
+}
+
+/** One write-only secret: a password field with Save, Test and Remove; never its value. */
 function SecretRow({
   name,
   label,
@@ -53,22 +80,24 @@ function SecretRow({
 }) {
   const id = useId();
   const refresh = useRefreshSecrets();
-  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const fromEnv = status?.set === true && status.source === "env";
+  // Not stored anywhere else: it's gone when the dialog closes.
+  const [tested, setTested] = useState<Tested | null>(null);
+  const set = status?.set === true;
+  const fromEnv = set && status.source === "env";
 
-  async function act(work: () => Promise<void>) {
-    setBusy(true);
+  async function act(doing: string, work: () => Promise<void>) {
+    setBusy(doing);
     setError(null);
+    setTested(null);
     try {
       await work();
-      await refresh();
     } catch (failure) {
       setError(message(failure));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -77,100 +106,100 @@ function SecretRow({
     const secret = value;
     // Drop the value from React state right away; only this request carries it.
     setValue("");
-    void act(async () => {
+    void act("Saving…", async () => {
       await storeSecret(name, secret);
-      setEditing(false);
+      await refresh();
     });
   }
 
   return (
-    <li className="flex flex-col gap-2 p-3 text-sm">
+    <li className="flex flex-col gap-1.5 text-sm">
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 font-medium">
-          <KeyRound aria-hidden className="size-4 text-ink-muted" />
+        <label htmlFor={id} className="font-medium">
           {label}
+          <span aria-hidden className="ml-2 font-normal text-ink-muted">
+            Optional
+          </span>
+        </label>
+        <span className="flex items-center gap-1 text-ink-muted">
+          {set ? (
+            <CircleCheck aria-hidden className="size-4 text-success" />
+          ) : (
+            <CircleDashed aria-hidden className="size-4" />
+          )}
+          {statusLabel(status)}
         </span>
-        <span className="text-ink-muted">{statusLabel(status)}</span>
       </div>
-      <p className="text-xs text-ink-muted">{hint}</p>
-      {editing ? (
-        <form onSubmit={submit} className="flex flex-col gap-2">
-          <Field id={id} label={`New ${label}`} error={error}>
-            <Input
-              id={id}
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              value={value}
-              aria-describedby={describedBy(id)}
-              aria-invalid={!!error}
-              onChange={(event) => {
-                setValue(event.target.value);
-              }}
-            />
-          </Field>
-          <div className="flex gap-2">
-            <ReasonButton
-              type="submit"
-              size="sm"
-              reason={
-                busy ? "Saving…" : value === "" ? "Paste the value first" : null
-              }
-            >
-              {busy ? (
-                <LoaderCircle aria-hidden className="animate-spin" />
-              ) : null}
-              Save
-            </ReasonButton>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setValue("");
-                setEditing(false);
-                setError(null);
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <div className="flex flex-col gap-1">
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setEditing(true);
-              }}
-            >
-              {status?.set ? "Replace" : "Set"}
-            </Button>
-            {status?.set ? (
-              <ReasonButton
-                variant="outline"
-                size="sm"
-                reason={
-                  fromEnv
-                    ? "Set by an environment variable: unset it where the daemon starts"
-                    : busy
-                      ? "Removing…"
-                      : null
-                }
-                onClick={() => void act(() => removeSecret(name))}
-              >
-                Remove
-              </ReasonButton>
-            ) : null}
-          </div>
-          {error ? (
-            <p role="alert" className="text-sm text-danger">
-              {error}
-            </p>
+      <form onSubmit={submit} className="flex gap-2">
+        <Input
+          id={id}
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={
+            set ? "Saved · paste a new value to replace it" : "Not set"
+          }
+          value={value}
+          aria-describedby={describedBy(id)}
+          aria-invalid={!!error}
+          className="flex-1 font-mono"
+          onChange={(event) => {
+            setValue(event.target.value);
+          }}
+        />
+        <ReasonButton
+          type="submit"
+          reason={busy ?? (value === "" ? "Paste the value first" : null)}
+        >
+          {busy === "Saving…" ? (
+            <LoaderCircle aria-hidden className="animate-spin" />
           ) : null}
-        </div>
+          Save
+        </ReasonButton>
+        <ReasonButton
+          type="button"
+          variant="outline"
+          reason={busy ?? (set ? null : "Save a value first")}
+          onClick={() =>
+            void act("Testing…", async () => {
+              setTested(await testSecret(name));
+            })
+          }
+        >
+          {busy === "Testing…" ? (
+            <LoaderCircle aria-hidden className="animate-spin" />
+          ) : null}
+          Test
+        </ReasonButton>
+        {set ? (
+          <ReasonButton
+            type="button"
+            variant="outline"
+            reason={
+              fromEnv
+                ? "Set by an environment variable: unset it where the daemon starts"
+                : busy
+            }
+            onClick={() =>
+              void act("Removing…", async () => {
+                await removeSecret(name);
+                await refresh();
+              })
+            }
+          >
+            Remove
+          </ReasonButton>
+        ) : null}
+      </form>
+      {tested ? <TestResult result={tested} /> : null}
+      {error ? (
+        <p id={describedBy(id)} role="alert" className="text-danger">
+          {error}
+        </p>
+      ) : (
+        <p id={describedBy(id)} className="text-xs text-ink-muted">
+          {hint}
+        </p>
       )}
     </li>
   );
@@ -205,8 +234,13 @@ export function AccountsTab() {
     );
   }
   return (
-    <div className="flex flex-col gap-2">
-      <ul className="flex flex-col divide-y rounded-md border">
+    <div className="flex flex-col gap-5">
+      <p className="flex items-start gap-2 rounded-md bg-accent/10 p-3 text-sm">
+        <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
+        Keys and tokens are stored in your system keychain, never in project
+        files. A value is never shown again after saving.
+      </p>
+      <ul className="flex flex-col gap-5">
         {SECRETS.map((secret) => (
           <SecretRow
             key={secret.name}
@@ -215,10 +249,6 @@ export function AccountsTab() {
           />
         ))}
       </ul>
-      <p className="text-xs text-ink-muted">
-        Stored in your system keychain. A value is never shown again after
-        saving.
-      </p>
     </div>
   );
 }

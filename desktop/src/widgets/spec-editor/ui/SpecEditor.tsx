@@ -17,6 +17,7 @@ import {
   type SpecFile,
 } from "@/entities/project";
 import type { CurrentRun } from "@/entities/run";
+import { useAgentBlocker } from "@/features/settings";
 import { Button, ConfirmDialog, Markdown } from "@/shared/ui";
 
 import { useSpecAutosave, type SaveState } from "../model/autosave";
@@ -104,7 +105,8 @@ function Editor({
   const generate = useGeneratePlan(project.name);
   const [view, setView] = useState<View>("split");
   const plan = planState(run);
-  const blocker = planBlocker(project, draft.text, draft.state);
+  const agent = useAgentBlocker();
+  const blocker = planBlocker(project, draft.text, draft.state) ?? agent;
   const look = SAVE_LOOK[draft.state];
   const failure =
     generate.error?.message ?? (generate.isPending ? null : plan.failure);
