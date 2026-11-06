@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **35 tickets in 6 phases, about 84.5 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **36 tickets in 6 phases, about 86.5 hours** for one developer.
 
 **What v1 includes**
 
@@ -82,9 +82,9 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T18 | Merge policy | 3 Planner and Git | T12, T17 | 1.5 |
 | T19 | Live API | 4 Desktop UI | T07, T13 | 2.5 |
 | T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
-| T21 | Tickets tab and drawer | 4 Desktop UI | T15, T36 | 3 |
+| T21 | Tickets tab and plan review | 4 Desktop UI | T15, T36 | 2.5 |
 | T22 | Run tab | 4 Desktop UI | T32 | 3 |
-| T23 | Packaging | 4 Desktop UI | T21, T22, T36 | 3 |
+| T23 | Packaging | 4 Desktop UI | T21, T22, T36, T37 | 3 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T22 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
@@ -97,9 +97,10 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T34 | Settings polish and secret test | 4 Desktop UI | T33 | 1.5 |
 | T35 | Project creation job | 4 Desktop UI | T34, T16 | 2 |
 | T36 | New project dialog | 4 Desktop UI | T35 | 2 |
-|  | **Total** |  |  | **84.5** |
+| T37 | Ticket drawer and actions | 4 Desktop UI | T21 | 2.5 |
+|  | **Total** |  |  | **86.5** |
 
-Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T23 → T26 (36 h).
+Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T23 → T26 (38 h).
 
 ## Phase 0 — Scaffolding
 
@@ -420,7 +421,7 @@ Done when:
 
 ## Phase 4 — Desktop UI (v0 screens)
 
-Ten tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Eleven tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -526,19 +527,36 @@ Done when:
 - [ ] A project can be created from each of the three sources without the CLI
 - [ ] A failed step shows its error and output and returns to the field that caused it
 
-### T21 · Tickets tab and drawer
+### T21 · Tickets tab and plan review
 
-Plan review, the board and approvals in one list. *Depends on: T15, T36 · 3 h*
+Review the plan and see every ticket in one list. *Depends on: T15, T36 · 2.5 h*
 
-- One list grouped by status. While the plan is a draft, a banner shows the ticket count, validation problems and **Approve plan**.
-- Ticket drawer: details, "Done when" with the latest review result, dependencies, attempts. Editable when draft, ready or blocked.
-- Contextual actions: **Run this ticket**, **Unblock**, **Approve and merge** or **Request changes** in local mode, the PR link in GitHub mode.
-- One note-to-agent dialog, shared by Unblock and Request changes.
+- `GET /api/projects/{project}/plan`: `state` (`none`, `planning`, `draft`, `approved`), `generated_at`, `ticket_count`, `total_h` and `problems` (`{code, message, ticket_ids}`: cycle, unknown dependency, duplicate id, missing "Done when"); `POST …/plan/approve` answers 409 `plan_invalid` with the problems and changes nothing.
+- Tickets tab: search, phase filter, "Show done"; a draft banner with counts, problems as links to their ticket, **Approve plan** behind a confirm (disabled while problems exist) and **Re-plan**.
+- One list grouped Draft · Needs approval · Blocked · Running · Ready · Done (empty groups hidden, Done collapsed), the next ticket marked; empty, planning, loading and error states.
+- A read-only ticket drawer (`?ticket=`): scope, "Done when" with the latest review result, dependencies and details.
+- `remark-gfm` in the safe Markdown component; Rust files under the 500-line limit and Clippy's `too_many_lines`.
 
 Done when:
 
 - [ ] A plan with a cycle cannot be approved, and the problem links to the ticket
+- [ ] Tickets are grouped by status, with the next ticket marked, and every row opens its drawer
+- [ ] Markdown checklists and tables render; raw HTML still doesn't
+- [ ] Rust files are covered by the line limit, and Clippy's `too_many_lines` passes
+
+### T37 · Ticket drawer and actions
+
+Act on one ticket: edit it, run it, unblock it or approve it. *Depends on: T21 · 2.5 h*
+
+- The drawer's primary action by status (spec section 7 table); "Why it needs you", Attempts and Git sections.
+- Editing when Draft, Ready or Blocked, with the ETag and a "Changed on disk · Reload · Keep mine" bar.
+- One note-to-agent dialog, shared by Unblock and Request changes.
+- **Approve and merge** through a confirm in local mode; the PR link in GitHub mode.
+
+Done when:
+
 - [ ] Edits round-trip to the ticket files and survive a reload
+- [ ] Each status shows its one primary action, and every disabled action says why
 
 ### T22 · Run tab
 
@@ -556,7 +574,7 @@ Done when:
 
 ### T23 · Packaging
 
-One installer that brings its own daemon. *Depends on: T21, T22, T36 · 3 h*
+One installer that brings its own daemon. *Depends on: T21, T22, T36, T37 · 3 h*
 
 - The daemon is bundled with PyInstaller and shipped as a Tauri sidecar; the app starts it when it is not running.
 - Closing the window leaves the daemon and any run going, with a tray icon to quit.
