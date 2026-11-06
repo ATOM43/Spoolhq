@@ -33,3 +33,15 @@ class PlanError(SchedulerError):
 
 class TransitionError(SchedulerError):
     """A ticket cannot move to the requested status; the message says why."""
+
+
+class TicketLockedError(SchedulerError):
+    """The ticket can't be edited while it is running or waiting for approval."""
+
+
+class TicketEditError(SchedulerError):
+    """An edit would break the plan; ``field`` is the part of the request to fix."""
+
+    def __init__(self, message: str, field: str) -> None:
+        super().__init__(message)
+        self.field = field

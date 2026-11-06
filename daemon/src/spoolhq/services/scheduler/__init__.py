@@ -13,6 +13,8 @@ from spoolhq.services.scheduler.errors import (
     PlanProblem,
     ProblemCode,
     SchedulerError,
+    TicketEditError,
+    TicketLockedError,
     TransitionError,
 )
 from spoolhq.services.scheduler.graph import validate_plan
@@ -49,6 +51,8 @@ __all__ = [
     "PlanSummary",
     "ProblemCode",
     "SchedulerError",
+    "TicketEditError",
+    "TicketLockedError",
     "TransitionError",
     "TransitionResult",
     "apply_transition",

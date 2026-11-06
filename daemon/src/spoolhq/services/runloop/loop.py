@@ -418,9 +418,9 @@ class RunLoop:
         """A ``pr_changes`` attempt with ``note`` for a waiting ticket (``approval.reject``)."""
         return approval.reject(self, project, ticket_id, note)
 
-    def unblock(self, project: str, ticket_id: str, note: str) -> Run:
+    def unblock(self, project: str, ticket_id: str, note: str, reset_retries: bool = True) -> Run:
         """A ``pr_changes`` attempt with ``note`` for a blocked ticket (``approval.unblock``)."""
-        return approval.unblock(self, project, ticket_id, note)
+        return approval.unblock(self, project, ticket_id, note, reset_retries)
 
     def discard(self, project: str, ticket_id: str) -> None:
         """Remove the worktree of an interrupted or blocked ticket; ticket back to ``ready``."""

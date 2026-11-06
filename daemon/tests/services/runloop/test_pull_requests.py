@@ -14,7 +14,7 @@ import pytest
 from spoolhq.services.agents import AgentRunner, FakeRunner
 from spoolhq.services.github import MISSING_TOKEN, GitHubClient
 from spoolhq.services.projects import load_project, save_project
-from spoolhq.services.runloop import Delivery, GitHubPoller, RunLoop, RunLoopError
+from spoolhq.services.runloop import Delivery, GitHubPoller, RunLoop, RunLoopError, ticket_runs
 from spoolhq.services.runs import RunLog, RunRegistry, RunStatus, last_integration
 from spoolhq.services.tickets import load_ticket, save_ticket
 from tests.conftest import GITHUB_URL, commit_file, make_github_remote, run_git
@@ -199,8 +199,15 @@ def test_a_pull_request_is_opened_then_merged(
 
     poller = GitHubPoller(loop, registry, github=fake.client, clock=clock)
     assert poller.sync("demo") == ["T01: PR #1 open"]
+    settings = load_project("demo", projects_dir=projects_dir)
+    shown = ticket_runs(settings, log_of(registry), "T01", poller.checked_at["demo"]).git
+    assert (shown.pr_number, shown.pr_state, shown.commit) == (1, "open", None)
+    assert shown.pr_checked_at == poller.checked_at["demo"]
     merge = fake.merge(1)
     assert poller.sync("demo") == [f"T01: PR #1 merged as {merge[:7]}; tagged ticket/T01"]
+    shown = ticket_runs(settings, log_of(registry), "T01", None).git
+    assert (shown.pr_state, shown.commit, shown.tag) == ("merged", merge, "ticket/T01")
+    assert shown.commit_url == f"https://github.com/acme/demo/commit/{merge}"
 
     assert git(repo, "rev-parse", "main") == merge
     assert git(repo, "rev-parse", "ticket/T01") == merge == git(bare, "rev-parse", "ticket/T01")

@@ -20,13 +20,14 @@ from spoolhq.api.schemas.runs import RunView
 from spoolhq.api.schemas.tickets import (
     InvalidTicketView,
     Note,
+    TicketDetail,
     TicketList,
     TicketUpdate,
     TicketView,
 )
 from spoolhq.api.security import bearer_scheme
-from spoolhq.services.projects import EditConflict, read_with_etag, write_if_match
-from spoolhq.services.runloop import RunLoop
+from spoolhq.services.projects import EditConflict, load_project, read_with_etag, write_if_match
+from spoolhq.services.runloop import GitHubPoller, RunLoop, ticket_runs
 from spoolhq.services.runs import ticket_activity
 from spoolhq.services.scheduler import edit_ticket
 from spoolhq.services.tickets import (
@@ -69,10 +70,15 @@ def _read(name: str, ticket_id: str, request: Request) -> tuple[TicketView, str]
 @router.get("/{ticket_id}")
 def get_ticket(
     name: ProjectName, ticket_id: TicketId, request: Request, response: Response
-) -> TicketView:
+) -> TicketDetail:
+    """The ticket (its ETag in the header) with its latest run, attempts and git state."""
     workspace(request, name)
     view, response.headers["ETag"] = _read(name, ticket_id, request)
-    return view
+    poller: GitHubPoller = request.app.state.github
+    with service_errors():
+        project = load_project(name, projects_dir=settings(request).projects_dir)
+    runs = ticket_runs(project, run_log(request, name), ticket_id, poller.checked_at.get(name))
+    return TicketDetail.of_runs(view, runs)
 
 
 @router.put("/{ticket_id}")
@@ -111,4 +117,4 @@ def unblock_ticket(name: ProjectName, ticket_id: TicketId, body: Note, request: 
     """Continue a blocked ticket's run with your note: a new attempt whose prompt has it."""
     loop: RunLoop = request.app.state.runloop
     with service_errors():
-        return RunView.of(loop.unblock(name, ticket_id, body.note))
+        return RunView.of(loop.unblock(name, ticket_id, body.note, body.reset_retries))

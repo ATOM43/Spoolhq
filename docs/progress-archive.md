@@ -346,3 +346,12 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - A full `DECISIONS.md` renders byte-identical to before (checked against the existing snapshot).
 - `task.md`: the example `project.yaml` has the `template` block and a valid `git.remote`; a test validates it against the model.
 - DECISIONS 331.
+
+## T34 · Settings polish and secret test
+
+- Daemon: `POST /api/settings/secrets/{secret}/test` (`services/secrets/check.py`): reads the secret with the new `read_secret` (env, then keychain) and makes one read-only HTTPS `GET` to a fixed URL per provider (Anthropic `/v1/models`, GitHub `/user`, ClickUp `/api/v2/user`) with `httpx`, no redirects, 10 s; answers `{ok, message}` with fixed text only and logs one line with the name and outcome. TS client regenerated.
+- Settings dialog: underlined tabs (Agents, Accounts, General, About), ✕ and a footer with **Done**, both disabled with the reason while no backend is ready on first run. Agents: the SDK without a key is grey ("Needs an API key (optional)"), amber only when nothing is ready, the raw daemon message under a collapsed "Details". Accounts: password field with Save, Test and Remove per secret, status as icon + label, the PNG's help lines, test result under the field ("Key works · tested just now" or the failure), kept only while the dialog is open.
+- Panel: a gear at the right end of the breadcrumb row opens the same dialog, also with an invalid `project.yaml`. Run next / Run all and Generate plan / Retry are disabled with "Set up an agent first…" when no backend is ready, with an **Open Settings** link that opens the Agents tab (`openSettings`).
+- ruff: `PLW1514` enabled (preview rule, explicit) and `scripts/` now linted; no findings, 0 files changed.
+- Tests: daemon (each provider's 200, 401, 403, 500, timeout, network error, redirect not followed, not set makes no call, env value used, no token 401, unknown name 422, secret absent from every answer and log record), Vitest (tabs, ✕, Done, first run both ways, SDK neutral and Details collapsed, amber only when blocking, value gone after Save, Test disabled when not set, each result with its icon and gone after closing, gear with invalid settings, Open Settings opens Agents).
+- Docs: `api.md` (testing a secret), `context.md` (split `DECISIONS.md`); DECISIONS 332–336.

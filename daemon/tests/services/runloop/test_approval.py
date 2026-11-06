@@ -10,7 +10,8 @@ from typer.testing import CliRunner
 from spoolhq.cli.main import app
 from spoolhq.services.agents import FakeRunner
 from spoolhq.services.projects import load_project, save_project
-from spoolhq.services.runloop import Delivery, RunLoopError
+from spoolhq.services.runloop import Delivery, RunLoopError, ticket_runs
+from spoolhq.services.runloop.machine import retries_used
 from spoolhq.services.runloop.pr_body import md_escape
 from spoolhq.services.runs import AttemptKind, EventKind, Run, RunLog, RunRegistry, RunStatus
 from spoolhq.services.tickets import load_ticket, save_ticket
@@ -343,3 +344,43 @@ def test_unblock_continues_the_blocked_run_with_the_note(
     assert last.kind is AttemptKind.PR_CHANGES
     prompt = loop.agents.implementer.calls[-1][0]  # type: ignore[attr-defined]
     assert "use the slug helper" in prompt
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("reset", [True, False], ids=["reset", "kept"])
+def test_unblock_resets_the_retry_count_only_when_asked(
+    reset: bool,
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    clock: ManualClock,
+    registry: RunRegistry,
+    projects_dir: Path,
+) -> None:
+    changes = transcripts.review("changes_requested", (True, False, True))
+    loop, _ = make_loop(
+        [transcripts.implement() for _ in range(5)],
+        [changes, changes, changes, changes, transcripts.review("approve")],
+        integrator=Delivery(clock=clock),
+    )
+    loop.start("demo", "next")
+    loop.wait("demo")
+    log = log_of(registry)
+    run = log.list_runs()[0]
+    assert retries_used(log, run.id, AttemptKind.REVIEW_RETRY) == 2  # the limit: blocked
+    settings = load_project("demo", projects_dir=projects_dir)
+    git = ticket_runs(settings, log, "T01", None).git
+    assert git.branch is not None and git.branch.startswith("feat/T01-")
+    assert (git.commits, git.diff_lines, git.commit) == (1, 1, None)  # later ones changed nothing
+
+    loop.unblock("demo", "T01", "use the slug helper", reset_retries=reset)
+    loop.wait("demo")
+
+    kinds = [a.kind for a in log.list_attempts(run.id)][3:]
+    if reset:  # changes requested again, and a fresh retry is allowed
+        assert kinds == [AttemptKind.PR_CHANGES, AttemptKind.REVIEW_RETRY]
+        assert retries_used(log, run.id, AttemptKind.REVIEW_RETRY) == 1
+        assert log.get_run(run.id).status is RunStatus.DONE
+    else:  # the old retries still count: blocked again at once
+        assert kinds == [AttemptKind.PR_CHANGES]
+        assert retries_used(log, run.id, AttemptKind.REVIEW_RETRY) == 2
+        assert log.get_run(run.id).status is RunStatus.BLOCKED

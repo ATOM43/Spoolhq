@@ -2,15 +2,17 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from spoolhq.services.runloop import Current, Merged, describe
 from spoolhq.services.runs import Attempt, Run, RunPage
 
+NOTE_MAX = 100_000
+
 
 class Reject(BaseModel):
-    note: str = ""
-    """What should change; required (an empty note is refused with 409)."""
+    note: str = Field(min_length=1, max_length=NOTE_MAX)
+    """What should change: the new attempt's prompt has it (blank is refused with 409)."""
 
 
 class RuleHitView(BaseModel):

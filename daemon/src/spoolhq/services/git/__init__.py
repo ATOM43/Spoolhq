@@ -64,6 +64,7 @@ from spoolhq.services.git.repo import (
     is_branch_name,
     is_work_tree,
     operation_in_progress,
+    ticket_branch,
 )
 from spoolhq.services.git.runner import (
     MIN_GIT_VERSION,
@@ -101,6 +102,7 @@ __all__ = [
     "merge_head",
     "merge_in",
     "operation_in_progress",
+    "ticket_branch",
     "outside_symlinks",
     "parse_numstat",
     "restore_branch",

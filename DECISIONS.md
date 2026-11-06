@@ -362,3 +362,11 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 356 · Where the spec won over the V2 and D4 PNGs · docs/decisions/desktop.md
 357 · GitHub-style markdown · docs/decisions/desktop.md
 358 · Rust files are under the 500-line limit, and Clippy denies long functions · docs/decisions/core.md
+359 · The drawer reuses the existing ticket routes · docs/decisions/api.md
+360 · The ticket detail carries the run, attempts and git · docs/decisions/api.md
+361 · Unblock resets the retries with a log event · docs/decisions/runloop.md
+362 · Ticket edits lock while a run owns the ticket, and refuse only what they introduce · docs/decisions/projects-tickets.md
+363 · "Checked 20 s ago" is the poller's memory · docs/decisions/git-github.md
+364 · Links are copied, not opened · docs/decisions/desktop.md
+365 · The drawer's actions and edit mode · docs/decisions/desktop.md
+366 · Where the spec won over the V2 and D3 PNGs · docs/decisions/desktop.md

@@ -9,11 +9,13 @@ export {
   CardTitle,
 } from "./card";
 export { CopyButton, CopyCommand } from "./copy-command";
+export { useCopy } from "./use-copy";
 export { Dialog } from "./dialog";
 export { EmptyState } from "./empty-state";
 export { Field } from "./field";
 export { describedBy } from "./field-ids";
 export { Input } from "./input";
+export { Textarea } from "./textarea";
 export { ProgressLine } from "./progress-line";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
 export { ConfirmDialog } from "./confirm-dialog";

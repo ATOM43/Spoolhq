@@ -138,8 +138,8 @@ All routes need the token. Unknown projects, runs and tickets give 404; refusals
 | `POST /api/projects/{name}/run/resume` (`?run_id=`) | resume a paused or interrupted run |
 | `POST /api/projects/{name}/run/cancel` (`?run_id=`) | cancel |
 | `POST /api/projects/{name}/tickets/{id}/approve` (alias `/integrate`) | integrate a ticket waiting in `awaiting_approval` ([merge policy](merge-policy.md#local-approval)) |
-| `POST /api/projects/{name}/tickets/{id}/reject` `{"note": "..."}` | send a waiting ticket back with a note: a `pr_changes` attempt |
-| `POST /api/projects/{name}/tickets/{id}/unblock` `{"note": "..."}` | continue a blocked ticket's run in its kept worktree: a `pr_changes` attempt with the note (409 `not_blocked` otherwise) |
+| `POST /api/projects/{name}/tickets/{id}/reject` `{"note": "..."}` | send a waiting ticket back with a note: a `pr_changes` attempt whose prompt has it (a missing or empty note is 422, a blank one 409) |
+| `POST /api/projects/{name}/tickets/{id}/unblock` `{"note": "...", "reset_retries": true}` | continue a blocked ticket's run in its kept worktree: a `pr_changes` attempt with the note (409 `not_blocked` otherwise). With `reset_retries` (the default) the run's gate and review retries count again from zero; without it the earlier ones still count, so the next failure blocks again |
 | `POST /api/projects/{name}/tickets/{id}/discard` | discard an interrupted or blocked ticket's worktree |
 | `GET /api/projects/{name}/runs/current` | `active`, `working`, the active (else latest) run, its attempts, tokens and phase lines, and `last_merged` (`ticket_id`, full `commit`, `tag` of the latest finished integration, or `null`) |
 

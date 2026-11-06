@@ -22,8 +22,9 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET`, `PUT /api/projects/{name}/settings` | `project.yaml` as `{"settings": {...}}`, validated by the project model; [ETag](#etags-and-edit-conflicts) |
 | `GET`, `PUT /api/projects/{name}/spec` | `CONTEXT.md` as `{"content": "..."}`; ETag |
 | `GET /api/projects/{name}/tickets?status=&phase=` | `{"tickets": [...], "invalid": [...]}`; each ticket is `id`, `file_name`, `meta` (the frontmatter), `body` and `activity` (null before its first run: `attempts`, `tokens` of attempts without a cost, `cost_micro_usd` summed over those with one, the latest run's `run_id` and `reason`) |
-| `GET`, `PUT /api/projects/{name}/tickets/{id}` | one ticket (`activity` null); PUT takes `{"meta", "body"}`; ETag |
-| `POST /api/projects/{name}/tickets/{id}/unblock` | `{"note"}`: continue a blocked ticket's run with the note (409 `not_blocked`) |
+| `GET /api/projects/{name}/tickets/{id}` | one ticket (`activity` null) with its ETag and [what the drawer shows](#ticket-detail): `run`, `attempts`, `git` |
+| `PUT /api/projects/{name}/tickets/{id}` | `{"meta", "body"}` with `If-Match`; see [Editing a ticket](#editing-a-ticket) |
+| `POST /api/projects/{name}/tickets/{id}/unblock` | `{"note", "reset_retries"}`: continue a blocked ticket's run with a new attempt whose prompt has the note (`note` 1 character or more, else 422; `reset_retries` default true gives the run its full gate and review retries again; 409 `not_blocked`) |
 | `POST /api/projects/{name}/tickets/{id}/approve` (`/integrate`), `/reject`, `/discard` | see [run-loop.md](run-loop.md#api-and-cli) |
 | `GET /api/projects/{name}/plan` | the [plan summary](#plan-summary): `state`, `generated_at`, `ticket_count`, `total_h`, `problems` |
 | `POST /api/projects/{name}/plan/generate`, `/plan/approve` | see [planner.md](planner.md#api); approve answers 409 `plan_invalid` with the problems while [any exist](#plan-summary) |
@@ -149,6 +150,29 @@ Tickets, the spec and `project.yaml` carry an `ETag`: the quoted SHA-256 of the 
 The daemon reads the bytes, hashes and compares them, and writes (a temp file in the same folder, then `os.replace`), all under the project's edit lock, so two API edits never both win. Writers outside the daemon don't take that lock: an editor saving in the moment between the compare and the replace is overwritten. The window is a few milliseconds.
 
 A ticket PUT goes through the ticket store, so only frontmatter keys whose value changed are rewritten and the body is kept byte for byte (an unchanged PUT writes the same bytes); a status change must be allowed by the scheduler's transition table (409 `invalid_transition`), and the id must still match the file name (422).
+
+### Editing a ticket
+
+A ticket can be edited while it is `draft`, `ready` or `blocked`; while it is `running` or `awaiting_approval` a PUT is 409 `ticket_locked` ("T05 is locked while running"). Only what the edit changes is checked, so an old ticket can still be fixed one part at a time; each refusal is 422 `validation_error` with the field, and nothing is written:
+
+| Refused | `field` | Message |
+| --- | --- | --- |
+| a changed `depends_on` naming a ticket that doesn't exist | `meta.depends_on` | `T01 depends on T99, which does not exist` |
+| a changed `depends_on` that makes a cycle through this ticket | `meta.depends_on` | `cycle: T01 → T03 → T01` |
+| a changed body without "Done when" items | `done_when` | `“Done when” needs at least one checklist item` |
+
+### Ticket detail
+
+`GET …/tickets/{id}` adds what the ticket drawer shows to the ticket:
+
+| Field | Meaning |
+| --- | --- |
+| `run` | the ticket's latest run (as `GET …/runs/{id}` has it, without attempts): `status`, `reason` (why it is blocked), `policy.rules` (the merge-policy rules that fired), `pr_number`, `pr_url` |
+| `attempts` | every attempt of the ticket across its runs, oldest first, each with its `run_id` |
+| `git.branch`, `git.commits`, `git.diff_lines` | the ticket's local `feat/<id>-…` branch while it exists, its commits ahead of the default branch and the lines they change; null without a branch |
+| `git.commit`, `git.commit_url`, `git.tag` | the squash commit on the default branch once merged, that commit on GitHub (with a GitHub remote) and the `ticket/<id>` tag |
+| `git.pr_number`, `git.pr_url`, `git.pr_state` | the latest run's pull request; `pr_state` is `open` (waiting), `merged` or `closed` |
+| `git.pr_checked_at` | when this daemon last checked the project's open pull requests (null before the first check since it started) |
 
 ## Paged run history
 

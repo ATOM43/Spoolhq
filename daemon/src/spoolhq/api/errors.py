@@ -19,7 +19,12 @@ from starlette.responses import JSONResponse
 from spoolhq.services.planner import PlanInvalid
 from spoolhq.services.projects import ProjectError, ProjectValidationError
 from spoolhq.services.runloop import RunLoopError
-from spoolhq.services.scheduler import PlanProblem, SchedulerError
+from spoolhq.services.scheduler import (
+    PlanProblem,
+    SchedulerError,
+    TicketEditError,
+    TicketLockedError,
+)
 from spoolhq.services.tickets import TicketError, TicketValidationError
 
 STATUS_CODES = {
@@ -89,6 +94,10 @@ def service_errors() -> Iterator[None]:
         # give them a NotFound error class if a message ever changes.
         code = 404 if str(exc).startswith("no ") else 409
         raise ApiError(code, STATUS_CODES[code], str(exc)) from exc
+    except TicketEditError as exc:
+        raise ApiError(422, "validation_error", str(exc), field=exc.field) from exc
+    except TicketLockedError as exc:
+        raise ApiError(409, "ticket_locked", str(exc)) from exc
     except SchedulerError as exc:
         raise ApiError(409, "invalid_transition", str(exc)) from exc
 

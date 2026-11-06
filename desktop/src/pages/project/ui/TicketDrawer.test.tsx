@@ -117,6 +117,49 @@ const DETAIL: ProjectDetail = {
   idle: null,
 };
 
+const T04_RUN = {
+  id: 7,
+  kind: "ticket",
+  ticket_id: "T04",
+  status: "blocked",
+  reason: "gates failed after 2 retries",
+  started_at: "2026-11-06T10:00:00Z",
+  ended_at: null,
+  reset_at: null,
+  progress_note: null,
+};
+const T04_ATTEMPT = {
+  number: 2,
+  run_id: 7,
+  kind: "gate_retry",
+  status: "gates_failed",
+  backend: "claude-code-cli",
+  model: null,
+  input_tokens: 1000,
+  output_tokens: 500,
+  cost_micro_usd: null,
+  started_at: "2026-11-06T10:00:00Z",
+  ended_at: "2026-11-06T10:22:05Z",
+};
+
+const detailOf = (ticket: Ticket) => ({
+  ...ticket,
+  run: ticket.id === "T04" ? T04_RUN : null,
+  attempts: ticket.id === "T04" ? [T04_ATTEMPT] : [],
+  git: {
+    branch: null,
+    commits: null,
+    diff_lines: null,
+    commit: null,
+    commit_url: null,
+    tag: null,
+    pr_number: null,
+    pr_url: null,
+    pr_state: null,
+    pr_checked_at: null,
+  },
+});
+
 const notFound = () =>
   Promise.reject(
     new DaemonError({
@@ -197,6 +240,13 @@ describe("ticket drawer", () => {
                 ],
               });
         }
+        case "/api/projects/{name}/tickets/{ticket_id}": {
+          const { ticket_id } = (
+            init as { params: { path: { ticket_id: string } } }
+          ).params.path;
+          const ticket = [T01, T04, T05].find((t) => t.id === ticket_id);
+          return ticket ? ok(detailOf(ticket)) : notFound();
+        }
         case "/api/agents":
           return ok({ backends: [], graphify: { installed: false } });
         case "/api/settings":
@@ -217,7 +267,7 @@ describe("ticket drawer", () => {
     ).toBeVisible();
     expect(aside.getByText("Blocked")).toBeInTheDocument();
     expect(
-      aside.getByText("Actions and editing come in T37"),
+      await aside.findByRole("button", { name: "Unblock" }),
     ).toBeInTheDocument();
 
     await userEvent.keyboard("{Escape}");
@@ -305,6 +355,35 @@ describe("ticket drawer", () => {
       within(drawer() as HTMLElement).getByRole("button", { name: "Close" }),
     );
     expect(drawer()).toBeNull();
+  });
+
+  it("follows a Waits-for chip, and an attempt link opens the Run tab", async () => {
+    const router = show("/p/demo?tab=tickets&ticket=T05");
+    const aside = within(
+      await screen.findByRole("complementary", { name: "Ticket T05" }),
+    );
+    // T05 waits for T04 (blocked): its action says so.
+    expect(
+      await aside.findByRole("button", { name: "Run this ticket" }),
+    ).toBeDisabled();
+    // The "Waits for" chip in the header (the Dependencies section has one too).
+    await userEvent.click(
+      aside.getAllByRole("button", { name: "Open T04" })[0] as HTMLElement,
+    );
+    expect(router.state.location.search).toBe("?tab=tickets&ticket=T04");
+    const blocked = within(drawer() as HTMLElement);
+    await userEvent.click(
+      await blocked.findByRole("button", {
+        name: "Open attempt 2 in the Run tab",
+      }),
+    );
+    expect(router.state.location.search).toBe(
+      "?tab=tickets&ticket=T04&attempt=2",
+    );
+    expect(screen.getByRole("tab", { name: /Run/ })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
   });
 
   it("says when the ticket no longer exists", async () => {

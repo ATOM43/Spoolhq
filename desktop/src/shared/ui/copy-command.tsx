@@ -1,22 +1,6 @@
 import { Check, Copy } from "lucide-react";
-import { useState } from "react";
-
 import { Button } from "./button";
-
-type CopyState = "idle" | "copied" | "failed";
-
-function useCopy(text: string) {
-  const [state, setState] = useState<CopyState>("idle");
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setState("copied");
-    } catch {
-      setState("failed");
-    }
-  }
-  return { state, copy };
-}
+import { useCopy } from "./use-copy";
 
 /** A small icon button that copies `text` (a path, a branch). */
 export function CopyButton({ text, label }: { text: string; label: string }) {

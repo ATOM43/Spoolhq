@@ -59,6 +59,7 @@ from spoolhq.services.runs import (
     RunLog,
     RunRegistry,
     RunStatus,
+    format_ts,
     open_pull_requests,
     pull_request_integration,
     set_integration_state,
@@ -106,6 +107,8 @@ class GitHubPoller:
         self.interval_s = interval_s
         self.wait_until: datetime | None = None
         """Set by a rate limit: no API call before then."""
+        self.checked_at: dict[str, str] = {}
+        """When each project's open pull requests were last checked."""
         self._sync_lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -164,6 +167,7 @@ class GitHubPoller:
                         extra={"project": project, "ticket_id": run.ticket_id, "error": str(exc)},
                     )
                     lines.append(f"{run.ticket_id}: {exc}")
+        self.checked_at[project] = format_ts(self.clock())
         return lines
 
     def _check(self, settings: Project, run_log: RunLog, run: Run, client: GitHubClient) -> str:

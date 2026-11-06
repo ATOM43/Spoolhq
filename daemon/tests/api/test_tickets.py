@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from spoolhq.services.agents import FakeRunner
-from spoolhq.services.runloop import Agents
+from spoolhq.services.runloop import Agents, RunLoopError
 from spoolhq.services.runs import AttemptKind, RunLog, RunStatus
 from spoolhq.services.tickets import load_ticket, render_ticket
 from tests.api.test_runs import follow
@@ -104,9 +104,82 @@ def test_get_then_put_unchanged_is_byte_identical(
         json={"meta": body["meta"], "body": body["body"]},
         headers=auth(token, **{"If-Match": got.headers["ETag"]}),
     )
-    assert put.status_code == 200, put.json()
     assert (fixture_tickets / path.name).read_bytes() == path.read_bytes()
+    if body["meta"]["status"] in ("running", "awaiting_approval"):
+        assert (put.status_code, put.json()["error"]["code"]) == (409, "ticket_locked")
+        return
+    assert put.status_code == 200, put.json()
     assert put.headers["ETag"] == got.headers["ETag"]
+
+
+def write_ticket(workspace: Path, ticket_id: str, deps: str, status: str = "ready") -> Path:
+    file = workspace / "tickets" / f"{ticket_id}-x.md"
+    file.write_text(
+        f"---\nid: {ticket_id}\ntitle: Ticket {ticket_id}\nphase: 0\ndepends_on: [{deps}]\n"
+        f"status: {status}\nestimate_h: 1\n---\n\n## Done when\n\n- [ ] works\n",
+        encoding="utf-8",
+    )
+    return file
+
+
+def edit(client: TestClient, token: str, ticket_id: str, **changes: object) -> dict[str, object]:
+    """PUT the ticket with ``changes`` to its meta (or ``body``); the response's JSON."""
+    url = f"/api/projects/demo/tickets/{ticket_id}"
+    got = client.get(url, headers=auth(token))
+    body = changes.pop("body", got.json()["body"])
+    update = {"meta": {**got.json()["meta"], **changes}, "body": body}
+    response = client.put(
+        url, json=update, headers=auth(token, **{"If-Match": got.headers["ETag"]})
+    )
+    return {"status": response.status_code, **response.json()}
+
+
+@pytest.mark.parametrize(
+    ("changes", "field", "message"),
+    [
+        ({"depends_on": ["T99"]}, "meta.depends_on", "T01 depends on T99, which does not exist"),
+        ({"depends_on": ["T03"]}, "meta.depends_on", "cycle: T01 → T03 → T01"),
+        ({"body": "## Scope\n\nNothing to check.\n"}, "done_when", "“Done when” needs"),
+    ],
+    ids=["unknown-dependency", "cycle", "empty-done-when"],
+)
+def test_an_edit_that_breaks_the_plan_is_422_with_the_field(
+    client: TestClient,
+    token: str,
+    workspace: Path,
+    changes: dict[str, object],
+    field: str,
+    message: str,
+) -> None:
+    tickets = workspace / "tickets"
+    write_ticket(workspace, "T01", "")
+    write_ticket(workspace, "T03", "T01", "draft")
+    before = {p.name: p.read_bytes() for p in tickets.iterdir()}
+    answer = edit(client, token, "T01", **changes)
+    error = answer["error"]
+    assert isinstance(error, dict)
+    assert (answer["status"], error["code"], error["field"]) == (422, "validation_error", field)
+    assert error["message"].startswith(message)
+    assert {p.name: p.read_bytes() for p in tickets.iterdir()} == before
+
+
+def test_an_edit_while_running_is_409(client: TestClient, token: str, workspace: Path) -> None:
+    file = write_ticket(workspace, "T01", "", "running")
+    before = file.read_bytes()
+    answer = edit(client, token, "T01", title="Renamed")
+    assert answer["status"] == 409
+    assert answer["error"] == {"code": "ticket_locked", "message": "T01 is locked while running"}
+    assert file.read_bytes() == before
+
+
+def test_a_title_edit_changes_only_the_title_line(
+    client: TestClient, token: str, fixture_tickets: Path
+) -> None:
+    file = fixture_tickets / "T02-crlf.md"
+    before = file.read_bytes()
+    answer = edit(client, token, "T02", title="Renamed in the app")
+    assert answer["status"] == 200
+    assert file.read_bytes() == before.replace(b"Windows line endings", b"Renamed in the app", 1)
 
 
 def test_conflicting_edit(
@@ -200,3 +273,46 @@ def test_unblock_a_blocked_ticket(
     assert response.status_code == 200
     assert follow(run_client, token)["run"]["status"] == "done"
     assert "keep it short" in implementer.calls[-1][0]
+
+
+def test_unblock_passes_the_note_and_reset_retries(
+    run_client: TestClient, token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loop = run_client.app.state.runloop  # type: ignore[attr-defined]
+    calls: list[tuple[object, ...]] = []
+
+    def unblock(*args: object) -> None:
+        calls.append(args)
+        raise RunLoopError("stop here")
+
+    monkeypatch.setattr(loop, "unblock", unblock)
+    url = "/api/projects/demo/tickets/T07/unblock"
+    for body in ({"note": "a"}, {"note": "b", "reset_retries": False}):
+        run_client.post(url, json=body, headers=auth(token))
+    assert calls == [("demo", "T07", "a", True), ("demo", "T07", "b", False)]
+    empty = run_client.post(url, json={"note": ""}, headers=auth(token))
+    assert (empty.status_code, empty.json()["error"]["field"]) == (422, "note")
+
+
+def test_reject_without_a_note_is_422(run_client: TestClient, token: str) -> None:
+    url = "/api/projects/demo/tickets/T07/reject"
+    response = run_client.post(url, json={}, headers=auth(token))
+    assert (response.status_code, response.json()["error"]["field"]) == (422, "note")
+
+
+@pytest.mark.integration
+def test_the_detail_has_the_run_attempts_and_git(run_client: TestClient, token: str) -> None:
+    url = "/api/projects/demo/tickets/T07"
+    before = run_client.get(url, headers=auth(token)).json()
+    assert (before["run"], before["attempts"]) == (None, [])
+    assert before["git"]["branch"] is None and before["git"]["commit"] is None
+    run_client.post("/api/projects/demo/run/next", headers=auth(token))
+    follow(run_client, token)
+
+    detail = run_client.get(url, headers=auth(token)).json()
+    assert detail["run"]["status"] == "done"
+    assert [(a["number"], a["status"]) for a in detail["attempts"]] == [(1, "approved")]
+    assert detail["attempts"][0]["run_id"] == detail["run"]["id"]
+    git = detail["git"]
+    assert len(git["commit"]) == 40 and git["tag"] == "ticket/T07"
+    assert git["commit_url"] is None and git["pr_state"] is None

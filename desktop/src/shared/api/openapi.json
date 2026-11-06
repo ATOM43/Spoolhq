@@ -718,6 +718,7 @@
     "/api/projects/{name}/tickets/{ticket_id}": {
       "get": {
         "summary": "Get Ticket",
+        "description": "The ticket (its ETag in the header) with its latest run, attempts and git state.",
         "operationId": "get_ticket_api_projects__name__tickets__ticket_id__get",
         "security": [
           {
@@ -756,7 +757,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TicketView"
+                  "$ref": "#/components/schemas/TicketDetail"
                 }
               }
             }
@@ -3042,11 +3043,19 @@
           "note": {
             "type": "string",
             "maxLength": 100000,
-            "title": "Note",
-            "default": ""
+            "minLength": 1,
+            "title": "Note"
+          },
+          "reset_retries": {
+            "type": "boolean",
+            "title": "Reset Retries",
+            "default": true
           }
         },
         "type": "object",
+        "required": [
+          "note"
+        ],
         "title": "Note"
       },
       "PhaseLine": {
@@ -3522,11 +3531,15 @@
         "properties": {
           "note": {
             "type": "string",
-            "title": "Note",
-            "default": ""
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Note"
           }
         },
         "type": "object",
+        "required": [
+          "note"
+        ],
         "title": "Reject"
       },
       "RollbackView": {
@@ -4205,6 +4218,291 @@
           "reason"
         ],
         "title": "TicketActivityView"
+      },
+      "TicketAttemptView": {
+        "properties": {
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens"
+          },
+          "cost_micro_usd": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micro Usd"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "number",
+          "kind",
+          "status",
+          "backend",
+          "model",
+          "input_tokens",
+          "output_tokens",
+          "cost_micro_usd",
+          "started_at",
+          "ended_at",
+          "run_id"
+        ],
+        "title": "TicketAttemptView"
+      },
+      "TicketDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/TicketMeta"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "activity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TicketActivityView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/TicketAttemptView"
+            },
+            "type": "array",
+            "title": "Attempts"
+          },
+          "git": {
+            "$ref": "#/components/schemas/TicketGitView"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "file_name",
+          "meta",
+          "body",
+          "run",
+          "attempts",
+          "git"
+        ],
+        "title": "TicketDetail",
+        "description": "``GET …/tickets/{id}``: the ticket with its latest run, attempts and git state."
+      },
+      "TicketGitView": {
+        "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "commits": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commits"
+          },
+          "diff_lines": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diff Lines"
+          },
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit"
+          },
+          "commit_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit Url"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag"
+          },
+          "pr_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Number"
+          },
+          "pr_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Url"
+          },
+          "pr_state": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "merged",
+                  "closed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr State"
+          },
+          "pr_checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Checked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "branch",
+          "commits",
+          "diff_lines",
+          "commit",
+          "commit_url",
+          "tag",
+          "pr_number",
+          "pr_url",
+          "pr_state",
+          "pr_checked_at"
+        ],
+        "title": "TicketGitView"
       },
       "TicketList": {
         "properties": {

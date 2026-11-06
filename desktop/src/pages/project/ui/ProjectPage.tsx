@@ -280,6 +280,19 @@ function Loaded({
               ticketId={ticket}
               onOpen={openTicket}
               onClose={closeTicket}
+              onShowRun={(attempt) => {
+                // shortcut: the Run tab (T22) is a placeholder; it reads ?attempt= then.
+                setParams((previous) => {
+                  const next = new URLSearchParams(previous);
+                  if (attempt === undefined) {
+                    next.delete("attempt");
+                  } else {
+                    next.set("attempt", String(attempt));
+                  }
+                  return next;
+                });
+                setChosen("run");
+              }}
             />
           ) : null}
         </div>

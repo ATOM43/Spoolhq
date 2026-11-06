@@ -107,7 +107,7 @@ def test_current_with_no_run(run_client: TestClient, token: str) -> None:
         (
             "POST",
             "/api/projects/demo/tickets/T07/reject",
-            {},
+            {"note": " "},
             409,
             "say what should change with --note",
         ),

@@ -33,6 +33,7 @@ from spoolhq.services.runs.journal import (
     pull_request_integration,
     set_integration_state,
     start_integration,
+    ticket_merge,
 )
 from spoolhq.services.runs.log import RunLog
 from spoolhq.services.runs.model import (
@@ -101,6 +102,7 @@ __all__ = [
     "format_ts",
     "get_integration",
     "last_integration",
+    "ticket_merge",
     "open_integrations",
     "open_pull_requests",
     "pull_request_integration",

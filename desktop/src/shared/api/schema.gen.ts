@@ -218,7 +218,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Ticket */
+        /**
+         * Get Ticket
+         * @description The ticket (its ETag in the header) with its latest run, attempts and git state.
+         */
         get: operations["get_ticket_api_projects__name__tickets__ticket_id__get"];
         /** Put Ticket */
         put: operations["put_ticket_api_projects__name__tickets__ticket_id__put"];
@@ -946,11 +949,13 @@ export interface components {
         };
         /** Note */
         Note: {
-            /**
-             * Note
-             * @default
-             */
+            /** Note */
             note: string;
+            /**
+             * Reset Retries
+             * @default true
+             */
+            reset_retries: boolean;
         };
         /** PhaseLine */
         PhaseLine: {
@@ -1112,10 +1117,7 @@ export interface components {
         };
         /** Reject */
         Reject: {
-            /**
-             * Note
-             * @default
-             */
+            /** Note */
             note: string;
         };
         /** RollbackView */
@@ -1307,6 +1309,72 @@ export interface components {
             run_id: number | null;
             /** Reason */
             reason: string | null;
+        };
+        /** TicketAttemptView */
+        TicketAttemptView: {
+            /** Number */
+            number: number;
+            /** Kind */
+            kind: string;
+            /** Status */
+            status: string;
+            /** Backend */
+            backend: string | null;
+            /** Model */
+            model: string | null;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Cost Micro Usd */
+            cost_micro_usd: number | null;
+            /** Started At */
+            started_at: string;
+            /** Ended At */
+            ended_at: string | null;
+            /** Run Id */
+            run_id: number;
+        };
+        /**
+         * TicketDetail
+         * @description ``GET …/tickets/{id}``: the ticket with its latest run, attempts and git state.
+         */
+        TicketDetail: {
+            /** Id */
+            id: string;
+            /** File Name */
+            file_name: string;
+            meta: components["schemas"]["TicketMeta"];
+            /** Body */
+            body: string;
+            activity?: components["schemas"]["TicketActivityView"] | null;
+            run: components["schemas"]["RunView"] | null;
+            /** Attempts */
+            attempts: components["schemas"]["TicketAttemptView"][];
+            git: components["schemas"]["TicketGitView"];
+        };
+        /** TicketGitView */
+        TicketGitView: {
+            /** Branch */
+            branch: string | null;
+            /** Commits */
+            commits: number | null;
+            /** Diff Lines */
+            diff_lines: number | null;
+            /** Commit */
+            commit: string | null;
+            /** Commit Url */
+            commit_url: string | null;
+            /** Tag */
+            tag: string | null;
+            /** Pr Number */
+            pr_number: number | null;
+            /** Pr Url */
+            pr_url: string | null;
+            /** Pr State */
+            pr_state: ("open" | "merged" | "closed") | null;
+            /** Pr Checked At */
+            pr_checked_at: string | null;
         };
         /** TicketList */
         TicketList: {
@@ -2016,7 +2084,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TicketView"];
+                    "application/json": components["schemas"]["TicketDetail"];
                 };
             };
             /** @description An error. */

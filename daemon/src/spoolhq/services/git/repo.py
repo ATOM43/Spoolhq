@@ -7,6 +7,8 @@ from a repository with nothing uncommitted and no rebase or merge half done.
 
 from pathlib import Path
 
+from spoolhq.services.git.diffstat import parse_numstat
+from spoolhq.services.git.naming import BRANCH_PREFIX
 from spoolhq.services.git.runner import GitError, command_error, run_git
 
 MAX_LISTED_CHANGES = 20
@@ -135,3 +137,27 @@ def ensure_no_operation_in_progress(repo: Path) -> None:
         raise OperationInProgressError(
             f"repo {repo}: a {operation} is in progress; finish or abort it first"
         )
+
+
+def ticket_branch(repo: Path, ticket_id: str, base: str) -> tuple[str, int, int] | None:
+    """The ticket's local ``feat/<ticket_id>-…`` branch (the newest if several), its
+    commits ahead of ``base`` and the lines they add and remove; None without one."""
+    refs = (
+        run_git(
+            [
+                "for-each-ref",
+                "--sort=-committerdate",
+                "--format=%(refname:short)",
+                f"refs/heads/{BRANCH_PREFIX}{ticket_id}-*",
+            ],
+            repo,
+        )
+        .check()
+        .stdout.split()
+    )
+    if not refs:
+        return None
+    count = run_git(["rev-list", "--count", f"{base}..{refs[0]}"], repo).check().stdout
+    numstat = run_git(["diff", "--numstat", "-z", f"{base}...{refs[0]}"], repo).check().stdout
+    lines = sum(change.added + change.removed for change in parse_numstat(numstat))
+    return refs[0], int(count.strip()), lines

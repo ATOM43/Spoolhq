@@ -148,3 +148,14 @@ def pull_request_integration(run_log: RunLog, run_id: int) -> Integration | None
             (run_id, IntegrationState.PR_OPEN.value),
         ).fetchone()
     return _to_integration(row) if row is not None else None
+
+
+def ticket_merge(run_log: RunLog, ticket_id: str) -> Integration | None:
+    """The ticket's integration that finished (``done``) most recently, if any."""
+    with run_log.transaction() as tx:
+        row = tx.conn.execute(
+            f"SELECT {COLUMNS} FROM integrations WHERE ticket_id = ? AND state = ? "  # noqa: S608 - constant columns
+            "ORDER BY id DESC LIMIT 1",
+            (ticket_id, IntegrationState.DONE.value),
+        ).fetchone()
+    return _to_integration(row) if row is not None else None

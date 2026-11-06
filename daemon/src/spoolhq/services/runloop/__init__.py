@@ -10,6 +10,7 @@ the one service that imports the others; no service imports it. See ``docs/run-l
 
 from spoolhq.services.runloop.approval import approve, reject, unblock
 from spoolhq.services.runloop.delivery import Delivery
+from spoolhq.services.runloop.details import TicketGit, TicketRuns, ticket_runs
 from spoolhq.services.runloop.integration import LocalIntegrator, recover_integrations
 from spoolhq.services.runloop.integrator import (
     HoldForIntegration,
@@ -85,4 +86,7 @@ __all__ = [
     "reject",
     "unblock",
     "take_run_lock",
+    "TicketGit",
+    "TicketRuns",
+    "ticket_runs",
 ]

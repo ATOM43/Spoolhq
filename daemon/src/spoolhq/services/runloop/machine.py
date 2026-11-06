@@ -31,12 +31,16 @@ from spoolhq.services.runs import (
     Attempt,
     AttemptKind,
     AttemptStatus,
+    EventKind,
+    RunLog,
     append_transcript,
     attempt_dir,
     write_artifact,
 )
 
 IMPLEMENTER_MAX_TURNS = 100
+RETRIES_RESET = "retries_reset_after"
+"""Log-event key: retries count only attempts after this attempt id (an unblock)."""
 PROMPTS_DIR = "prompts"
 EARLY_STOPS = (Outcome.TIMED_OUT, Outcome.MAX_TURNS, Outcome.BUDGET_EXHAUSTED)
 # Where the next attempt continues after the last finished one (see next_kind).
@@ -77,15 +81,26 @@ def retry_or_block(ctx: RunContext, kind: AttemptKind, what: str, detail: str = 
     """Start a retry of ``kind`` if the project's limit allows another, else block."""
     limits = ctx.project.limits
     limit = limits.gate_retries if kind is AttemptKind.GATE_RETRY else limits.review_retries
-    used = sum(
-        1
-        for attempt in ctx.run_log.list_attempts(ctx.run.id)
-        if attempt.kind is kind and attempt.status is not AttemptStatus.INTERRUPTED
-    )
-    if used < limit:
+    if retries_used(ctx.run_log, ctx.run.id, kind) < limit:
         return kind
     suffix = f": {detail}" if detail else ""
     return Ending(EndKind.BLOCKED, f"{what} after {_retries(limit)}{suffix}")
+
+
+def retries_used(run_log: RunLog, run_id: int, kind: AttemptKind) -> int:
+    """The run's ``kind`` retries so far, counted from its latest unblock that reset them."""
+    after = 0
+    for event in run_log.events_since(0, run_id=run_id, limit=100_000):
+        reset = event.payload.get(RETRIES_RESET) if event.kind is EventKind.LOG else None
+        if isinstance(reset, int):
+            after = reset
+    return sum(
+        1
+        for attempt in run_log.list_attempts(run_id)
+        if attempt.id > after
+        and attempt.kind is kind
+        and attempt.status is not AttemptStatus.INTERRUPTED
+    )
 
 
 def over_budget(ctx: RunContext) -> str | None:

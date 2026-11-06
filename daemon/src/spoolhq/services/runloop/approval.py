@@ -13,6 +13,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from spoolhq.services.git import staged_changes
+from spoolhq.services.runloop.machine import RETRIES_RESET
 from spoolhq.services.runloop.model import NotBlockedError, RunContext, RunLoopError, user_errors
 from spoolhq.services.runloop.policy import DeliveryMode, as_record, delivery_mode, evaluate
 from spoolhq.services.runs import (
@@ -125,9 +126,12 @@ def reject(loop: "RunLoop", project: str, ticket_id: str, note: str) -> Run:
         return loop._continue(settings, workspace, run_log, latest, None, AttemptKind.PR_CHANGES)
 
 
-def unblock(loop: "RunLoop", project: str, ticket_id: str, note: str) -> Run:
+def unblock(
+    loop: "RunLoop", project: str, ticket_id: str, note: str, reset_retries: bool = True
+) -> Run:
     """Continue a blocked ticket's latest run in its kept worktree: a ``pr_changes``
-    attempt with ``note`` as the user's note, then gates, reviewer and policy again."""
+    attempt with ``note`` as the user's note, then gates, reviewer and policy again.
+    ``reset_retries`` gives the run its full gate and review retries again."""
     if not note.strip():
         raise RunLoopError(NOTE_REQUIRED)
     settings, workspace, run_log = loop._project(project)
@@ -138,6 +142,9 @@ def unblock(loop: "RunLoop", project: str, ticket_id: str, note: str) -> Run:
             runs = run_log.list_runs(ticket_id=ticket_id, limit=1)
         if status != "blocked" or not runs or runs[0].status is not RunStatus.BLOCKED:
             raise NotBlockedError(f"{ticket_id} is {status}, not blocked")
-        payload = {"message": "unblocked by the user", "user_note": note.strip()}
+        payload: dict[str, Any] = {"message": "unblocked by the user", "user_note": note.strip()}
+        attempts = run_log.list_attempts(runs[0].id)
+        if reset_retries and attempts:
+            payload[RETRIES_RESET] = attempts[-1].id
         run_log.append_event(runs[0].id, EventKind.LOG, payload)
         return loop._continue(settings, workspace, run_log, runs[0], None, AttemptKind.PR_CHANGES)
