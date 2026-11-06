@@ -33,4 +33,20 @@
   .markdown blockquote {
     @apply border-l-2 pl-3 text-ink-muted;
   }
+  .markdown ul.contains-task-list {
+    @apply list-none pl-1;
+  }
+  .markdown .task-list-item input {
+    @apply mr-2 align-middle;
+  }
+  .markdown table {
+    @apply block overflow-x-auto border-collapse text-left;
+  }
+  .markdown th,
+  .markdown td {
+    @apply border px-2 py-1;
+  }
+  .markdown th {
+    @apply bg-surface-sunken font-semibold;
+  }
 }

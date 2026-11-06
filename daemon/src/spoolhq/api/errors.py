@@ -16,9 +16,10 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException
 from starlette.responses import JSONResponse
 
+from spoolhq.services.planner import PlanInvalid
 from spoolhq.services.projects import ProjectError, ProjectValidationError
 from spoolhq.services.runloop import RunLoopError
-from spoolhq.services.scheduler import SchedulerError
+from spoolhq.services.scheduler import PlanProblem, SchedulerError
 from spoolhq.services.tickets import TicketError, TicketValidationError
 
 STATUS_CODES = {
@@ -42,6 +43,8 @@ class ErrorBody(BaseModel):
     """412 ``edit_conflict``: the file's current ETag."""
     current: Any = None
     """412 ``edit_conflict``: the file's current content, as its GET returns it."""
+    problems: list[dict[str, Any]] | None = None
+    """409 ``plan_invalid``: every problem, as ``GET …/plan`` lists them."""
 
 
 class ErrorResponse(BaseModel):
@@ -64,12 +67,19 @@ def error_response(
     return JSONResponse(body.model_dump(exclude_none=True), status_code, headers=headers)
 
 
+def problem_view(problem: PlanProblem) -> dict[str, Any]:
+    return {"code": problem.code, "message": problem.message, "ticket_ids": problem.ticket_ids}
+
+
 @contextmanager
 def service_errors() -> Iterator[None]:
     """Refusals from the services become ApiErrors: unknown things 404, the rest 409
     (or 422 for invalid content), with the service's message."""
     try:
         yield
+    except PlanInvalid as exc:
+        problems = [problem_view(problem) for problem in exc.problems]
+        raise ApiError(409, "plan_invalid", str(exc), problems=problems) from exc
     except RunLoopError as exc:
         raise ApiError(RUN_LOOP_STATUS.get(exc.code, 409), exc.code, str(exc)) from exc
     except (ProjectValidationError, TicketValidationError) as exc:

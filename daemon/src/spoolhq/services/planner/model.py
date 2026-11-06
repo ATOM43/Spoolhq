@@ -6,12 +6,14 @@ characters before it reaches a ticket file.
 """
 
 import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from spoolhq.core.ids import TICKET_ID_RE, TICKET_ID_RULE
 from spoolhq.services.agents import Outcome
+from spoolhq.services.scheduler import PlanProblem
 
 MIN_ESTIMATE_H = 1.5
 MAX_ESTIMATE_H = 4
@@ -20,6 +22,16 @@ TITLE_MAX = 80
 
 class PlannerError(Exception):
     """The plan can't be generated, written or approved; the message says why."""
+
+
+class PlanInvalid(PlannerError):
+    """The plan can't be approved; ``problems`` lists every problem, as the overview."""
+
+    def __init__(self, problems: Sequence[PlanProblem]) -> None:
+        super().__init__(
+            "cannot approve the plan: " + "; ".join(problem.message for problem in problems)
+        )
+        self.problems = tuple(problems)
 
 
 class InvalidPlan(PlannerError):

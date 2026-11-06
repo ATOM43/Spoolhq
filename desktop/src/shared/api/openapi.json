@@ -1775,6 +1775,53 @@
         }
       }
     },
+    "/api/projects/{name}/plan": {
+      "get": {
+        "summary": "Get Plan",
+        "operationId": "get_plan_api_projects__name__plan_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{name}/plan/generate": {
       "post": {
         "summary": "Generate Plan",
@@ -2726,6 +2773,21 @@
           },
           "current": {
             "title": "Current"
+          },
+          "problems": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problems"
           }
         },
         "type": "object",
@@ -3021,6 +3083,32 @@
         ],
         "title": "PlanApproved"
       },
+      "PlanProblemView": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "ticket_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ticket Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "ticket_ids"
+        ],
+        "title": "PlanProblemView"
+      },
       "PlanStarted": {
         "properties": {
           "run_id": {
@@ -3037,6 +3125,55 @@
           "run"
         ],
         "title": "PlanStarted"
+      },
+      "PlanView": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "planning",
+              "draft",
+              "approved"
+            ],
+            "title": "State"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "ticket_count": {
+            "type": "integer",
+            "title": "Ticket Count"
+          },
+          "total_h": {
+            "type": "number",
+            "title": "Total H"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/PlanProblemView"
+            },
+            "type": "array",
+            "title": "Problems"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "generated_at",
+          "ticket_count",
+          "total_h",
+          "problems"
+        ],
+        "title": "PlanView"
       },
       "PolicyView": {
         "properties": {
@@ -4015,6 +4152,60 @@
         ],
         "title": "TemplateView"
       },
+      "TicketActivityView": {
+        "properties": {
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "tokens": {
+            "type": "integer",
+            "title": "Tokens"
+          },
+          "cost_micro_usd": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micro Usd"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attempts",
+          "tokens",
+          "cost_micro_usd",
+          "run_id",
+          "reason"
+        ],
+        "title": "TicketActivityView"
+      },
       "TicketList": {
         "properties": {
           "tickets": {
@@ -4142,6 +4333,16 @@
           "body": {
             "type": "string",
             "title": "Body"
+          },
+          "activity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TicketActivityView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

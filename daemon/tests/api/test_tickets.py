@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from spoolhq.services.agents import FakeRunner
 from spoolhq.services.runloop import Agents
+from spoolhq.services.runs import AttemptKind, RunLog, RunStatus
 from spoolhq.services.tickets import load_ticket, render_ticket
 from tests.api.test_runs import follow
 from tests.conftest import AGENT_FIXTURES, FIXTURES_DIR, REVIEW_FIXTURES
@@ -46,6 +47,37 @@ def test_list_with_filters(client: TestClient, token: str, fixture_tickets: Path
     assert all(t["meta"]["status"] == status and t["meta"]["phase"] == 0 for t in filtered)
     bad = client.get("/api/projects/demo/tickets?status=nonsense", headers=auth(token))
     assert (bad.status_code, bad.json()["error"]["field"]) == (422, "status")
+
+
+def test_listed_tickets_carry_their_runs(
+    client: TestClient, token: str, fixture_tickets: Path, workspace: Path
+) -> None:
+    first, second = (path.name[:3] for path in TICKET_FIXTURES[:2])
+    with RunLog(workspace, daemon_instance="test") as log:
+        old = log.start_run(first)
+        log.record_usage(log.start_attempt(old.id, AttemptKind.INITIAL).id, 100, 20)
+        log.set_run_status(old.id, RunStatus.BLOCKED, "gates failed")
+        new = log.start_run(first)
+        attempt = log.start_attempt(new.id, AttemptKind.INITIAL)
+        log.record_usage(attempt.id, 50, 5, cost_micro_usd=840_000)
+        log.set_run_status(new.id, RunStatus.AWAITING_APPROVAL, "diff 612 lines > 400")
+        plan = log.start_plan_run()
+        log.set_run_status(plan.id, RunStatus.DONE, "3 draft tickets written")
+
+    tickets = client.get("/api/projects/demo/tickets", headers=auth(token)).json()["tickets"]
+
+    by_id = {ticket["id"]: ticket for ticket in tickets}
+    assert by_id[first]["activity"] == {
+        "attempts": 2,
+        "tokens": 120,
+        "cost_micro_usd": 840_000,
+        "run_id": new.id,
+        "reason": "diff 612 lines > 400",
+    }
+    assert by_id[second]["activity"] is None
+    assert "plan" not in by_id
+    one = client.get(f"/api/projects/demo/tickets/{first}", headers=auth(token)).json()
+    assert one["activity"] is None
 
 
 def test_ticket_ids_are_checked_in_the_path(

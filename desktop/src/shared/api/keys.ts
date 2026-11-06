@@ -6,6 +6,10 @@ export const queryKeys = {
   projects: ["projects"] as const,
   project: (name: string) => ["projects", name] as const,
   tickets: (project: string) => ["tickets", project] as const,
+  // Under the tickets' key: invalidating a project's tickets refreshes these too.
+  plan: (project: string) => ["tickets", project, "plan"] as const,
+  review: (project: string, runId: number) =>
+    ["tickets", project, "review", runId] as const,
   runs: (project: string) => ["runs", project] as const,
   agents: ["agents"] as const,
   settings: ["settings"] as const,

@@ -3,7 +3,10 @@
 from dataclasses import dataclass
 from typing import Literal
 
-ProblemCode = Literal["unknown_dependency", "cycle", "duplicate_id"]
+# The planner adds the last two when it reviews a plan (``services.planner.overview``).
+ProblemCode = Literal[
+    "unknown_dependency", "cycle", "duplicate_id", "missing_done_when", "invalid_ticket"
+]
 
 
 @dataclass(frozen=True)

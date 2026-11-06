@@ -12,6 +12,7 @@ from spoolhq.api.params import (
     ProjectName,
     TicketId,
     require_if_match,
+    run_log,
     settings,
     workspace,
 )
@@ -26,6 +27,7 @@ from spoolhq.api.schemas.tickets import (
 from spoolhq.api.security import bearer_scheme
 from spoolhq.services.projects import EditConflict, read_with_etag, write_if_match
 from spoolhq.services.runloop import RunLoop
+from spoolhq.services.runs import ticket_activity
 from spoolhq.services.scheduler import edit_ticket
 from spoolhq.services.tickets import (
     TicketStatus,
@@ -49,8 +51,9 @@ def get_tickets(
         listing = list_tickets(
             name, projects_dir=settings(request).projects_dir, status=status, phase=phase
         )
+    activity = ticket_activity(run_log(request, name))
     return TicketList(
-        tickets=[TicketView.of(ticket) for ticket in listing.tickets],
+        tickets=[TicketView.of(ticket, activity.get(ticket.id)) for ticket in listing.tickets],
         invalid=[InvalidTicketView.of(invalid) for invalid in listing.invalid],
     )
 

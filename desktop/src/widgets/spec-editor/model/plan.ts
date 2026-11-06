@@ -1,28 +1,7 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-
 import type { ProjectDetail } from "@/entities/project";
 import type { CurrentRun } from "@/entities/run";
-import { api, body, queryKeys } from "@/shared/api";
 
 import type { SaveState } from "./autosave";
-
-/** `POST …/plan/generate`; the run events then report the planner's progress. */
-export function useGeneratePlan(project: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () =>
-      body(
-        api.POST("/api/projects/{name}/plan/generate", {
-          params: { path: { name: project } },
-        }),
-      ),
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.runs(project) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.projects }),
-      ]),
-  });
-}
 
 export interface PlanState {
   planning: boolean;

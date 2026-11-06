@@ -130,7 +130,7 @@ A missing or unreadable `plan.json` records nothing, so every draft is kept. If 
 
 ## Approval
 
-`spool plan approve <project>` checks the whole plan again (invalid ticket files and the scheduler's plan validation) and refuses with every problem named, for example `cannot approve the plan: cycle: T01 → T02 → T03 → T01`. Otherwise it moves every draft to `ready` through the [transition table](scheduler.md#status-transitions), in one step: only the `status` line of each file changes, and the files are swapped in the same all-or-nothing way. With no drafts it says `nothing to approve` (exit 1).
+`spool plan approve <project>` checks the whole plan again (invalid ticket files, the scheduler's plan validation, and a "Done when" checklist on every ticket that isn't done) and refuses with every problem named, for example `cannot approve the plan: cycle: T01 → T02 → T03 → T01`. Otherwise it moves every draft to `ready` through the [transition table](scheduler.md#status-transitions), in one step: only the `status` line of each file changes, and the files are swapped in the same all-or-nothing way. With no drafts it says `nothing to approve` (exit 1).
 
 ## Commands
 
@@ -149,7 +149,8 @@ Both need the token; errors use the [API's error format](api.md#errors).
 | Route | What it does |
 | --- | --- |
 | `POST /api/projects/{name}/plan/generate` | Body `{"template_description": null}` (optional). Checks the project, `CONTEXT.md` and the ticket files at once (404 for an unknown project, 409 for the rest), then starts the planner on the daemon's worker and returns **202** with `{"run_id", "run"}`. One plan per project at a time (409). |
-| `POST /api/projects/{name}/plan/approve` | 200 `{"approved": ["T01", …]}`, or 409 with the same message as the CLI. |
+| `POST /api/projects/{name}/plan/approve` | 200 `{"approved": ["T01", …]}`, or 409 with the same message as the CLI: `plan_invalid` with the [problems](api.md#plan-summary) when the plan has any, else `conflict`. |
+| `GET /api/projects/{name}/plan` | The [plan summary](api.md#plan-summary): state, size and problems. |
 
 The planner's work is recorded in the [run log](runs.md) as a run of kind `plan` (ticket id `plan`) with one attempt of kind `plan` in `runs/plan/<NNN>/` (its transcript) and the attempt's usage (input, output and cache-read tokens, so `spool runs show` gives the weighted total the budget counts). The run ends `done` (`18 draft tickets written`), `blocked` with the error, or `cancelled` when the daemon stops.
 

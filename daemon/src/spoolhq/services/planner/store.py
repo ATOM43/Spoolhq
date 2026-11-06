@@ -14,13 +14,26 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from spoolhq.core.ids import id_key, slugify
-from spoolhq.services.planner.model import PlannedTicket, PlannerError
+from spoolhq.core.ids import TICKET_ID_RE, id_key, slugify
+from spoolhq.services.planner.model import PlanInvalid, PlannedTicket, PlannerError
 from spoolhq.services.projects import project_dir
 from spoolhq.services.projects.yaml_io import dump, to_node
-from spoolhq.services.scheduler import SchedulerError, check_transition, validate_plan
-from spoolhq.services.tickets import Ticket, TicketError, list_tickets, render_ticket, tickets_dir
+from spoolhq.services.scheduler import (
+    PlanProblem,
+    SchedulerError,
+    check_transition,
+    validate_plan,
+)
+from spoolhq.services.tickets import (
+    InvalidTicket,
+    Ticket,
+    TicketError,
+    list_tickets,
+    render_ticket,
+    tickets_dir,
+)
 from spoolhq.services.tickets.errors import source_name
+from spoolhq.services.tickets.store import FILE_NAME_RE
 
 PLAN_FILE = ".spoolhq/plan.json"
 
@@ -180,29 +193,53 @@ def write_plan(
 # --- approval -----------------------------------------------------------------------------
 
 
+def _invalid_problem(invalid: InvalidTicket) -> PlanProblem:
+    match = FILE_NAME_RE.fullmatch(invalid.file_name)
+    prefix = match["prefix"] if match else ""
+    ids = (prefix,) if TICKET_ID_RE.fullmatch(prefix) else ()
+    return PlanProblem("invalid_ticket", ids, "; ".join(invalid.errors))
+
+
+def plan_problems(
+    tickets: Sequence[Ticket], invalid: Sequence[InvalidTicket] = ()
+) -> list[PlanProblem]:
+    """Invalid files, the scheduler's graph problems, then open tickets with no "Done
+    when" items (the reviewer has nothing to check them against)."""
+    problems = [_invalid_problem(ticket) for ticket in invalid]
+    problems += validate_plan(tickets)
+    problems += [
+        PlanProblem("missing_done_when", (ticket.id,), f"{ticket.id} has no 'Done when'")
+        for ticket in tickets
+        if ticket.meta.status != "done" and not ticket.done_when
+    ]
+    return problems
+
+
 def approve_plan(project: str, *, projects_dir: Path) -> tuple[str, ...]:
     """Move every draft to ``ready`` in one step, after checking the whole plan.
 
-    Raises PlannerError naming every problem (invalid files, plan problems, refused
-    transitions), or ``nothing to approve`` when there are no drafts; then nothing
-    changes. Returns the approved ids.
+    Raises PlanInvalid listing every ``plan_problems`` problem, else PlannerError for
+    refused transitions or ``nothing to approve`` when there are no drafts; then
+    nothing changes. Returns the approved ids.
     """
     try:
         listing = list_tickets(project, projects_dir=projects_dir)
     except TicketError as exc:
         raise PlannerError(str(exc)) from exc
-    problems = [error for ticket in listing.invalid for error in ticket.errors]
-    problems += [problem.message for problem in validate_plan(listing.tickets)]
+    problems = plan_problems(listing.tickets, listing.invalid)
+    if problems:
+        raise PlanInvalid(problems)
     drafts = [ticket for ticket in listing.tickets if ticket.meta.status == "draft"]
-    if not problems and not drafts:
+    if not drafts:
         raise PlannerError("nothing to approve")
+    refused = []
     for ticket in drafts:
         try:
             check_transition(ticket, "ready", listing.tickets)
         except SchedulerError as exc:
-            problems.append(str(exc))
-    if problems:
-        raise PlannerError("cannot approve the plan: " + "; ".join(problems))
+            refused.append(str(exc))
+    if refused:
+        raise PlannerError("cannot approve the plan: " + "; ".join(refused))
     folder = tickets_dir(project, projects_dir=projects_dir)
     writes: dict[Path, str] = {}
     for ticket in drafts:

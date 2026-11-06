@@ -51,13 +51,17 @@ def test_every_test_folder_has_init() -> None:
 # DECISIONS.md and docs/decisions/ (scripts/check_decisions.py, run by `just lint`).
 
 
-def _check_decisions() -> Any:
-    path = TESTS_DIR.parents[1] / "scripts" / "check_decisions.py"
-    spec = importlib.util.spec_from_file_location("check_decisions", path)
+def _script(name: str) -> Any:
+    path = TESTS_DIR.parents[1] / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _check_decisions() -> Any:
+    return _script("check_decisions")
 
 
 def _decisions(root: Path, index: list[str], entries: list[str]) -> Path:
@@ -104,3 +108,19 @@ def test_a_mismatched_title_fails(tmp_path: Path) -> None:
     index = [GOOD_INDEX[0], "002 · Two · docs/decisions/core.md"]
     found = _check_decisions().problems(_decisions(tmp_path, index, GOOD_ENTRIES))
     assert found == ["DECISIONS.md: 2 title 'Two' != heading 'Two.'"]
+
+
+# The 500-line limit (scripts/check_line_limit.py, run by `just lint`).
+
+
+def test_the_repo_is_within_the_line_limit() -> None:
+    assert _script("check_line_limit").oversized(TESTS_DIR.parents[1]) == []
+
+
+def test_a_rust_file_over_the_limit_fails(tmp_path: Path) -> None:
+    folder = tmp_path / "desktop" / "src-tauri" / "src"
+    folder.mkdir(parents=True)
+    (folder / "short.rs").write_text("fn a() {}\n" * 500, encoding="utf-8")
+    (folder / "long.rs").write_text("fn a() {}\n" * 501, encoding="utf-8")
+    found = _script("check_line_limit").oversized(tmp_path)
+    assert found == [("desktop/src-tauri/src/long.rs", 501)]

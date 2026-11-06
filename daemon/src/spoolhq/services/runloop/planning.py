@@ -14,11 +14,14 @@ from typing import Any
 
 from spoolhq.services.agents import AgentRunner, Outcome
 from spoolhq.services.planner import (
+    PlanInvalid,
     PlannerError,
+    PlanOverview,
     PlanResult,
     approve_plan,
     generate_plan,
     load_existing,
+    plan_overview,
     read_spec,
 )
 from spoolhq.services.projects import NO_TEST_COMMAND, Project, load_project, project_dir
@@ -166,12 +169,23 @@ class PlanJobs:
         run_log.set_run_status(attempt.run_id, statuses[1], reason)
 
     def approve(self, project: str) -> tuple[str, ...]:
-        """Move every draft of ``project`` to ``ready``; RunLoopError lists the problems."""
+        """Move every draft of ``project`` to ``ready``; PlanInvalid lists the plan's
+        problems, RunLoopError any other refusal."""
         self._workspace(project)
         try:
             return approve_plan(project, projects_dir=self.projects_dir)
+        except PlanInvalid:
+            raise
         except PlannerError as exc:
             raise RunLoopError(str(exc)) from exc
+
+    def overview(self, project: str) -> PlanOverview:
+        """The project's plan, ``planning`` while its planner runs here."""
+        self._workspace(project)
+        with self._mutex:
+            job = self._jobs.get(project)
+            planning = job is not None and job.thread.is_alive()
+        return plan_overview(project, projects_dir=self.projects_dir, planning=planning)
 
     def wait(self, project: str, timeout: float | None = None) -> None:
         """Wait for the project's plan thread to finish (tests, shutdown)."""

@@ -16,13 +16,14 @@ import {
   type ProjectDetail,
   type SpecFile,
 } from "@/entities/project";
+import { useGeneratePlan } from "@/entities/plan";
 import type { CurrentRun } from "@/entities/run";
 import { useAgentBlocker } from "@/features/settings";
 import { Button, ConfirmDialog, Markdown } from "@/shared/ui";
 
 import { useSpecAutosave, type SaveState } from "../model/autosave";
 import { wordCount } from "../model/words";
-import { planBlocker, planState, useGeneratePlan } from "../model/plan";
+import { planBlocker, planState } from "../model/plan";
 import { PlanButton, PlanFailure } from "./PlanBar";
 
 export const STARTER_OUTLINE = `# Objective

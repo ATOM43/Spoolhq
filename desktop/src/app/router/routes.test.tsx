@@ -89,6 +89,14 @@ const BODIES: Record<string, string> = {
     latest_seq: 0,
   }),
   "/api/projects/demo/spec": '{"content":""}',
+  "/api/projects/demo/tickets": '{"tickets":[],"invalid":[]}',
+  "/api/projects/demo/plan": JSON.stringify({
+    state: "none",
+    generated_at: null,
+    ticket_count: 0,
+    total_h: 0,
+    problems: [],
+  }),
 };
 
 function daemonRunning() {
@@ -164,7 +172,11 @@ describe("app shell", () => {
       await screen.findByRole("tab", { name: "Spec", selected: true }),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Tickets 0" }));
-    expect(screen.getByText("Coming in T21")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Write a spec first; the planner turns it into tickets.",
+      ),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Run" }));
     expect(screen.getByText("Coming in T22")).toBeInTheDocument();
   });

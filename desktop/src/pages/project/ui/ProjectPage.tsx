@@ -1,4 +1,4 @@
-import { FolderX, ListTodo, LoaderCircle, Play, RotateCw } from "lucide-react";
+import { FolderX, LoaderCircle, Play, RotateCw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
@@ -25,6 +25,8 @@ import {
   DaemonErrorPanel,
 } from "@/widgets/daemon-down-panel";
 import { SpecEditor } from "@/widgets/spec-editor";
+import { TicketDrawer } from "@/widgets/ticket-drawer";
+import { TicketList } from "@/widgets/ticket-list";
 
 import { formatUsage, guidance, panelState, type Tab } from "../model/state";
 import { CreatingPanel } from "./CreatingPanel";
@@ -160,8 +162,27 @@ function Loaded({
   const spec = useSpec(project.name);
   // The project's REST answer came first, so its latest_seq is where the stream starts.
   useProjectEvents([project]);
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const asked = TABS.find((tab) => tab === params.get("tab")) ?? null;
+  const ticket = params.get("ticket");
+  // The drawer lives in the URL (?ticket=T04), so a reload restores it.
+  const openTicket = useCallback(
+    (id: string | null) => {
+      setParams((previous) => {
+        const next = new URLSearchParams(previous);
+        if (id === null) {
+          next.delete("ticket");
+        } else {
+          next.set("ticket", id);
+        }
+        return next;
+      });
+    },
+    [setParams],
+  );
+  const closeTicket = useCallback(() => {
+    openTicket(null);
+  }, [openTicket]);
   const [chosen, setChosen] = useState<Tab | null>(asked ?? initialTab);
 
   const ready = !current.isPending && !spec.isPending;
@@ -222,34 +243,46 @@ function Loaded({
             ) : null}
           </TabsTrigger>
         </TabsList>
-        {/* Kept mounted, so switching tabs never drops an edit that isn't saved yet. */}
-        <TabsContent
-          value="spec"
-          forceMount
-          className="flex min-h-0 flex-col data-[state=inactive]:hidden"
-        >
-          <SpecEditor
-            project={project}
-            run={current.data}
-            onViewPlan={() => {
-              setChosen("tickets");
-            }}
-          />
-        </TabsContent>
-        <TabsContent value="tickets" className="overflow-auto p-6">
-          <EmptyState
-            icon={<ListTodo aria-hidden />}
-            title="Coming in T21"
-            description="The ticket list, plan review and the ticket drawer arrive in T21. Until then, `spool plan show` and `spool plan approve` cover them."
-          />
-        </TabsContent>
-        <TabsContent value="run" className="overflow-auto p-6">
-          <EmptyState
-            icon={<Play aria-hidden />}
-            title="Coming in T22"
-            description="The live run view arrives in T22. The header above shows the run's state and controls it."
-          />
-        </TabsContent>
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {/* Kept mounted, so switching tabs never drops an edit that isn't saved yet. */}
+          <TabsContent
+            value="spec"
+            forceMount
+            className="flex min-h-0 flex-col data-[state=inactive]:hidden"
+          >
+            <SpecEditor
+              project={project}
+              run={current.data}
+              onViewPlan={() => {
+                setChosen("tickets");
+              }}
+            />
+          </TabsContent>
+          <TabsContent value="tickets" className="overflow-auto p-6">
+            <TicketList
+              project={project}
+              onOpen={openTicket}
+              onOpenSpec={() => {
+                setChosen("spec");
+              }}
+            />
+          </TabsContent>
+          <TabsContent value="run" className="overflow-auto p-6">
+            <EmptyState
+              icon={<Play aria-hidden />}
+              title="Coming in T22"
+              description="The live run view arrives in T22. The header above shows the run's state and controls it."
+            />
+          </TabsContent>
+          {ticket ? (
+            <TicketDrawer
+              project={project.name}
+              ticketId={ticket}
+              onOpen={openTicket}
+              onClose={closeTicket}
+            />
+          ) : null}
+        </div>
       </Tabs>
     </>
   );

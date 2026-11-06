@@ -38,4 +38,43 @@ describe("Markdown", () => {
     );
     expect(container.querySelector("img")?.getAttribute("src") ?? "").toBe("");
   });
+
+  it("renders task lists as disabled checkboxes, and tables", () => {
+    const source = [
+      "- [x] done",
+      "- [ ] open",
+      "",
+      "| Item | State |",
+      "| --- | --- |",
+      "| T04 | met |",
+    ].join("\n");
+    render(<Markdown source={source} />);
+
+    const boxes = screen.getAllByRole("checkbox");
+    expect(boxes).toHaveLength(2);
+    expect(boxes[0]).toBeChecked();
+    expect(boxes[1]).not.toBeChecked();
+    for (const box of boxes) {
+      expect(box).toBeDisabled();
+    }
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "State" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "met" })).toBeInTheDocument();
+  });
+
+  it("keeps HTML and javascript: links inert inside GFM tables", () => {
+    const source = [
+      "| a | b |",
+      "| --- | --- |",
+      "| <script>window.pwned = true</script> | [x](javascript:alert(1)) |",
+    ].join("\n");
+    const { container } = render(<Markdown source={source} />);
+    expect(container.querySelector("script")).toBeNull();
+    expect(screen.getByText("x").getAttribute("href") ?? "").not.toMatch(
+      /javascript/i,
+    );
+    expect((window as { pwned?: boolean }).pwned).toBeUndefined();
+  });
 });

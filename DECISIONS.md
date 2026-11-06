@@ -355,3 +355,10 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 349 · Where the spec won over the D1 PNG · docs/decisions/desktop.md
 350 · A rollback that left paths behind is a list entry, `cleanup_failed` · docs/decisions/api.md
 351 · The panel while a project is created, and error toasts · docs/decisions/desktop.md
+352 · The plan summary is `GET …/plan`, and approve answers 409 `plan_invalid` · docs/decisions/api.md
+353 · Listed tickets carry their run activity · docs/decisions/api.md
+354 · The Tickets tab · docs/decisions/desktop.md
+355 · The read-only ticket drawer · docs/decisions/desktop.md
+356 · Where the spec won over the V2 and D4 PNGs · docs/decisions/desktop.md
+357 · GitHub-style markdown · docs/decisions/desktop.md
+358 · Rust files are under the 500-line limit, and Clippy denies long functions · docs/decisions/core.md

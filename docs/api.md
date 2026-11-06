@@ -21,11 +21,12 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/projects/{name}` | the summary plus `repo`, `default_branch`, `remote` (all three null while `settings_error` is set), `invalid_tickets`, and what can run: `next_ticket` (what `run/next` would start, else null) and `idle` (`{code, ticket_ids, message}` when nothing can: `all_done`, `running`, `awaiting_approval`, `blocked`, `waiting`, `plan_not_approved` or `invalid_plan`; null with no tickets) |
 | `GET`, `PUT /api/projects/{name}/settings` | `project.yaml` as `{"settings": {...}}`, validated by the project model; [ETag](#etags-and-edit-conflicts) |
 | `GET`, `PUT /api/projects/{name}/spec` | `CONTEXT.md` as `{"content": "..."}`; ETag |
-| `GET /api/projects/{name}/tickets?status=&phase=` | `{"tickets": [...], "invalid": [...]}`; each ticket is `id`, `file_name`, `meta` (the frontmatter), `body` |
-| `GET`, `PUT /api/projects/{name}/tickets/{id}` | one ticket; PUT takes `{"meta", "body"}`; ETag |
+| `GET /api/projects/{name}/tickets?status=&phase=` | `{"tickets": [...], "invalid": [...]}`; each ticket is `id`, `file_name`, `meta` (the frontmatter), `body` and `activity` (null before its first run: `attempts`, `tokens` of attempts without a cost, `cost_micro_usd` summed over those with one, the latest run's `run_id` and `reason`) |
+| `GET`, `PUT /api/projects/{name}/tickets/{id}` | one ticket (`activity` null); PUT takes `{"meta", "body"}`; ETag |
 | `POST /api/projects/{name}/tickets/{id}/unblock` | `{"note"}`: continue a blocked ticket's run with the note (409 `not_blocked`) |
 | `POST /api/projects/{name}/tickets/{id}/approve` (`/integrate`), `/reject`, `/discard` | see [run-loop.md](run-loop.md#api-and-cli) |
-| `POST /api/projects/{name}/plan/generate`, `/plan/approve` | see [planner.md](planner.md#api) |
+| `GET /api/projects/{name}/plan` | the [plan summary](#plan-summary): `state`, `generated_at`, `ticket_count`, `total_h`, `problems` |
+| `POST /api/projects/{name}/plan/generate`, `/plan/approve` | see [planner.md](planner.md#api); approve answers 409 `plan_invalid` with the problems while [any exist](#plan-summary) |
 | `POST /api/projects/{name}/run/next`, `/run/all`, `/run/ticket/{id}` | start a run (201) |
 | `POST /api/projects/{name}/run/pause`, `/run/resume`, `/run/cancel` | the current run (or `?run_id=`) |
 | `GET /api/projects/{name}/runs/current` | the active (else latest) run with its phase lines, tokens and `cost_micro_usd` (null unless an API-key backend reported a cost), and `latest_seq` |
@@ -92,6 +93,25 @@ Each preset is written as `project.yaml` [`merge_policy`](merge-policy.md) keys:
 
 Stack commands are optional in `project.yaml`. Without a `test` command a project can't plan or run tickets: `run/next` and `plan/generate` answer 409 "Set the stack commands in project.yaml first", and the project detail's `idle` has code `no_commands` with that message.
 
+## Plan summary
+
+`GET /api/projects/{name}/plan` is what the Tickets tab's draft banner shows:
+
+| Field | |
+| --- | --- |
+| `state` | `planning` while the planner runs in this daemon, else `draft` (any draft ticket), `approved` (tickets, none draft) or `none` (no tickets) |
+| `generated_at` | when the planner last wrote the plan (`.spoolhq/plan.json`), or null |
+| `ticket_count`, `total_h` | the drafts and their summed estimate while the plan is a draft (what approving moves), every ticket otherwise |
+| `problems` | each `{code, message, ticket_ids}`, in this order: `invalid_ticket` (a file that doesn't load; `ticket_ids` from its file name), `unknown_dependency` (the ticket and the missing id), `cycle` (its members in work order, from the lowest id: `T07`, `T08`, `T09` for T07 → T08 → T09 → T07), `duplicate_id`, `missing_done_when` (a ticket that isn't done and has no "Done when" items) |
+
+`POST …/plan/approve` checks the same problems first. With any, it answers 409 and changes no file:
+
+```json
+{"error": {"code": "plan_invalid", "message": "cannot approve the plan: cycle: T01 → T02 → T01", "problems": [{"code": "cycle", "message": "cycle: T01 → T02 → T01", "ticket_ids": ["T01", "T02"]}]}}
+```
+
+Without problems every draft becomes `ready` (200 `{"approved": [...]}`); with no drafts it is 409 `conflict` "nothing to approve".
+
 ## Testing a secret
 
 Settings' **Test** button. `{name}` is `anthropic`, `github` or `clickup` (422 otherwise). The daemon reads the secret the way it uses it (environment first, then the keychain) and makes exactly one read-only HTTPS `GET`:
@@ -116,7 +136,7 @@ Every non-2xx answer has one shape:
 {"error": {"code": "edit_conflict", "message": "the file changed since you loaded it; reload and edit again", "field": null}}
 ```
 
-`code` is snake_case and stable; `message` is for people; `field` names the offending input when there is one (`limit`, `cursor`, `meta.title`). Messages never repeat request values. Codes in use: `bad_request`, `bad_host`, `unauthorized`, `not_found`, `method_not_allowed`, `validation_error` (422), `conflict` (409, a refusal with the reason), `run_locked`, `not_blocked`, `invalid_transition`, `template_error`, `keychain_unavailable`, `precondition_required` (428), `edit_conflict` (412), `payload_too_large` (413), `limit_too_large` and `invalid_cursor` (400).
+`code` is snake_case and stable; `message` is for people; `field` names the offending input when there is one (`limit`, `cursor`, `meta.title`). Messages never repeat request values. Codes in use: `bad_request`, `bad_host`, `unauthorized`, `not_found`, `method_not_allowed`, `validation_error` (422), `conflict` (409, a refusal with the reason), `run_locked`, `not_blocked`, `invalid_transition`, `plan_invalid` (409, with `problems`), `template_error`, `keychain_unavailable`, `precondition_required` (428), `edit_conflict` (412), `payload_too_large` (413), `limit_too_large` and `invalid_cursor` (400).
 
 ## ETags and edit conflicts
 

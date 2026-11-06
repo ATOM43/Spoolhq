@@ -338,3 +338,11 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - `scripts/check_decisions.py` (in `just lint`): every index number has exactly one entry and the reverse, no gaps or duplicates, titles match the entry headings, each line names the right file. Tests in `daemon/tests/test_layout.py`.
 - `task.md`'s example `merge_policy` already used the model's keys (`max_diff_lines`, `protected_paths`; fixed in 7b4f640), so it is unchanged.
 - DECISIONS 330.
+
+## Chore · Context pack reads split decisions
+
+- `services/context/decisions.py`: `read_repo_docs(repo, count)` reads `CLAUDE.md`, `PROGRESS.md` and `DECISIONS.md`; a decisions index is expanded to the newest `count` full entries from their area files, in number order. The run loop and `spool prompt show` use it.
+- Area paths from the index are read only inside the repo (no absolute, `..`, drive or symlink-out paths); a missing file or entry keeps its index line with one warning.
+- A full `DECISIONS.md` renders byte-identical to before (checked against the existing snapshot).
+- `task.md`: the example `project.yaml` has the `template` block and a valid `git.remote`; a test validates it against the model.
+- DECISIONS 331.

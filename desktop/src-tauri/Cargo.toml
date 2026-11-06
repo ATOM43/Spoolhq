@@ -35,3 +35,7 @@ toml = "=1.1.8"
 [dev-dependencies]
 tempfile = "=3.27.0"
 tokio = { version = "=1.53.3", features = ["net", "rt"] }
+
+[lints.clippy]
+# Pedantic, enabled alone at its default threshold (100 lines); `just lint` denies warnings.
+too_many_lines = "warn"

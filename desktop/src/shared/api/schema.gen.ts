@@ -502,6 +502,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Plan */
+        get: operations["get_plan_api_projects__name__plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/plan/generate": {
         parameters: {
             query?: never;
@@ -834,6 +851,10 @@ export interface components {
             etag?: string | null;
             /** Current */
             current?: unknown;
+            /** Problems */
+            problems?: {
+                [key: string]: unknown;
+            }[] | null;
         };
         /** ErrorResponse */
         ErrorResponse: {
@@ -943,11 +964,36 @@ export interface components {
             /** Approved */
             approved: string[];
         };
+        /** PlanProblemView */
+        PlanProblemView: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Ticket Ids */
+            ticket_ids: string[];
+        };
         /** PlanStarted */
         PlanStarted: {
             /** Run Id */
             run_id: number;
             run: components["schemas"]["RunView"];
+        };
+        /** PlanView */
+        PlanView: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "none" | "planning" | "draft" | "approved";
+            /** Generated At */
+            generated_at: string | null;
+            /** Ticket Count */
+            ticket_count: number;
+            /** Total H */
+            total_h: number;
+            /** Problems */
+            problems: components["schemas"]["PlanProblemView"][];
         };
         /**
          * PolicyView
@@ -1249,6 +1295,19 @@ export interface components {
             summary?: string | null;
             commands: components["schemas"]["TemplateCommandsView"];
         };
+        /** TicketActivityView */
+        TicketActivityView: {
+            /** Attempts */
+            attempts: number;
+            /** Tokens */
+            tokens: number;
+            /** Cost Micro Usd */
+            cost_micro_usd: number | null;
+            /** Run Id */
+            run_id: number | null;
+            /** Reason */
+            reason: string | null;
+        };
         /** TicketList */
         TicketList: {
             /** Tickets */
@@ -1299,6 +1358,7 @@ export interface components {
             meta: components["schemas"]["TicketMeta"];
             /** Body */
             body: string;
+            activity?: components["schemas"]["TicketActivityView"] | null;
         };
         /**
          * UsageTotal
@@ -2514,6 +2574,38 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": unknown;
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_plan_api_projects__name__plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanView"];
                 };
             };
             /** @description An error. */
