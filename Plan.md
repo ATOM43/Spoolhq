@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **36 tickets in 6 phases, about 86.5 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **37 tickets in 6 phases, about 88 hours** for one developer.
 
 **What v1 includes**
 
@@ -98,7 +98,8 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T35 | Project creation job | 4 Desktop UI | T34, T16 | 2 |
 | T36 | New project dialog | 4 Desktop UI | T35 | 2 |
 | T37 | Ticket drawer and actions | 4 Desktop UI | T21 | 2.5 |
-|  | **Total** |  |  | **86.5** |
+| T38 | Add ticket | 4 Desktop UI | T37 | 1.5 |
+|  | **Total** |  |  | **88** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T23 → T26 (38 h).
 
@@ -421,7 +422,7 @@ Done when:
 
 ## Phase 4 — Desktop UI (v0 screens)
 
-Eleven tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Twelve tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -557,6 +558,19 @@ Done when:
 
 - [ ] Edits round-trip to the ticket files and survive a reload
 - [ ] Each status shows its one primary action, and every disabled action says why
+
+### T38 · Add ticket
+
+Add a ticket by hand from the Tickets tab. *Depends on: T37 · 1.5 h*
+
+- **Add ticket** opens an empty drawer in edit mode; the daemon assigns the next free number.
+- The same validation as a plan.
+- Saved as Draft before approval, or Ready when appended to an approved plan.
+
+Done when:
+
+- [ ] A ticket added in the app appears as a file with the next free number
+- [ ] A new ticket with an unknown dependency or a cycle can't be saved, and the error names the field
 
 ### T22 · Run tab
 
