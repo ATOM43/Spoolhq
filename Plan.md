@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **37 tickets in 6 phases, about 88 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **39 tickets in 6 phases, about 91 hours** for one developer.
 
 **What v1 includes**
 
@@ -83,10 +83,10 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T19 | Live API | 4 Desktop UI | T07, T13 | 2.5 |
 | T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
 | T21 | Tickets tab and plan review | 4 Desktop UI | T15, T36 | 2.5 |
-| T22 | Run tab | 4 Desktop UI | T32 | 3 |
-| T23 | Packaging | 4 Desktop UI | T21, T22, T36, T37 | 3 |
+| T22 | Live run | 4 Desktop UI | T37 | 2 |
+| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37 | 3 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
-| T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T22 | 3 |
+| T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T40 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
 | T27 | Agent roles, custom endpoints and contract suite | 3 Planner and Git | T09, T14 | 2 |
 | T30 | Codex CLI backend | 3 Planner and Git | T27 | 2 |
@@ -99,9 +99,11 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T36 | New project dialog | 4 Desktop UI | T35 | 2 |
 | T37 | Ticket drawer and actions | 4 Desktop UI | T21 | 2.5 |
 | T38 | Add ticket | 4 Desktop UI | T37 | 1.5 |
-|  | **Total** |  |  | **88** |
+| T39 | Run details | 4 Desktop UI | T22 | 2 |
+| T40 | Past runs and replay | 4 Desktop UI | T39 | 2 |
+|  | **Total** |  |  | **91** |
 
-Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T23 → T26 (38 h).
+Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T26 (44 h).
 
 ## Phase 0 — Scaffolding
 
@@ -422,7 +424,7 @@ Done when:
 
 ## Phase 4 — Desktop UI (v0 screens)
 
-Twelve tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Fourteen tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -572,23 +574,54 @@ Done when:
 - [ ] A ticket added in the app appears as a file with the next free number
 - [ ] A new ticket with an unknown dependency or a cycle can't be saved, and the error names the field
 
-### T22 · Run tab
+### T22 · Live run
 
-Watch the agent and inspect past attempts. *Depends on: T32 · 3 h*
+Watch the current run as it happens. *Depends on: T37 · 2 h*
 
-- Live transcript with collapsible tool calls; sub-tabs Gates, Review and Diff.
-- Step indicator (Worktree → Implement → Gates → Review → Policy → Integrate), attempt number, elapsed time, cost.
-- A result panel at the end of each run with the next action: view the next ticket, unblock, or review.
-- With nothing running: **Run next** and a list of past runs that open in replay.
+- Daemon: the agent's messages, tool calls and results, file edits, usage, denials and stream warnings stored as run events; `step` events (`worktree`, `implement`, `gates`, `review`, `policy`, `integrate`, each `running`, `passed`, `failed` or `skipped`, with the attempt number; a retry starts again at `implement`); `GET /api/projects/{project}/runs/{run_id}/events?attempt=N&after=<seq>&limit=` (default 500, max 2,000, oldest first, `next_after`).
+- Opening the Run tab mid-run loads the current attempt's events from its start, then subscribes from the last `seq` loaded; events are kept per attempt, deduplicated and in `seq` order; a new attempt switches the view.
+- Header: ticket chip and title (opens the drawer), "Attempt 2 of 4", backend, elapsed time, usage; the step indicator Worktree → Implement → Gates → Review → Policy → Integrate with icon + label.
+- Transcript (60%): agent messages as safe Markdown; tool calls as collapsed rows (tool, file or command, duration) that expand to at most 200 lines of plain text; denied commands as a red row; file edits with line counts; stream warnings and usage-limit pauses as muted rows; nothing clickable or rendered as HTML; auto-scroll with "Jump to latest"; the last 500 rows with **Show earlier**.
+- Right panel (40%): the Gates, Review and Diff labels with "Details come in T39".
+- Result panel at the end of a run: merged (with the next ticket), blocked (**Unblock**), needs approval (**Review**), paused by a usage limit, cancelled or interrupted (**Run next**).
+- No active run: no runs yet, the last run's summary with **Run next**, a finished `?attempt=N` with **Show current run**, loading and error states.
 
 Done when:
 
 - [ ] A full fake run plays live with no reload
-- [ ] Unblocking with a note starts an attempt whose prompt contains the note
+- [ ] Opening the Run tab mid-run shows the attempt from its start, with no gaps or duplicates
+- [ ] The result panel names the outcome and its next action
+
+### T39 · Run details
+
+See why an attempt passed or failed. *Depends on: T22 · 2 h*
+
+- The right-hand sub-tabs: **Gates** (each command with pass/fail and duration, trimmed output with the first failure highlighted), **Review** (each "Done when" item met or not met with the reviewer's reason, and the verdict) and **Diff** (file list with change counts, unified diff).
+- File-edit rows in the transcript expand to a mini diff.
+- The drawer's gate and reviewer lines.
+
+Done when:
+
+- [ ] A failed gate shows its command, duration and first failure line
+- [ ] The review panel shows every "Done when" item with its verdict and reason
+- [ ] The diff panel shows each changed file with a unified diff
+
+### T40 · Past runs and replay
+
+Look back at any earlier attempt. *Depends on: T39 · 2 h*
+
+- The **Past runs** table (ticket, attempt, outcome, duration, usage, finished), paged.
+- A row opens the run layout in replay mode with the banner "Viewing attempt 2 · finished 14:02 · Blocked" and no controls.
+- `?attempt=N` for a finished attempt opens its replay; past events load only when opened.
+
+Done when:
+
+- [ ] A past run opens in replay with the same layout and no controls
+- [ ] A drawer attempt link opens that attempt's replay
 
 ### T23 · Packaging
 
-One installer that brings its own daemon. *Depends on: T21, T22, T36, T37 · 3 h*
+One installer that brings its own daemon. *Depends on: T21, T40, T36, T37 · 3 h*
 
 - The daemon is bundled with PyInstaller and shipped as a Tauri sidecar; the app starts it when it is not running.
 - Closing the window leaves the daemon and any run going, with a tray icon to quit.
@@ -619,7 +652,7 @@ Done when:
 
 ### T25 · Dogfood on the dashboard task
 
-The first real test, against a plan you already wrote by hand. *Depends on: T16, T18, T21, T22 · 3 h*
+The first real test, against a plan you already wrote by hand. *Depends on: T16, T18, T21, T40 · 3 h*
 
 - Run the simulation-dashboard spec end to end with the fastapi-react template.
 - Compare the planner's tickets with the hand-written 18-ticket plan.
