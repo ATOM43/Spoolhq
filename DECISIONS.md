@@ -370,3 +370,8 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 364 · Links are copied, not opened · docs/decisions/desktop.md
 365 · The drawer's actions and edit mode · docs/decisions/desktop.md
 366 · Where the spec won over the V2 and D3 PNGs · docs/decisions/desktop.md
+367 · Tool results and edit line counts are agent events · docs/decisions/agents.md
+368 · The implementer's transcript and the steps are run events · docs/decisions/runloop.md
+369 · A run's events by attempt window, paged by seq · docs/decisions/api.md
+370 · The Run tab's live events · docs/decisions/desktop.md
+371 · Where the spec won over the V2 · Run tab, live PNG · docs/decisions/desktop.md

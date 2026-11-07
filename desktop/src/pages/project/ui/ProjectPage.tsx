@@ -1,4 +1,4 @@
-import { FolderX, LoaderCircle, Play, RotateCw } from "lucide-react";
+import { FolderX, LoaderCircle, RotateCw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
@@ -32,6 +32,7 @@ import { formatUsage, guidance, panelState, type Tab } from "../model/state";
 import { CreatingPanel } from "./CreatingPanel";
 import { ProjectHeader } from "./ProjectHeader";
 import { RunControls } from "./RunControls";
+import { RunTab } from "./RunTab";
 import { SettingsBar } from "./SettingsBar";
 
 /** V2 · Project panel: header with run controls, tabs Spec · Tickets · Run. */
@@ -183,6 +184,14 @@ function Loaded({
   const closeTicket = useCallback(() => {
     openTicket(null);
   }, [openTicket]);
+  const attemptParam = Number(params.get("attempt"));
+  const showCurrent = useCallback(() => {
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete("attempt");
+      return next;
+    });
+  }, [setParams]);
   const [chosen, setChosen] = useState<Tab | null>(asked ?? initialTab);
 
   const ready = !current.isPending && !spec.isPending;
@@ -267,11 +276,22 @@ function Loaded({
               }}
             />
           </TabsContent>
-          <TabsContent value="run" className="overflow-auto p-6">
-            <EmptyState
-              icon={<Play aria-hidden />}
-              title="Coming in T22"
-              description="The live run view arrives in T22. The header above shows the run's state and controls it."
+          <TabsContent value="run" className="flex min-h-0 flex-col">
+            <RunTab
+              project={project.name}
+              current={current}
+              state={state}
+              attempt={
+                Number.isInteger(attemptParam) && attemptParam > 0
+                  ? attemptParam
+                  : null
+              }
+              ticket={ticket}
+              onOpenTicket={openTicket}
+              onShowTickets={() => {
+                setChosen("tickets");
+              }}
+              onShowCurrent={showCurrent}
             />
           </TabsContent>
           {ticket ? (
@@ -281,7 +301,6 @@ function Loaded({
               onOpen={openTicket}
               onClose={closeTicket}
               onShowRun={(attempt) => {
-                // shortcut: the Run tab (T22) is a placeholder; it reads ?attempt= then.
                 setParams((previous) => {
                   const next = new URLSearchParams(previous);
                   if (attempt === undefined) {

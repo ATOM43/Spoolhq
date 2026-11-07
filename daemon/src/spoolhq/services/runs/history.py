@@ -1,4 +1,5 @@
-"""Run history, newest first, a page at a time behind an opaque cursor.
+"""Run history, newest first, a page at a time behind an opaque cursor; and a run's
+stored events, oldest first, a page at a time (``page_events``).
 
 The cursor encodes the last run of a page (``started_at`` and ``id``); the next page
 holds the runs strictly older than it in ``(started_at, id)`` order. A run started while
@@ -10,8 +11,8 @@ import binascii
 from dataclasses import dataclass
 
 from spoolhq.services.runs.log import RunLog
-from spoolhq.services.runs.model import Run
-from spoolhq.services.runs.rows import RUN_COLUMNS, to_run
+from spoolhq.services.runs.model import Event, EventKind, Run
+from spoolhq.services.runs.rows import EVENT_COLUMNS, RUN_COLUMNS, to_event, to_run
 
 
 @dataclass(frozen=True)
@@ -51,3 +52,50 @@ def page_runs(run_log: RunLog, cursor: str | None, limit: int) -> RunPage:
     runs = [to_run(row) for row in rows[:limit]]
     more = len(rows) > limit
     return RunPage(runs, encode_cursor(runs[-1]) if more else None)
+
+
+@dataclass(frozen=True)
+class EventPage:
+    events: list[Event]
+    next_after: int | None
+    """The ``after`` of the next page; None on the last page."""
+
+
+def page_events(
+    run_log: RunLog, run_id: int, attempt: int | None, after: int, limit: int
+) -> EventPage:
+    """A run's events after ``after``, oldest first, at most ``limit``.
+
+    With ``attempt`` (its number), only what happened from that attempt's start until the
+    next attempt's start: its run-level events (the worktree, the integration, the end of
+    the run) included, the worktree for the run's first attempt. KeyError for an unknown
+    run or attempt.
+    """
+    attempts = run_log.list_attempts(run_id)
+    low, high = after, None
+    if attempt is not None:
+        index = next(i for i, a in enumerate(attempts) if a.number == attempt)  # StopIteration
+        bounds = _starts(run_log, run_id)
+        if index > 0:
+            low = max(low, bounds[attempts[index].id] - 1)
+        if index + 1 < len(attempts):
+            high = bounds[attempts[index + 1].id]
+    with run_log._reading() as conn:
+        rows = conn.execute(
+            f"SELECT {EVENT_COLUMNS} FROM events "  # noqa: S608 - constant columns
+            "WHERE run_id = ? AND id > ? AND (? IS NULL OR id < ?) ORDER BY id LIMIT ?",
+            (run_id, low, high, high, limit + 1),
+        ).fetchall()
+    events = [to_event(row) for row in rows[:limit]]
+    return EventPage(events, events[-1].id if len(rows) > limit else None)
+
+
+def _starts(run_log: RunLog, run_id: int) -> dict[int, int]:
+    """Each attempt's id → the seq of its ``attempt.started`` event."""
+    with run_log._reading() as conn:
+        rows = conn.execute(
+            "SELECT attempt_id, MIN(id) FROM events WHERE run_id = ? AND kind = ? "
+            "GROUP BY attempt_id",
+            (run_id, EventKind.ATTEMPT_STARTED.value),
+        ).fetchall()
+    return {int(attempt_id): int(seq) for attempt_id, seq in rows}

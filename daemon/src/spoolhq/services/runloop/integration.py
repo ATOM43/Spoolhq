@@ -292,12 +292,15 @@ class LocalIntegrator:
             message = f"file too large to commit: {big[0]} ({big[1] / 2**20:.1f} MB)"
             return _result(IntegrationStatus.FAILED, message)
         # The policy sees exactly what would land, less SpoolHQ's own PROGRESS.md entry.
+        ctx.step("policy", "running")
         mode = decide(ctx, main_sha)
+        ctx.step("policy", "passed")
         if mode == "approval":
             self._abandon(ctx, journal, restore=True)
             policy = ctx.run.policy or {}
             reason = approval_message(ctx, describe(policy.get("rules", [])))
             return _result(IntegrationStatus.HELD, f"{tid} {reason}")
+        ctx.step("integrate", "running")
         self._append_progress(ctx)
         note, title = ctx.run.progress_note, ctx.ticket.meta.title
         sha = commit_staged(path, commit_message(tid, title, note, ctx.run.id))

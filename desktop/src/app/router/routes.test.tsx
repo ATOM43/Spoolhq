@@ -178,6 +178,6 @@ describe("app shell", () => {
       ),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Run" }));
-    expect(screen.getByText("Coming in T22")).toBeInTheDocument();
+    expect(screen.getByText("No runs yet.")).toBeInTheDocument();
   });
 });

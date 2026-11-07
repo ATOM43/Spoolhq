@@ -355,3 +355,15 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - ruff: `PLW1514` enabled (preview rule, explicit) and `scripts/` now linted; no findings, 0 files changed.
 - Tests: daemon (each provider's 200, 401, 403, 500, timeout, network error, redirect not followed, not set makes no call, env value used, no token 401, unknown name 422, secret absent from every answer and log record), Vitest (tabs, ✕, Done, first run both ways, SDK neutral and Details collapsed, amber only when blocking, value gone after Save, Test disabled when not set, each result with its icon and gone after closing, gear with invalid settings, Open Settings opens Agents).
 - Docs: `api.md` (testing a secret), `context.md` (split `DECISIONS.md`); DECISIONS 332–336.
+
+## T35 · Project creation job
+
+- Plan: T35 split into T35 (this, 2 h) and T36 · New project dialog (2 h); T21 and T23 depend on T36; 35 tickets, 84.5 h; critical path T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T23 → T26 (36 h).
+- `services/creation/`: request model and checks (name `^[a-z][a-z0-9-]{0,39}$`, built-in templates only, untrusted path refused if root, home, inside SpoolHQ's folders or a symlink; existing repo clean; duplicate name), four steps with state, duration, fixed message, trimmed output and the request field, rollback of recorded paths newest first without following symlinks, in-memory jobs kept 1 h.
+- API: `POST /api/projects` → 202 `{"job_id"}` or 422 with the field; `GET /api/jobs/{id}`, `POST /api/jobs/{id}/cancel`; `GET /api/templates` adds `summary`; the project detail reports `idle.code = "no_commands"`. TS client regenerated.
+- `spool init` runs the same job in the foreground (`--source`, `--install/--lint/--test`, `--merge-preset`, `--clickup-list`); `--branch`, `--template-ref` and folder/URL templates are gone from it (`spool templates check` keeps them). `init_from_template` removed.
+- Stack commands optional in `project.yaml`; without `test` the run loop and planner refuse with "Set the stack commands in project.yaml first". Unset gates are skipped. `try_command`/`run_process` take a cancel event.
+- Merge presets: `direct_unless_risky` = defaults, `always_pr` = `protected_paths: ['**']`, `always_direct` = `max_diff_lines: 100000` + `protected_paths: []`.
+- Desktop: the old dialog's model adapted to the job API (UI unchanged until T36); the panel shows the `no_commands` reason.
+- Tests: each source end to end, a forced failure after every step for every source (tree and git state unchanged), an empty folder kept, symlinks not followed, cancel during commands, a failing test command (`commands.test`, first failure line), path, template and name refusals with no job, presets and their decisions, CLI and API workspaces identical, 1 h retention.
+- Docs: `api.md` (creating a project, rollback, presets), `templates.md`, `project-yaml.md`, `architecture.md`, README, `task.md`; DECISIONS 337–344.

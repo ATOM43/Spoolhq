@@ -40,6 +40,7 @@ from spoolhq.services.agents.model import (
     Started,
     StreamWarning,
     ToolCall,
+    ToolResult,
     Usage,
 )
 from spoolhq.services.agents.runner import AgentRunner, BackendUnavailableError
@@ -71,6 +72,7 @@ __all__ = [
     "RunResult",
     "Started",
     "ToolCall",
+    "ToolResult",
     "Usage",
     "temp_worktree_refusal",
     "available_runners",

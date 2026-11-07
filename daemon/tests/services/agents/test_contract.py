@@ -179,7 +179,7 @@ def test_a_run_that_creates_a_file(
     result, events = run(adapter.make(tmp_path, success, False), policy)
     assert result.outcome is Outcome.COMPLETED
     assert result.files_changed == ("hello.txt",)
-    assert FileEdit(path="hello.txt") in events
+    assert any(isinstance(e, FileEdit) and e.path == "hello.txt" for e in events)
     assert isinstance(events[0], Started)
 
 

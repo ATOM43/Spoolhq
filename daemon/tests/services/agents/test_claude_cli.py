@@ -246,6 +246,7 @@ def test_run_end_to_end(tmp_path: Path, policy: AgentPolicy) -> None:
         "usage",
         "message",
         "tool_call",
+        "tool_result",
         "file_edit",
         "usage",
         "message",

@@ -33,6 +33,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/projects/{name}/runs/current` | the active (else latest) run with its phase lines, tokens and `cost_micro_usd` (null unless an API-key backend reported a cost), and `latest_seq` |
 | `GET /api/projects/{name}/runs?cursor=&limit=` | the run history, [paged](#paged-run-history) |
 | `GET /api/projects/{name}/runs/{run_id}` | one run with its `attempts` (number, kind, status — the verdict —, backend, tokens, times) |
+| `GET /api/projects/{name}/runs/{run_id}/events?attempt=&after=&limit=` | the run's stored events, [paged](#run-events), oldest first |
 | `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/{artifact}` | an attempt's file as stored; `artifact` is `transcript`, `gates`, `diff` or `review` (422 for anything else) |
 | `POST /api/projects/{name}/github/sync` | check open pull requests now |
 | `GET /api/templates` | the built-in templates: `name` (what `POST /api/projects` takes as `template`), `description`, `summary` (one line of at most 120 characters, for a card; null if the template has none) and `commands` (`install`, `lint`, `test` from its `spoolhq-template.yaml`, which the New project dialog pre-fills) |
@@ -177,6 +178,27 @@ A ticket can be edited while it is `draft`, `ready` or `blocked`; while it is `r
 ## Paged run history
 
 `GET …/runs` returns runs newest first, `{"items": [...], "next_cursor": "..." | null}`. `limit` is 50 by default, at most 200 (400 `limit_too_large` above). Pass `next_cursor` back as `cursor` for the next page; it is `null` on the last page. The cursor is opaque (base64 of the last run's `started_at` and id); the next page holds the runs strictly older than it, so a run started while you page sorts before the cursor and never shows up twice.
+
+## Run events
+
+`GET …/runs/{run_id}/events` returns `{"items": [...], "next_after": <seq> | null}`; each item is the [WebSocket's envelope](#event-websocket). `after` (default 0) skips the events up to that `seq`; `limit` is 500 by default, at most 2,000 (400 `limit_too_large` above). Pass `next_after` back as `after` for the next page; it is null on the last page. With `attempt=N` (the attempt's number, as in the artifact URL) only that attempt's window comes back: from its `attempt.started` event until the next attempt's, with the run-level events in between (the integration, the end of the run), and for the run's first attempt everything from the run's start (the worktree). An unknown run or attempt is 404. The Run tab loads the current attempt this way, then subscribes with `since=` the last `seq` it loaded.
+
+What a run records, by `type` (the `data` models are in the OpenAPI components):
+
+| Type | `data` | |
+| --- | --- | --- |
+| `run.started`, `run.status`, `run.interrupted`, `run.phase` | `RunStartedData`, `RunStatusData` (`from`, `to`, `reason`, `reset_at`), `RunInterruptedData`, `RunPhaseData` (`phase`, `text`) | the run itself; `run.phase` is the line `spool run` prints |
+| `step` | `StepData`: `step` (`worktree`, `implement`, `gates`, `review`, `policy`, `integrate`), `state` (`running`, `passed`, `failed`, `skipped`), `attempt` | each step starting and ending; a retry starts again at `implement` with the next attempt number |
+| `attempt.started`, `attempt.finished` | `AttemptStartedData` (`number`, `kind`, `backend`, `model`), `AttemptFinishedData` (`number`, `status`) | |
+| `agent.message` | `text` (at most 20,000 characters) | the implementer's text |
+| `agent.tool_call`, `agent.tool_result` | `id`, `name`, `input_summary` (JSON, cut to 2,000 characters); `id`, `text` (the first 200 lines), `lines` (how many it had), `is_error` | a result answers the call with the same `id`; the time between them is the call's duration |
+| `agent.file_edit` | `path`, `added`, `removed` (lines, null when unknown) | |
+| `agent.usage` | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens` | per model message |
+| `agent.denied` | `tool`, `input_summary`, `reason` | a tool call the policy refused |
+| `agent.rate_limit`, `agent.warning` | `status`, `reset_at`; `text`, `line` | usage-limit notices; a line of output the parser skipped |
+| `log`, `integrate`, `policy.decision` | `LogData`, `IntegrateData` (`commit`, `tag`, `pr`), `PolicyDecisionData` | |
+
+The `agent.*` events are the implementer's, recorded on its attempt; the reviewer's stream stays in the attempt's `transcript.jsonl` only. Agent and tool text is untrusted. Codex reports no tool results (its calls have no `agent.tool_result`).
 
 ## Event WebSocket
 

@@ -485,6 +485,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/runs/{run_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Events
+         * @description A run's stored events after ``after``, oldest first, as the event stream sends
+         *     them; with ``attempt``, from that attempt's start until the next one's. Pass
+         *     ``next_after`` back as ``after`` for the next page.
+         */
+        get: operations["list_events_api_projects__name__runs__run_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/runs/{run_id}/attempts/{number}/{artifact}": {
         parameters: {
             query?: never;
@@ -862,6 +884,35 @@ export interface components {
         /** ErrorResponse */
         ErrorResponse: {
             error: components["schemas"]["ErrorBody"];
+        };
+        /** EventEnvelope */
+        EventEnvelope: {
+            /** Seq */
+            seq: number;
+            /** Run Id */
+            run_id: number;
+            /** Attempt */
+            attempt: number | null;
+            /** Ticket */
+            ticket: string | null;
+            /** Type */
+            type: string;
+            /** Ts */
+            ts: string;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * EventList
+         * @description ``GET …/runs/{run_id}/events``: stored events, oldest first.
+         */
+        EventList: {
+            /** Items */
+            items: components["schemas"]["EventEnvelope"][];
+            /** Next After */
+            next_after: number | null;
         };
         /** GeneratePlan */
         GeneratePlan: {
@@ -1446,25 +1497,6 @@ export interface components {
             /** Version */
             version: string;
         };
-        /** EventEnvelope */
-        EventEnvelope: {
-            /** Seq */
-            seq: number;
-            /** Run Id */
-            run_id: number;
-            /** Attempt */
-            attempt: number | null;
-            /** Ticket */
-            ticket: string | null;
-            /** Type */
-            type: string;
-            /** Ts */
-            ts: string;
-            /** Data */
-            data: {
-                [key: string]: unknown;
-            };
-        };
         /**
          * AuthMessage
          * @description The client's first message, within 5 s.
@@ -1593,6 +1625,107 @@ export interface components {
             rules: {
                 [key: string]: string;
             }[];
+        } & {
+            [key: string]: unknown;
+        };
+        /** StepData */
+        StepData: {
+            /**
+             * Step
+             * @enum {string}
+             */
+            step: "worktree" | "implement" | "gates" | "review" | "policy" | "integrate";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "running" | "passed" | "failed" | "skipped";
+            /** Attempt */
+            attempt: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AgentMessageData */
+        AgentMessageData: {
+            /** Text */
+            text: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AgentToolCallData */
+        AgentToolCallData: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Input Summary */
+            input_summary: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AgentToolResultData */
+        AgentToolResultData: {
+            /** Id */
+            id: string;
+            /** Text */
+            text: string;
+            /** Lines */
+            lines: number;
+            /** Is Error */
+            is_error: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AgentFileEditData */
+        AgentFileEditData: {
+            /** Path */
+            path: string;
+            /** Added */
+            added: number | null;
+            /** Removed */
+            removed: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AgentUsageData */
+        AgentUsageData: {
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Cache Creation Tokens */
+            cache_creation_tokens: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AgentDeniedData */
+        AgentDeniedData: {
+            /** Tool */
+            tool: string;
+            /** Input Summary */
+            input_summary: string;
+            /** Reason */
+            reason: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AgentRateLimitData */
+        AgentRateLimitData: {
+            /** Status */
+            status: string;
+            /** Reset At */
+            reset_at: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AgentWarningData */
+        AgentWarningData: {
+            /** Text */
+            text: string;
+            /** Line */
+            line: string;
         } & {
             [key: string]: unknown;
         };
@@ -2607,6 +2740,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunDetail"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_events_api_projects__name__runs__run_id__events_get: {
+        parameters: {
+            query?: {
+                attempt?: number | null;
+                after?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventList"];
                 };
             };
             /** @description An error. */

@@ -23,7 +23,14 @@ from spoolhq.services.runs.files import (
     attempt_files,
     write_artifact,
 )
-from spoolhq.services.runs.history import RunPage, decode_cursor, encode_cursor, page_runs
+from spoolhq.services.runs.history import (
+    EventPage,
+    RunPage,
+    decode_cursor,
+    encode_cursor,
+    page_events,
+    page_runs,
+)
 from spoolhq.services.runs.journal import (
     Integration,
     IntegrationState,
@@ -63,6 +70,8 @@ from spoolhq.services.runs.totals import (
 )
 
 __all__ = [
+    "EventPage",
+    "page_events",
     "TicketActivity",
     "Totals",
     "latest_phase",

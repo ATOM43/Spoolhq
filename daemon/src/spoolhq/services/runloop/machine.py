@@ -26,6 +26,7 @@ from spoolhq.services.review import GateLine, ReviewInputs, ReviewResult, review
 from spoolhq.services.runloop.integrator import IntegrationStatus
 from spoolhq.services.runloop.model import Ending, EndKind, RunContext
 from spoolhq.services.runloop.prompting import implementer_prompt
+from spoolhq.services.runloop.transcript import Recorder
 from spoolhq.services.runs import (
     ArtifactName,
     Attempt,
@@ -201,7 +202,7 @@ def implement(ctx: RunContext, attempt: Attempt) -> tuple[RunResult, str]:
         prompt,
         policy,
         Budget(max_turns=IMPLEMENTER_MAX_TURNS, max_usd=usd_left, max_tokens=left),
-        on_event=lambda _event: None,
+        on_event=Recorder(ctx.run_log, attempt),
         on_raw=on_raw,
         cancel=ctx.flags.cancel,
     )
@@ -305,6 +306,8 @@ def integrate(ctx: RunContext) -> Step:
     once, and gates failing on the merged code use the gate retries."""
     result = ctx.integrator.integrate(ctx)
     tid = ctx.ticket_id
+    if result.status is not IntegrationStatus.HELD:
+        ctx.step("integrate", "passed" if result.status is IntegrationStatus.MERGED else "failed")
     if result.status is IntegrationStatus.MERGED:
         detail = f" {result.message}" if result.message else ""
         ctx.phase("integrate", f"{tid} · integrate · merged{detail}")
@@ -337,16 +340,20 @@ def attempt_once(ctx: RunContext, attempt: Attempt) -> Step:
     """One attempt: implement, commit, gates, review. The next step of the run."""
     label = f"{ctx.ticket_id} attempt {attempt.number}"
     ctx.phase("implement", f"{label} · implement ({attempt.kind})", attempt)
+    ctx.step("implement", "running", attempt)
     resolving = attempt.kind is AttemptKind.CONFLICT_RETRY
     conflicted = conflict_files(ctx.worktree.path) if resolving else ()
     result, final_text = implement(ctx, attempt)
     if resolving and result.outcome in (Outcome.COMPLETED, *EARLY_STOPS):
         # Committing would conclude the merge, so the markers are checked first.
         if ending := check_resolved(ctx, attempt, conflicted):
+            ctx.step("implement", "failed", attempt)
             return ending
     if result.outcome in EARLY_STOPS:
         commit(ctx, attempt, label)  # keep what it did; the retry continues from it
     if result.outcome is not Outcome.COMPLETED:
+        if result.outcome not in (Outcome.CANCELLED, Outcome.USAGE_LIMITED):
+            ctx.step("implement", "failed", attempt)
         return agent_stopped(
             ctx, attempt, "implementer", result.outcome, result.error, result.reset_at
         )
@@ -354,10 +361,13 @@ def attempt_once(ctx: RunContext, attempt: Attempt) -> Step:
     if note is not None:
         ctx.run = ctx.run_log.set_progress_note(ctx.run.id, note)
     commit(ctx, attempt, label)
+    ctx.step("implement", "passed", attempt)
     if ending := interrupted(ctx, attempt):
         return ending
 
+    ctx.step("gates", "running", attempt)
     gate_run = run_gates(ctx, attempt, label)
+    ctx.step("gates", "passed" if gate_run.passed else "failed", attempt)
     if not gate_run.passed:
         ctx.run_log.finish_attempt(attempt.id, AttemptStatus.GATES_FAILED)
         first = gate_run.first_failure
@@ -366,7 +376,10 @@ def attempt_once(ctx: RunContext, attempt: Attempt) -> Step:
     if ending := interrupted(ctx, attempt):
         return ending
 
+    ctx.step("review", "running", attempt)
     reviewed = run_review(ctx, attempt, gate_run)
+    passed = reviewed is not None and reviewed.verdict in ("approve", "needs_human")
+    ctx.step("review", "passed" if passed else "failed", attempt)
     if reviewed is None:
         ctx.run_log.finish_attempt(attempt.id, AttemptStatus.ERROR)
         return Ending(EndKind.BLOCKED, "reviewer changed the worktree")

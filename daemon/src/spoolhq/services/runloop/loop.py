@@ -37,6 +37,7 @@ from spoolhq.services.runloop.model import (
     RunContext,
     RunLoopError,
     record_phase,
+    record_step,
     user_errors,
 )
 from spoolhq.services.runloop.resume import ResumeTimer
@@ -158,9 +159,11 @@ class RunLoop:
         run = run_log.start_run(tid)
         record_phase(run_log, run.id, "picked", f"{tid} · {ticket.meta.title} · run {run.id}")
         manager = self._manager(settings)
+        record_step(run_log, run.id, "worktree", "running")
         try:
             worktree = manager.create(tid, ticket.meta.title, run.id)
         except (GitError, OSError) as exc:
+            record_step(run_log, run.id, "worktree", "failed")
             reason = f"cannot create the worktree: {exc}"
             record_phase(run_log, run.id, "blocked", f"{tid} · blocked · {reason}")
             run_log.set_run_status(run.id, RunStatus.BLOCKED, reason)
@@ -168,6 +171,7 @@ class RunLoop:
             raise RunLoopError(reason) from exc
         ctx = self._context(settings, workspace, run_log, ticket, run, manager, worktree)
         ctx.phase("worktree", f"{tid} · worktree · {worktree.path}")
+        record_step(run_log, run.id, "worktree", "passed")
         return ctx
 
     def _spawn(self, active: Active, ctx: RunContext, kind: AttemptKind | None, all_: bool) -> None:

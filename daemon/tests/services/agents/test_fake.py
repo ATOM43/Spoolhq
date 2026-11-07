@@ -32,7 +32,7 @@ def test_replay_writes_the_file(worktree: Path, policy: AgentPolicy) -> None:
     assert result.files_changed == ("hello.txt",)
     # The version the transcript was recorded with.
     assert (result.backend, result.backend_version) == ("fake", "2.1.302")
-    assert FileEdit(path="hello.txt") in events
+    assert FileEdit(path="hello.txt", added=1) in events
     assert len(raw) == len(SUCCESS.read_text(encoding="utf-8").splitlines())
 
 

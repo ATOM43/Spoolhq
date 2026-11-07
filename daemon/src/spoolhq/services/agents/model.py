@@ -205,7 +205,21 @@ class ToolCall:
 class FileEdit:
     path: str
     """Relative to the worktree, with forward slashes."""
+    added: int | None = None
+    removed: int | None = None
+    """Lines the edit added and removed, from the tool input; None when unknown."""
     kind: str = field(default="file_edit", init=False)
+
+
+@dataclass(frozen=True)
+class ToolResult:
+    """What a tool call returned, as text."""
+
+    id: str
+    """The ``ToolCall.id`` it answers."""
+    text: str
+    is_error: bool
+    kind: str = field(default="tool_result", init=False)
 
 
 @dataclass(frozen=True)
@@ -244,7 +258,15 @@ class StreamWarning:
 
 
 AgentEvent = (
-    Started | Message | ToolCall | FileEdit | Usage | PermissionDenied | RateLimit | StreamWarning
+    Started
+    | Message
+    | ToolCall
+    | ToolResult
+    | FileEdit
+    | Usage
+    | PermissionDenied
+    | RateLimit
+    | StreamWarning
 )
 
 

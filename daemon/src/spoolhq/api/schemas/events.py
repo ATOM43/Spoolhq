@@ -100,6 +100,68 @@ class PolicyDecisionData(_Data):
     rules: list[dict[str, str]]
 
 
+class EventList(BaseModel):
+    """``GET …/runs/{run_id}/events``: stored events, oldest first."""
+
+    items: list[EventEnvelope]
+    next_after: int | None
+    """Pass it as ``after`` for the next page; null on the last page."""
+
+
+class StepData(_Data):
+    step: Literal["worktree", "implement", "gates", "review", "policy", "integrate"]
+    state: Literal["running", "passed", "failed", "skipped"]
+    attempt: int
+
+
+class AgentMessageData(_Data):
+    text: str
+
+
+class AgentToolCallData(_Data):
+    id: str
+    name: str
+    input_summary: str
+
+
+class AgentToolResultData(_Data):
+    id: str
+    text: str
+    """The first 200 lines."""
+    lines: int
+    """How many lines the result had."""
+    is_error: bool
+
+
+class AgentFileEditData(_Data):
+    path: str
+    added: int | None
+    removed: int | None
+
+
+class AgentUsageData(_Data):
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_creation_tokens: int
+
+
+class AgentDeniedData(_Data):
+    tool: str
+    input_summary: str
+    reason: str
+
+
+class AgentRateLimitData(_Data):
+    status: str
+    reset_at: str | None
+
+
+class AgentWarningData(_Data):
+    text: str
+    line: str
+
+
 EVENT_DATA_MODELS: tuple[type[BaseModel], ...] = (
     EventEnvelope,
     AuthMessage,
@@ -112,4 +174,13 @@ EVENT_DATA_MODELS: tuple[type[BaseModel], ...] = (
     LogData,
     IntegrateData,
     PolicyDecisionData,
+    StepData,
+    AgentMessageData,
+    AgentToolCallData,
+    AgentToolResultData,
+    AgentFileEditData,
+    AgentUsageData,
+    AgentDeniedData,
+    AgentRateLimitData,
+    AgentWarningData,
 )

@@ -1,7 +1,7 @@
 """Run endpoints: start (next, all, one ticket), pause, resume and cancel a project's run,
 approve (or integrate) or reject a ticket waiting for a person, discard a ticket's
 leftover worktree, read the current run, the paged run history, one run with its
-attempts and an attempt's files (token required). Thin: the work is
+attempts, its stored events and an attempt's files (token required). Thin: the work is
 ``services.runloop.RunLoop``'s and ``services.runs``'.
 """
 
@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 
 from spoolhq.api.errors import ApiError, service_errors
 from spoolhq.api.params import ProjectName, TicketId, run_log, workspace
+from spoolhq.api.schemas.events import EventEnvelope, EventList
 from spoolhq.api.schemas.runs import (
     AttemptView,
     CurrentRun,
@@ -24,7 +25,7 @@ from spoolhq.api.schemas.runs import (
 )
 from spoolhq.api.security import bearer_scheme
 from spoolhq.services.runloop import RunLoop
-from spoolhq.services.runs import ArtifactName, attempt_dir, page_runs
+from spoolhq.services.runs import ArtifactName, attempt_dir, page_events, page_runs
 
 router = APIRouter(prefix="/api/projects/{name}", dependencies=[Security(bearer_scheme)])
 RunIdQuery = Annotated[
@@ -144,6 +145,37 @@ def get_run(name: ProjectName, run_id: int, request: Request) -> RunDetail:
     except KeyError as exc:
         raise ApiError(404, "not_found", f"no run {run_id} in {name!r}") from exc
     return RunDetail(**RunView.of(run).model_dump(), attempts=[AttemptView.of(a) for a in attempts])
+
+
+EVENTS_LIMIT = 2000
+
+
+@router.get("/runs/{run_id}/events")
+def list_events(
+    name: ProjectName,
+    run_id: int,
+    request: Request,
+    attempt: Annotated[int | None, Query(ge=1)] = None,
+    after: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1)] = 500,
+) -> EventList:
+    """A run's stored events after ``after``, oldest first, as the event stream sends
+    them; with ``attempt``, from that attempt's start until the next one's. Pass
+    ``next_after`` back as ``after`` for the next page."""
+    if limit > EVENTS_LIMIT:
+        raise ApiError(400, "limit_too_large", f"limit is at most {EVENTS_LIMIT}", field="limit")
+    log = run_log(request, name)
+    try:
+        run, attempts = log.get_run(run_id), log.list_attempts(run_id)
+        page = page_events(log, run_id, attempt, after, limit)
+    except (KeyError, StopIteration) as exc:
+        raise ApiError(404, "not_found", f"no such run or attempt in {name!r}") from exc
+    numbers = {a.id: a.number for a in attempts}
+    items = [
+        EventEnvelope.of(e, run.ticket_id, numbers.get(e.attempt_id) if e.attempt_id else None)
+        for e in page.events
+    ]
+    return EventList(items=items, next_after=page.next_after)
 
 
 @router.get(

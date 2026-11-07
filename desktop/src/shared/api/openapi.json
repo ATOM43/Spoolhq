@@ -1706,6 +1706,102 @@
         }
       }
     },
+    "/api/projects/{name}/runs/{run_id}/events": {
+      "get": {
+        "summary": "List Events",
+        "description": "A run's stored events after ``after``, oldest first, as the event stream sends\nthem; with ``attempt``, from that attempt's start until the next one's. Pass\n``next_after`` back as ``after`` for the next page.",
+        "operationId": "list_events_api_projects__name__runs__run_id__events_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "attempt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Attempt"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "After"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 500,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{name}/runs/{run_id}/attempts/{number}/{artifact}": {
       "get": {
         "summary": "Get Artifact",
@@ -2809,6 +2905,93 @@
           "error"
         ],
         "title": "ErrorResponse"
+      },
+      "EventEnvelope": {
+        "properties": {
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "integer"
+          },
+          "attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt"
+          },
+          "ticket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticket"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "ts": {
+            "title": "Ts",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          }
+        },
+        "required": [
+          "seq",
+          "run_id",
+          "attempt",
+          "ticket",
+          "type",
+          "ts",
+          "data"
+        ],
+        "title": "EventEnvelope",
+        "type": "object"
+      },
+      "EventList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EventEnvelope"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_after": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "next_after"
+        ],
+        "title": "EventList",
+        "description": "``GET …/runs/{run_id}/events``: stored events, oldest first."
       },
       "GeneratePlan": {
         "properties": {
@@ -4688,64 +4871,6 @@
         ],
         "title": "Version"
       },
-      "EventEnvelope": {
-        "properties": {
-          "seq": {
-            "title": "Seq",
-            "type": "integer"
-          },
-          "run_id": {
-            "title": "Run Id",
-            "type": "integer"
-          },
-          "attempt": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attempt"
-          },
-          "ticket": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ticket"
-          },
-          "type": {
-            "title": "Type",
-            "type": "string"
-          },
-          "ts": {
-            "title": "Ts",
-            "type": "string"
-          },
-          "data": {
-            "additionalProperties": true,
-            "title": "Data",
-            "type": "object"
-          }
-        },
-        "required": [
-          "seq",
-          "run_id",
-          "attempt",
-          "ticket",
-          "type",
-          "ts",
-          "data"
-        ],
-        "title": "EventEnvelope",
-        "type": "object"
-      },
       "AuthMessage": {
         "description": "The client's first message, within 5 s.",
         "properties": {
@@ -5040,6 +5165,247 @@
           "rules"
         ],
         "title": "PolicyDecisionData",
+        "type": "object"
+      },
+      "StepData": {
+        "additionalProperties": true,
+        "properties": {
+          "step": {
+            "enum": [
+              "worktree",
+              "implement",
+              "gates",
+              "review",
+              "policy",
+              "integrate"
+            ],
+            "title": "Step",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "passed",
+              "failed",
+              "skipped"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "step",
+          "state",
+          "attempt"
+        ],
+        "title": "StepData",
+        "type": "object"
+      },
+      "AgentMessageData": {
+        "additionalProperties": true,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "AgentMessageData",
+        "type": "object"
+      },
+      "AgentToolCallData": {
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "input_summary": {
+            "title": "Input Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "input_summary"
+        ],
+        "title": "AgentToolCallData",
+        "type": "object"
+      },
+      "AgentToolResultData": {
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "lines": {
+            "title": "Lines",
+            "type": "integer"
+          },
+          "is_error": {
+            "title": "Is Error",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "lines",
+          "is_error"
+        ],
+        "title": "AgentToolResultData",
+        "type": "object"
+      },
+      "AgentFileEditData": {
+        "additionalProperties": true,
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "added": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added"
+          },
+          "removed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed"
+          }
+        },
+        "required": [
+          "path",
+          "added",
+          "removed"
+        ],
+        "title": "AgentFileEditData",
+        "type": "object"
+      },
+      "AgentUsageData": {
+        "additionalProperties": true,
+        "properties": {
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_creation_tokens": {
+            "title": "Cache Creation Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_creation_tokens"
+        ],
+        "title": "AgentUsageData",
+        "type": "object"
+      },
+      "AgentDeniedData": {
+        "additionalProperties": true,
+        "properties": {
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          },
+          "input_summary": {
+            "title": "Input Summary",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "input_summary",
+          "reason"
+        ],
+        "title": "AgentDeniedData",
+        "type": "object"
+      },
+      "AgentRateLimitData": {
+        "additionalProperties": true,
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "reset_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset At"
+          }
+        },
+        "required": [
+          "status",
+          "reset_at"
+        ],
+        "title": "AgentRateLimitData",
+        "type": "object"
+      },
+      "AgentWarningData": {
+        "additionalProperties": true,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "line"
+        ],
+        "title": "AgentWarningData",
         "type": "object"
       }
     },

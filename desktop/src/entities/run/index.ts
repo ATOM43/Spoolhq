@@ -1,2 +1,14 @@
 /** A run: an agent working on one ticket. */
-export { useCurrentRun, type CurrentRun } from "./model/queries";
+export {
+  useCurrentRun,
+  useRun,
+  type CurrentRun,
+  type RunAttempt,
+  type RunDetail,
+} from "./model/queries";
+export {
+  mergeEvents,
+  runEventsKey,
+  useRunEvents,
+  type RunEvent,
+} from "./model/events";

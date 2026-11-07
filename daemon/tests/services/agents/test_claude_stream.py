@@ -18,6 +18,7 @@ from spoolhq.services.agents import (
     RateLimit,
     Started,
     ToolCall,
+    ToolResult,
     Usage,
 )
 from spoolhq.services.agents.claude_stream import epoch_to_datetime, summarize, usd_to_micro
@@ -99,6 +100,7 @@ def test_success_writes_file(worktree: Path) -> None:
         "usage",
         "message",
         "tool_call",
+        "tool_result",
         "file_edit",
         "usage",
         "message",
@@ -114,7 +116,8 @@ def test_success_writes_file(worktree: Path) -> None:
         name="Write",
         input_summary='{"content": "hello from spoolhq\\n", "file_path": "hello.txt"}',
     )
-    assert events[4] == FileEdit(path="hello.txt")
+    assert events[4] == ToolResult(id="toolu_01", text=events[4].text, is_error=False)
+    assert events[5] == FileEdit(path="hello.txt", added=1)
 
 
 def test_api_billing_reports_cost_in_micro_usd(worktree: Path) -> None:

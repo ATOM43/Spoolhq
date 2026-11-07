@@ -26,6 +26,7 @@ from spoolhq.services.agents.model import (
     RunResult,
     Started,
     ToolCall,
+    ToolResult,
     Usage,
 )
 
@@ -110,6 +111,39 @@ def _usage_counts(usage: Any) -> tuple[int, int, int, int]:
         _int(usage.get("output_tokens")),
         _int(usage.get("cache_read_input_tokens")),
         _int(usage.get("cache_creation_input_tokens")),
+    )
+
+
+def _lines(value: Any) -> int:
+    return len(value.splitlines()) if isinstance(value, str) else 0
+
+
+def line_counts(tool_input: Any) -> tuple[int | None, int | None]:
+    """``(added, removed)`` lines of an Edit, MultiEdit or Write input; None if unknown."""
+    if not isinstance(tool_input, Mapping):
+        return None, None
+    if "content" in tool_input:  # Write: what it replaced isn't in the input
+        return _lines(tool_input["content"]), None
+    edits = tool_input.get("edits")
+    pairs = edits if isinstance(edits, list) else [tool_input]
+    pairs = [edit for edit in pairs if isinstance(edit, Mapping) and "new_string" in edit]
+    if not pairs:
+        return None, None
+    return (
+        sum(_lines(edit.get("new_string")) for edit in pairs),
+        sum(_lines(edit.get("old_string")) for edit in pairs),
+    )
+
+
+def result_text(content: Any) -> str:
+    """A ``tool_result`` block's content as text (a string, or its text parts)."""
+    if isinstance(content, str):
+        return content
+    parts = content if isinstance(content, list) else []
+    return "\n".join(
+        str(part["text"])
+        for part in parts
+        if isinstance(part, Mapping) and part.get("type") == "text" and "text" in part
     )
 
 
@@ -322,10 +356,14 @@ class ClaudeStreamParser:
         for block in _blocks(message):
             if block.get("type") != "tool_result":
                 continue
-            relative = self._pending_edits.pop(str(block.get("tool_use_id", "")), None)
-            if relative is not None and not block.get("is_error"):
+            tool_id = str(block.get("tool_use_id", ""))
+            failed = bool(block.get("is_error"))
+            events.append(ToolResult(tool_id, result_text(block.get("content")), failed))
+            relative = self._pending_edits.pop(tool_id, None)
+            if relative is not None and not failed:
                 self._files.add(relative)
-                events.append(FileEdit(path=relative))
+                added, removed = line_counts(self._tool_inputs.get(tool_id))
+                events.append(FileEdit(path=relative, added=added, removed=removed))
         return events
 
     def deny(self, tool: str, tool_use_id: str, tool_input: Any, reason: str) -> list[AgentEvent]:

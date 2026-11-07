@@ -139,6 +139,12 @@ class RunContext:
         """Record a phase change (``run.phase``); ``text`` is the line the CLI prints."""
         record_phase(self.run_log, self.run.id, name, text, attempt)
 
+    def step(self, name: str, state: str, attempt: Attempt | None = None) -> None:
+        """Record a ``step`` event; without ``attempt``, the run's latest one."""
+        if attempt is None:
+            attempt = self.run_log.list_attempts(self.run.id)[-1]
+        record_step(self.run_log, self.run.id, name, state, attempt)
+
 
 @dataclass
 class Active:
@@ -184,5 +190,22 @@ def record_phase(
         run_id,
         EventKind.RUN_PHASE,
         {"phase": name, "text": text},
+        attempt_id=attempt.id if attempt is not None else None,
+    )
+
+
+STEPS = ("worktree", "implement", "gates", "review", "policy", "integrate")
+STEP_STATES = ("running", "passed", "failed", "skipped")
+
+
+def record_step(
+    run_log: RunLog, run_id: int, name: str, state: str, attempt: Attempt | None = None
+) -> None:
+    """Append a ``step`` event; the worktree step comes before attempt 1."""
+    assert name in STEPS and state in STEP_STATES  # noqa: S101 - a programming error
+    run_log.append_event(
+        run_id,
+        EventKind.STEP,
+        {"step": name, "state": state, "attempt": attempt.number if attempt else 1},
         attempt_id=attempt.id if attempt is not None else None,
     )
