@@ -1,6 +1,7 @@
 """The `spool` command."""
 
 import logging
+import os
 import sys
 import threading
 from collections.abc import Callable
@@ -45,6 +46,7 @@ from spoolhq.services.creation.request import MergePreset, Source
 from spoolhq.services.github import github_token
 from spoolhq.services.projects import ProjectError, load_project
 from spoolhq.services.projects.workspace import REPO_NOTES
+from spoolhq.services.runloop import Agents
 from spoolhq.services.templates import TemplateError, load_contract, open_template
 
 app = typer.Typer(
@@ -80,6 +82,7 @@ logger = logging.getLogger("spoolhq.daemon")
 def serve() -> None:
     """Start the daemon on 127.0.0.1 (the port comes from SPOOLHQ_PORT or config.toml)."""
     settings = _settings()
+    fake = _dev_fake_runner()
     home = ensure_home()
     try:
         # Held until the daemon exits: startup recovery must never run while another
@@ -88,10 +91,31 @@ def serve() -> None:
     except DaemonAlreadyRunning as exc:
         _fail(f"error: {exc}")
     with lock:
-        _serve(settings, home)
+        _serve(settings, home, fake)
 
 
-def _serve(settings: Settings, home: Path) -> None:
+FAKE_RUNNER_ENV = "SPOOLHQ_DEV_FAKE_RUNNER"
+FAKE_RUNNER_REFUSED = f"{FAKE_RUNNER_ENV} is for development only"
+
+
+def _dev_fake_runner() -> tuple[str, Agents] | None:
+    """The scenario and agents of ``SPOOLHQ_DEV_FAKE_RUNNER``, read once at start; exits
+    in a packaged (frozen) build or for an unknown scenario."""
+    scenario = os.environ.get(FAKE_RUNNER_ENV)
+    if not scenario:
+        return None
+    if getattr(sys, "frozen", False):
+        _fail(f"error: {FAKE_RUNNER_REFUSED}")
+    # Imported only here: packaged builds leave spoolhq.devtools out.
+    from spoolhq.devtools import SCENARIOS, dev_agents
+
+    if scenario not in SCENARIOS:
+        known = ", ".join(SCENARIOS)
+        _fail(f"error: {FAKE_RUNNER_REFUSED}; unknown scenario {scenario!r} (known: {known})")
+    return scenario, dev_agents(scenario)
+
+
+def _serve(settings: Settings, home: Path, fake: tuple[str, Agents] | None = None) -> None:
     token = load_or_create_token(home)
     secrets = [token, *filter(None, [github_token()])]
     log_file = configure_logging(home / "logs", settings.log_level, redact=secrets)
@@ -102,7 +126,14 @@ def _serve(settings: Settings, home: Path) -> None:
     typer.echo(f"Token: {token_path(home)}  Logs: {log_file}")
     logger.info("starting daemon", extra={"host": settings.host, "port": settings.port})
 
-    app = create_app(settings, token=token)
+    if fake is not None:
+        logger.warning("Fake runner active: %s", fake[0])
+    app = create_app(
+        settings,
+        token=token,
+        agents=fake[1] if fake else None,
+        fake_runner=fake[0] if fake else None,
+    )
     config = uvicorn.Config(
         app,
         host=settings.host,

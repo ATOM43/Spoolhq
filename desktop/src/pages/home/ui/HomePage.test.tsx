@@ -119,12 +119,15 @@ function renderHome() {
 const projectCalls = () =>
   GET.mock.calls.filter(([path]) => path === "/api/projects").length;
 
+let fakeRunner: string | null = null;
+
 describe("Home", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     daemonUp();
     projects = [];
     tickets = {};
+    fakeRunner = null;
     GET.mockImplementation((path, init) => {
       if (path === "/api/projects") {
         return ok(projects);
@@ -137,6 +140,13 @@ describe("Home", () => {
       if (path === "/api/templates") {
         return ok([]);
       }
+      if (path === "/api/agents") {
+        return ok({
+          backends: [],
+          graphify: { installed: false, version: null, tested: false },
+          fake_runner: fakeRunner,
+        });
+      }
       throw new Error(`unexpected GET ${path}`);
     });
     vi.mocked(subscribeEvents).mockReturnValue(() => undefined);
@@ -144,6 +154,25 @@ describe("Home", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("shows an amber Fake runner chip with the scenario as its tooltip", async () => {
+    fakeRunner = "happy";
+    renderHome();
+    const chip = await screen.findByText("Fake runner");
+    expect(chip).toHaveAttribute("title", "happy");
+    expect(chip).toHaveClass("text-warning");
+  });
+
+  it("shows no Fake runner chip without one", async () => {
+    renderHome();
+    await screen.findByText("No projects yet");
+    await waitFor(() => {
+      expect(GET.mock.calls.some(([path]) => path === "/api/agents")).toBe(
+        true,
+      );
+    });
+    expect(screen.queryByText("Fake runner")).not.toBeInTheDocument();
   });
 
   it("shows a loading state while the projects load", async () => {

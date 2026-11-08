@@ -46,6 +46,7 @@ function backend(name: string, extra: Partial<Backend> = {}): Backend {
 }
 
 let backends: Backend[] = [];
+let fakeRunner: string | null = null;
 let secrets: Record<string, Secret> = {};
 
 function settings() {
@@ -81,12 +82,14 @@ describe("Settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     backends = [];
+    fakeRunner = null;
     secrets = { anthropic: NOT_SET, github: NOT_SET, clickup: NOT_SET };
     GET.mockImplementation((path) => {
       if (path === "/api/agents") {
         return ok({
           backends,
           graphify: { installed: true, version: "0.9.92", tested: true },
+          fake_runner: fakeRunner,
         });
       }
       if (path === "/api/settings") {
@@ -299,6 +302,21 @@ describe("Settings", () => {
       "text-warning",
     );
     expect(within(dialog).getByRole("status")).toHaveTextContent(SET_UP_FIRST);
+  });
+
+  it("shows the dev fake runner first, in amber, and doesn't block", async () => {
+    backends = [backend("claude-code-cli", { logged_in: false })];
+    fakeRunner = "gate-retry";
+    renderDialog();
+    const dialog = await openSettings();
+    const line = await within(dialog).findByText(
+      "Fake runner (dev): gate-retry",
+    );
+    expect(line).toHaveClass("text-warning");
+    expect(within(dialog).getAllByRole("status")).toEqual([line]);
+    expect(within(dialog).getByText(/Not logged in/)).not.toHaveClass(
+      "text-warning",
+    );
   });
 
   it("can't test a secret that isn't set", async () => {

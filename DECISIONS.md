@@ -375,3 +375,4 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 369 · A run's events by attempt window, paged by seq · docs/decisions/api.md
 370 · The Run tab's live events · docs/decisions/desktop.md
 371 · Where the spec won over the V2 · Run tab, live PNG · docs/decisions/desktop.md
+372 · A dev-only fake runner, `SPOOLHQ_DEV_FAKE_RUNNER` · docs/decisions/agents.md

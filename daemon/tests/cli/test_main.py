@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import httpx
@@ -77,3 +78,40 @@ def test_client_sends_token_and_reports_401() -> None:
         with pytest.raises(ApiError, match="rejected the token"):
             client.version()
     assert seen == ["Bearer abc"]
+
+
+@pytest.mark.parametrize(("scenario", "frozen"), [("happy", True), ("nope", False)])
+def test_serve_refuses_the_fake_runner_frozen_or_unknown(
+    monkeypatch: pytest.MonkeyPatch, home: Path, scenario: str, frozen: bool
+) -> None:
+    monkeypatch.setenv("SPOOLHQ_DEV_FAKE_RUNNER", scenario)
+    if frozen:
+        monkeypatch.setattr("sys.frozen", True, raising=False)
+    result = runner.invoke(app, ["serve"])
+    assert result.exit_code == 1
+    assert "error: SPOOLHQ_DEV_FAKE_RUNNER is for development only" in result.output
+    assert not home.exists()  # refused before anything starts
+
+
+def test_serve_logs_the_fake_runner_and_passes_its_agents(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from spoolhq.services.agents import FakeRunner
+
+    main = sys.modules["spoolhq.cli.main"]  # ``spoolhq.cli.main`` is also a function
+
+    monkeypatch.setenv("SPOOLHQ_DEV_FAKE_RUNNER", "gate-retry")
+    built: dict[str, object] = {}
+
+    def fake_create_app(settings: object, **kwargs: object) -> object:
+        built.update(kwargs)
+        raise SystemExit(0)  # stop before uvicorn starts
+
+    monkeypatch.setattr(main, "create_app", fake_create_app)
+    monkeypatch.setattr(main, "configure_logging", lambda *a, **k: Path("daemon.log"))
+    with caplog.at_level("WARNING", logger="spoolhq"):
+        result = runner.invoke(app, ["serve"])
+    assert result.exit_code == 0, result.output
+    assert built["fake_runner"] == "gate-retry"
+    assert isinstance(built["agents"].implementer, FakeRunner)  # type: ignore[attr-defined]
+    assert "Fake runner active: gate-retry" in caplog.messages

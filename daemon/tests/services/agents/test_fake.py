@@ -36,7 +36,7 @@ def test_replay_writes_the_file(worktree: Path, policy: AgentPolicy) -> None:
     assert len(raw) == len(SUCCESS.read_text(encoding="utf-8").splitlines())
 
 
-def test_writes_outside_the_worktree_are_skipped(
+def test_a_write_outside_the_worktree_is_refused_as_a_policy_error(
     tmp_path: Path, worktree: Path, policy: AgentPolicy
 ) -> None:
     transcript = tmp_path / "escape.jsonl"
@@ -47,6 +47,8 @@ def test_writes_outside_the_worktree_are_skipped(
     )
     assert not (tmp_path / "escape.txt").exists()
     assert result.files_changed == ()
+    assert result.outcome is Outcome.ERROR
+    assert result.error == "policy not enforced: write outside the worktree: ../escape.txt"
 
 
 def test_detect() -> None:
@@ -128,3 +130,33 @@ def test_read_only_init_with_edit_is_not_enforced(worktree: Path, home: Path) ->
     assert result.error is not None
     assert result.error.startswith("policy not enforced:")
     assert "Edit" in result.error
+
+
+def test_cycle_starts_the_sequence_again(worktree: Path, policy: AgentPolicy) -> None:
+    runner = FakeRunner([SUCCESS, SUCCESS], cycle=True)
+    for _ in range(3):
+        result = runner.run("x", policy, BUDGET, on_event=lambda e: None, cancel=threading.Event())
+        assert result.outcome is Outcome.COMPLETED
+    assert len(runner.calls) == 3
+
+
+def test_render_rewrites_the_transcript_from_the_prompt(
+    worktree: Path, policy: AgentPolicy
+) -> None:
+    def render(prompt: str, text: str) -> str:
+        return text.replace("hello from spoolhq", prompt)
+
+    FakeRunner(SUCCESS, render=render).run(
+        "rendered", policy, BUDGET, on_event=lambda e: None, cancel=threading.Event()
+    )
+    assert (worktree / "hello.txt").read_text(encoding="utf-8") == "rendered\n"
+
+
+def test_a_cancel_during_the_delay_stops_the_run(worktree: Path, policy: AgentPolicy) -> None:
+    cancel = threading.Event()
+    threading.Timer(0.05, cancel.set).start()
+    result = FakeRunner(SUCCESS, delay_s=5).run(
+        "x", policy, BUDGET, on_event=lambda e: None, cancel=cancel
+    )
+    assert result.outcome is Outcome.CANCELLED
+    assert not (worktree / "hello.txt").exists()

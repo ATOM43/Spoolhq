@@ -2336,6 +2336,17 @@
           },
           "graphify": {
             "$ref": "#/components/schemas/GraphifyView"
+          },
+          "fake_runner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fake Runner"
           }
         },
         "type": "object",

@@ -60,11 +60,15 @@ export function useRefreshSecrets() {
     ]);
 }
 
-/** A backend can run: a logged-in coding CLI, or a saved Anthropic API key. */
+/** A backend can run: a logged-in coding CLI, a saved Anthropic API key, or the dev
+ * fake runner. */
 export function backendReady(
   agents: Agents | undefined,
   settings: DaemonSettings | undefined,
 ): boolean {
+  if (agents?.fake_runner) {
+    return true;
+  }
   const cli = agents?.backends.some((b) => b.installed && b.logged_in) ?? false;
   return cli || (settings?.secrets.anthropic?.set ?? false);
 }

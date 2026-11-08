@@ -89,3 +89,19 @@ To test the Claude Code adapter itself, pass `fake_claude_cmd(scenario, record, 
 `FakeRunner([a, b])` replays `a` on the first run and `b` on the second (and raises on a third), so retries can be tested; `fake.calls` holds each run's prompt and policy. The reviewer's ticket, seeded diff and transcripts are in `tests/fixtures/review/` (`REVIEW_FIXTURES`).
 
 Four tests use the real `claude` CLI and a real model, all marked `real_agent`: `tests/services/agents/test_real_run.py` (one implementer run), `tests/services/review/test_real_run.py` (a review of the seeded diff), `tests/services/runloop/test_real_run.py` (a whole run of a tiny ticket, both roles) and `tests/services/planner/test_real_run.py` (a plan for a small CLI tool). They are skipped unless `SPOOLHQ_REAL_AGENT=1` and `claude auth status` is logged in; `SPOOLHQ_RECORD=1` also saves their anonymised streams to `tests/fixtures/agents/claude/recorded/real_run.jsonl` and `tests/fixtures/review/recorded/real_review.jsonl`. See [agents.md](agents.md#the-fake-runner).
+
+## Watching a run without a model
+
+`just dev-fake scenario=happy` runs `just dev` with `SPOOLHQ_DEV_FAKE_RUNNER=happy`. The daemon reads the variable once at start, logs `Fake runner active: happy`, and gives every role (planner, implementer, reviewer) a `FakeRunner` whatever `project.yaml` says. Messages are replayed about 0.5 s apart, so the Run tab plays the run live. `GET /api/agents` reports `fake_runner`, Settings → Agents shows "Fake runner (dev): <scenario>" and Home's top bar an amber **Fake runner** chip.
+
+| Scenario | What happens |
+| --- | --- |
+| `happy` | Implements, the gates pass, the reviewer approves, the ticket merges. |
+| `gate-retry` | The first attempt fails the test gate, the second passes, then it merges. |
+| `review-changes` | The reviewer requests changes once, then approves. |
+| `blocked` | The test gate fails on every attempt and the ticket blocks. |
+| `plan` | The planner returns a valid 3-ticket draft plan (every scenario plans this way). |
+
+The transcripts are in `daemon/src/spoolhq/devtools/scenarios/`. Implementers write `backend/tests/test_spoolhq_fake.py` (the built-in `fastapi-react` layout) through the fake runner's worktree check, so the project's real gates run on a real change; on another stack the test gate won't fail as `gate-retry` and `blocked` expect. The reviewer's verdict gets one item per "Done when" item from its prompt. Each role's transcripts cycle across tickets for as long as the daemon runs.
+
+The daemon refuses to start, with `SPOOLHQ_DEV_FAKE_RUNNER is for development only`, in a packaged build (`sys.frozen`) or for an unknown scenario.

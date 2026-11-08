@@ -49,3 +49,5 @@ class GraphifyView(BaseModel):
 class AgentsView(BaseModel):
     backends: list[BackendView]
     graphify: GraphifyView
+    fake_runner: str | None = None
+    """The ``SPOOLHQ_DEV_FAKE_RUNNER`` scenario every role replays, or None (development)."""

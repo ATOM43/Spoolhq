@@ -104,9 +104,17 @@ export function AgentsTab() {
       </div>
     );
   }
-  const { backends, graphify } = agents.data;
+  const { backends, graphify, fake_runner: fakeRunner } = agents.data;
   return (
     <div className="flex flex-col gap-4">
+      {fakeRunner ? (
+        <p
+          role="status"
+          className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm font-medium text-warning"
+        >
+          Fake runner (dev): {fakeRunner}
+        </p>
+      ) : null}
       {blocking ? (
         <p
           role="status"

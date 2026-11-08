@@ -44,6 +44,7 @@ def create_app(
     daemon_instance: str | None = None,
     agents: Agents | None = None,
     integrator: Integrator | None = None,
+    fake_runner: str | None = None,
 ) -> FastAPI:
     """Build the app. Without ``token``, the one in the home folder is used (or created).
 
@@ -59,6 +60,7 @@ def create_app(
     so does the poller of open GitHub pull requests (``app.state.github``, every 60 s).
     On shutdown the loop stops its agents and leaves their runs for the next startup's
     recovery. The caller must hold the daemon single-instance lock while it runs.
+    ``fake_runner`` names the dev scenario ``agents`` replay, for ``GET /api/agents``.
     """
     if token is None:
         token = load_or_create_token(ensure_home())
@@ -121,6 +123,7 @@ def create_app(
     )
     app.state.settings = settings
     app.state.token = token
+    app.state.fake_runner = fake_runner
     app.state.streams = events.EventStreams()
     errors.install(app)
     for module in (

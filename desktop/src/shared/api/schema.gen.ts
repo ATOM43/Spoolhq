@@ -693,6 +693,8 @@ export interface components {
             /** Backends */
             backends: components["schemas"]["BackendView"][];
             graphify: components["schemas"]["GraphifyView"];
+            /** Fake Runner */
+            fake_runner?: string | null;
         };
         /**
          * Artifact

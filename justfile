@@ -45,6 +45,15 @@ test:
 [parallel]
 dev: daemon desktop
 
+# No model: SPOOLHQ_DEV_FAKE_RUNNER (docs/testing.md) replays one scenario for every role.
+# `just dev` with the fake runner: happy, gate-retry, review-changes, blocked or plan.
+dev-fake scenario="happy":
+    just _dev-with-fake-runner {{ trim_start_match(scenario, "scenario=") }}
+
+# The `$` parameter is exported to `just dev` as the variable, under sh and PowerShell.
+_dev-with-fake-runner $SPOOLHQ_DEV_FAKE_RUNNER:
+    just dev
+
 # Start only the daemon on 127.0.0.1.
 daemon:
     uv run --directory daemon spool serve
