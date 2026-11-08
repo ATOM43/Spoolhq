@@ -304,7 +304,7 @@ def test_reject_without_a_note_is_422(run_client: TestClient, token: str) -> Non
 def test_the_detail_has_the_run_attempts_and_git(run_client: TestClient, token: str) -> None:
     url = "/api/projects/demo/tickets/T07"
     before = run_client.get(url, headers=auth(token)).json()
-    assert (before["run"], before["attempts"]) == (None, [])
+    assert (before["run"], before["attempts"], before["review_retries_left"]) == (None, [], None)
     assert before["git"]["branch"] is None and before["git"]["commit"] is None
     run_client.post("/api/projects/demo/run/next", headers=auth(token))
     follow(run_client, token)
@@ -313,6 +313,7 @@ def test_the_detail_has_the_run_attempts_and_git(run_client: TestClient, token: 
     assert detail["run"]["status"] == "done"
     assert [(a["number"], a["status"]) for a in detail["attempts"]] == [(1, "approved")]
     assert detail["attempts"][0]["run_id"] == detail["run"]["id"]
+    assert detail["review_retries_left"] == 2  # the default limit, none used
     git = detail["git"]
     assert len(git["commit"]) == 40 and git["tag"] == "ticket/T07"
     assert git["commit_url"] is None and git["pr_state"] is None

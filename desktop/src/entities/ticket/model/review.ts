@@ -1,20 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { api, body, DaemonError, queryKeys } from "@/shared/api";
+import { api, body, DaemonError, queryKeys, type Schemas } from "@/shared/api";
 
 /** One "Done when" item as the reviewer (or a gate) judged it. */
 export interface ItemVerdict {
-  item: string;
+  text: string;
   met: boolean;
   reason: string;
 }
 
-function verdicts(review: unknown): ItemVerdict[] | null {
-  if (typeof review !== "object" || review === null || !("items" in review)) {
-    return null; // a stopped review, or no review at all
-  }
-  const { items } = review;
-  return Array.isArray(items) ? (items as ItemVerdict[]) : null;
+/** A review that stopped early has no verdicts: an older attempt's count instead. */
+function verdicts(review: Schemas["ReviewReport"]): ItemVerdict[] | null {
+  return review.stopped == null ? review.items : null;
 }
 
 async function latestReview(
@@ -30,20 +27,11 @@ async function latestReview(
   for (const attempt of [...run.attempts].reverse()) {
     try {
       const review = await body(
-        api.GET(
-          "/api/projects/{name}/runs/{run_id}/attempts/{number}/{artifact}",
-          {
-            params: {
-              path: {
-                name: project,
-                run_id: runId,
-                number: attempt.number,
-                artifact: "review",
-              },
-            },
-            parseAs: "json",
+        api.GET("/api/projects/{name}/runs/{run_id}/attempts/{number}/review", {
+          params: {
+            path: { name: project, run_id: runId, number: attempt.number },
           },
-        ),
+        }),
       );
       const found = verdicts(review);
       if (found) {

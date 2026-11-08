@@ -5,8 +5,9 @@ attempts, its stored events and an attempt's files (token required). Thin: the w
 ``services.runloop.RunLoop``'s and ``services.runs``'.
 """
 
-from enum import StrEnum
-from typing import Annotated
+import json
+from pathlib import Path
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request, Security, status
 from fastapi.responses import FileResponse
@@ -24,28 +25,21 @@ from spoolhq.api.schemas.runs import (
     RunView,
 )
 from spoolhq.api.security import bearer_scheme
-from spoolhq.services.runloop import RunLoop
+from spoolhq.services.runloop import (
+    DiffReport,
+    GatesReport,
+    ReviewReport,
+    RunLoop,
+    diff_report,
+    gates_report,
+    review_report,
+)
 from spoolhq.services.runs import ArtifactName, attempt_dir, page_events, page_runs
 
 router = APIRouter(prefix="/api/projects/{name}", dependencies=[Security(bearer_scheme)])
 RunIdQuery = Annotated[
     int | None, Query(description="The run to act on (default: the project's current run).")
 ]
-
-
-class Artifact(StrEnum):
-    TRANSCRIPT = "transcript"
-    GATES = "gates"
-    DIFF = "diff"
-    REVIEW = "review"
-
-
-ARTIFACT_FILES = {
-    Artifact.TRANSCRIPT: (ArtifactName.TRANSCRIPT, "application/x-ndjson"),
-    Artifact.GATES: (ArtifactName.GATES, "application/json"),
-    Artifact.DIFF: (ArtifactName.DIFF, "text/x-diff; charset=utf-8"),
-    Artifact.REVIEW: (ArtifactName.REVIEW, "application/json"),
-}
 
 
 def _loop(request: Request) -> RunLoop:
@@ -178,25 +172,53 @@ def list_events(
     return EventList(items=items, next_after=page.next_after)
 
 
-@router.get(
-    "/runs/{run_id}/attempts/{number}/{artifact}",
-    response_class=FileResponse,
-    responses={200: {"content": {"application/octet-stream": {}}}},
-)
-def get_artifact(
-    name: ProjectName, run_id: int, number: int, artifact: Artifact, request: Request
-) -> FileResponse:
-    """One file of an attempt, as stored; 404 if the attempt has none."""
+def _artifact(request: Request, name: str, run_id: int, number: int, file: ArtifactName) -> Path:
+    """The attempt's file: 404 ``not_found`` for an unknown run or attempt, 404
+    ``not_ready`` while its step hasn't written it."""
     log = run_log(request, name)
-    missing = ApiError(404, "not_found", f"run {run_id} has no {artifact} for attempt {number}")
     try:
         attempt = next(a for a in log.list_attempts(run_id) if a.number == number)
         folder = attempt_dir(workspace(request, name), attempt)
     except (KeyError, StopIteration, ValueError) as exc:
-        raise missing from exc
-    file_name, media_type = ARTIFACT_FILES[artifact]
-    path = folder / file_name.value
+        raise ApiError(404, "not_found", f"run {run_id} has no attempt {number}") from exc
+    path = folder / file.value
     # Never follow a link out of the attempt folder.
     if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(folder):
-        raise missing
-    return FileResponse(path, media_type=media_type)
+        raise ApiError(404, "not_ready", f"attempt {number} has no {file.value} yet")
+    return path
+
+
+def _json(path: Path) -> dict[str, Any]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
+@router.get(
+    "/runs/{run_id}/attempts/{number}/transcript",
+    response_class=FileResponse,
+    responses={200: {"content": {"application/x-ndjson": {}}}},
+)
+def get_transcript(name: ProjectName, run_id: int, number: int, request: Request) -> FileResponse:
+    """The attempt's raw agent streams (``transcript.jsonl``), as stored."""
+    path = _artifact(request, name, run_id, number, ArtifactName.TRANSCRIPT)
+    return FileResponse(path, media_type="application/x-ndjson")
+
+
+@router.get("/runs/{run_id}/attempts/{number}/gates")
+def get_gates(name: ProjectName, run_id: int, number: int, request: Request) -> GatesReport:
+    """Each gate's state, duration and trimmed output, with its first failure line."""
+    return gates_report(_json(_artifact(request, name, run_id, number, ArtifactName.GATES)))
+
+
+@router.get("/runs/{run_id}/attempts/{number}/review")
+def get_review(name: ProjectName, run_id: int, number: int, request: Request) -> ReviewReport:
+    """The reviewer's verdict, summary and each "Done when" item, in the ticket's order."""
+    return review_report(_json(_artifact(request, name, run_id, number, ArtifactName.REVIEW)))
+
+
+@router.get("/runs/{run_id}/attempts/{number}/diff")
+def get_diff(name: ProjectName, run_id: int, number: int, request: Request) -> DiffReport:
+    """The attempt's committed diff by file; a patch over 2,000 lines is cut."""
+    path = _artifact(request, name, run_id, number, ArtifactName.DIFF)
+    # Bytes, so a CRLF file's \r survives (read_text would translate newlines).
+    return diff_report(path.read_bytes().decode("utf-8", errors="replace"))

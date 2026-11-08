@@ -376,3 +376,7 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 370 · The Run tab's live events · docs/decisions/desktop.md
 371 · Where the spec won over the V2 · Run tab, live PNG · docs/decisions/desktop.md
 372 · A dev-only fake runner, `SPOOLHQ_DEV_FAKE_RUNNER` · docs/decisions/agents.md
+373 · An attempt's reports are typed views over the stored files · docs/decisions/api.md
+374 · Each gate starting is a `step` event with the gates done so far · docs/decisions/runloop.md
+375 · The Run tab's Gates, Review and Diff panels · docs/decisions/desktop.md
+376 · Where the spec won over the V2 PNGs · docs/decisions/desktop.md

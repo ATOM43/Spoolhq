@@ -2,9 +2,11 @@
 export {
   useCurrentRun,
   useRun,
+  useRunLimits,
   type CurrentRun,
   type RunAttempt,
   type RunDetail,
+  type RunLimits,
 } from "./model/queries";
 export {
   mergeEvents,
@@ -12,3 +14,11 @@ export {
   useRunEvents,
   type RunEvent,
 } from "./model/events";
+export {
+  useArtifact,
+  type DiffFile,
+  type DiffReport,
+  type GateReport,
+  type GatesReport,
+  type ReviewReport,
+} from "./model/artifacts";

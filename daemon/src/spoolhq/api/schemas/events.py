@@ -108,10 +108,23 @@ class EventList(BaseModel):
     """Pass it as ``after`` for the next page; null on the last page."""
 
 
+class GateDoneData(_Data):
+    name: str
+    command: str
+    status: str
+    duration_ms: int
+
+
 class StepData(_Data):
     step: Literal["worktree", "implement", "gates", "review", "policy", "integrate"]
     state: Literal["running", "passed", "failed", "skipped"]
     attempt: int
+    gate: str | None = None
+    """The gates step only: the gate starting now (``install``, ``lint``, ``test``)."""
+    command: str | None = None
+    """With ``gate``: its command line."""
+    done: list[GateDoneData] | None = None
+    """With ``gate``: the gates finished so far, without their output."""
 
 
 class AgentMessageData(_Data):

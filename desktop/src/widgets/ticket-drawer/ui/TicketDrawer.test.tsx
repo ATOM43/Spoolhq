@@ -112,6 +112,27 @@ let state: {
   etags: Record<string, string>;
   active: boolean;
   ready: boolean;
+  /** Attempt reports by name; a missing one is 404 `not_ready`. */
+  reports: Partial<Record<"gates" | "review", unknown>>;
+};
+
+const gate = (name: string, state: string) => ({
+  name,
+  command: `just ${name}`,
+  state,
+  duration_ms: 1000,
+  output: "",
+  first_failure_line: null,
+  truncated: false,
+});
+const FAILED_GATES = {
+  passed: false,
+  stopped: null,
+  results: [
+    gate("install", "passed"),
+    gate("lint", "passed"),
+    gate("test", "failed"),
+  ],
 };
 
 function reset() {
@@ -133,6 +154,7 @@ function reset() {
         run: run("blocked", { reason: "gates failed after 2 retries" }),
         attempts: [attempt],
         git: { ...NO_GIT, branch: "feat/T04-x", commits: 2, diff_lines: 40 },
+        review_retries_left: 1,
       },
       T06: {
         run: run("awaiting_approval", {
@@ -165,6 +187,7 @@ function reset() {
     etags: {},
     active: false,
     ready: true,
+    reports: { gates: FAILED_GATES },
   };
 }
 
@@ -192,6 +215,18 @@ beforeEach(() => {
       }
       case "/api/projects/{name}/runs/{run_id}":
         return ok({ attempts: [] });
+      case "/api/projects/{name}/runs/{run_id}/attempts/{number}/gates":
+      case "/api/projects/{name}/runs/{run_id}/attempts/{number}/review": {
+        const report =
+          state.reports[path.endsWith("gates") ? "gates" : "review"];
+        return report === undefined
+          ? Promise.reject(apiError(404, "not ready", { code: "not_ready" }))
+          : ok(report);
+      }
+      case "/api/projects/{name}/settings":
+        return ok({
+          settings: { limits: { gate_retries: 3, review_retries: 2 } },
+        });
       case "/api/agents":
         return ok({
           backends: state.ready ? [{ installed: true, logged_in: true }] : [],
@@ -338,6 +373,18 @@ describe("note to the agent", () => {
     expect(
       dialog.getByRole("checkbox", { name: "Reset retry count" }),
     ).toBeChecked();
+    expect(
+      await dialog.findByText("Starts attempt 4 of 6 · 2 review retries left"),
+    ).toBeVisible();
+    await userEvent.click(
+      dialog.getByRole("checkbox", { name: "Reset retry count" }),
+    );
+    expect(
+      dialog.getByText("Starts attempt 4 of 6 · 1 review retry left"),
+    ).toBeVisible();
+    await userEvent.click(
+      dialog.getByRole("checkbox", { name: "Reset retry count" }),
+    );
     expect(
       dialog.getByRole("textbox", { name: "Note to the agent" }),
     ).toHaveAttribute("maxlength", "4000");
@@ -695,5 +742,62 @@ describe("editing", () => {
       screen.getByRole("button", { name: "Discard changes" }),
     );
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("gate and review lines", () => {
+  it("sums up a blocked attempt's gates, before any review", async () => {
+    const { drawer } = show("T04");
+    const needs = await drawer.findByText("Why it needs you");
+    const box = within(needs.parentElement as HTMLElement);
+    const checks = await box.findByRole("list", { name: "Attempt 3 checks" });
+    expect(
+      within(checks)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["Gates: 2 of 3 passed · test failed", "Review: not run"]);
+    // Next to the latest attempt too.
+    const attempts = drawer.getByRole("region", { name: "Attempts" });
+    expect(
+      await within(attempts).findByText("Gates: 2 of 3 passed · test failed"),
+    ).toBeInTheDocument();
+  });
+
+  it("sums up the reviewer's verdict with the items met", async () => {
+    state.reports = {
+      gates: {
+        passed: true,
+        stopped: null,
+        results: [
+          gate("install", "passed"),
+          gate("lint", "skipped"),
+          gate("test", "timed_out"),
+        ],
+      },
+      review: {
+        verdict: "changes_requested",
+        summary: "",
+        stopped: null,
+        items: [
+          { text: "a", met: true, reason: "" },
+          { text: "b", met: true, reason: "" },
+          { text: "c", met: true, reason: "" },
+          { text: "d", met: true, reason: "" },
+          { text: "e", met: false, reason: "" },
+        ],
+      },
+    };
+    const { drawer } = show("T06");
+    const checks = await drawer.findAllByRole("list", {
+      name: "Attempt 3 checks",
+    });
+    expect(
+      within(checks[0] as HTMLElement)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual([
+      "Gates: 1 of 2 passed · test timed out",
+      "Review: changes requested · 4 of 5 met",
+    ]);
   });
 });

@@ -1,5 +1,6 @@
 """The run endpoints: token, refusals, and a run through the API with fake agents."""
 
+import json
 import time
 from pathlib import Path
 from typing import Any
@@ -242,21 +243,26 @@ def test_attempt_artifacts(client: TestClient, token: str, workspace: Path, tmp_
     log = _log(client, workspace)
     run = log.start_run("T01")
     attempt = log.start_attempt(run.id, AttemptKind.INITIAL)
-    write_artifact(attempt, "diff.patch", "--- a\n+++ b\n")
+    patch = "diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-a\r\n+b\r\n"
+    write_artifact(attempt, "diff.patch", patch)
+    write_artifact(attempt, "transcript.jsonl", '{"type":"result"}\n')
     base = f"/api/projects/demo/runs/{run.id}/attempts/1"
 
     diff = client.get(f"{base}/diff", headers=auth(token))
-    assert (diff.status_code, diff.text) == (200, "--- a\n+++ b\n")
-    assert diff.headers["content-type"].startswith("text/x-diff")
-    assert client.get(f"{base}/review", headers=auth(token)).status_code == 404
-    assert (
-        client.get(
-            f"/api/projects/demo/runs/{run.id}/attempts/2/diff", headers=auth(token)
-        ).status_code
-        == 404
-    )
-    unknown = client.get(f"{base}/secrets", headers=auth(token))
-    assert (unknown.status_code, unknown.json()["error"]["field"]) == (422, "artifact")
+    assert diff.status_code == 200
+    (file,) = diff.json()["files"]
+    assert (file["path"], file["additions"], file["deletions"]) == ("x.py", 1, 1)
+    assert file["patch"] == "@@ -1 +1 @@\n-a\r\n+b\r"  # CRLF kept
+    transcript = client.get(f"{base}/transcript", headers=auth(token))
+    assert (transcript.status_code, transcript.text) == (200, '{"type":"result"}\n')
+
+    # The step hasn't written it yet, versus no such attempt.
+    for name in ("review", "gates"):
+        early = client.get(f"{base}/{name}", headers=auth(token))
+        assert (early.status_code, early.json()["error"]["code"]) == (404, "not_ready")
+    other = client.get(f"/api/projects/demo/runs/{run.id}/attempts/2/diff", headers=auth(token))
+    assert (other.status_code, other.json()["error"]["code"]) == (404, "not_found")
+    assert client.get(f"{base}/secrets", headers=auth(token)).status_code == 404
 
     outside = tmp_path / "outside.json"
     outside.write_text('{"secret": true}', encoding="utf-8")
@@ -268,6 +274,57 @@ def test_attempt_artifacts(client: TestClient, token: str, workspace: Path, tmp_
     linked = client.get(f"{base}/review", headers=auth(token))
     assert linked.status_code == 404
     assert "secret" not in linked.text
+
+
+def test_attempt_reports(client: TestClient, token: str, workspace: Path) -> None:
+    log = _log(client, workspace)
+    run = log.start_run("T01")
+    attempt = log.start_attempt(run.id, AttemptKind.INITIAL)
+    gates = {
+        "passed": False,
+        "results": [
+            {
+                "name": "lint",
+                "command": "just lint",
+                "status": "passed",
+                "duration_s": 1.25,
+                "excerpt": "",
+            },
+            {
+                "name": "test",
+                "command": "just test",
+                "status": "timed_out",
+                "duration_s": 900,
+                "excerpt": "collecting\nFAILED t.py::a",
+                "output_truncated": True,
+            },
+        ],
+    }
+    write_artifact(attempt, "gates.json", json.dumps(gates))
+    review = {
+        "verdict": "approve",
+        "summary": "ok",
+        "items": [
+            {"index": 2, "item": "B", "met": True, "reason": "b"},
+            {"index": 1, "item": "A", "met": False, "reason": "a"},
+        ],
+    }
+    write_artifact(attempt, "review.json", json.dumps(review))
+    base = f"/api/projects/demo/runs/{run.id}/attempts/1"
+
+    body = client.get(f"{base}/gates", headers=auth(token)).json()
+    assert body["results"][1] == {
+        "name": "test",
+        "command": "just test",
+        "state": "timed_out",
+        "duration_ms": 900_000,
+        "output": "collecting\nFAILED t.py::a",
+        "first_failure_line": 1,
+        "truncated": True,
+    }
+    assert body["results"][0]["duration_ms"] == 1250
+    items = client.get(f"{base}/review", headers=auth(token)).json()["items"]
+    assert [i["text"] for i in items] == ["A", "B"]
 
 
 def _wait_working(client: TestClient, token: str) -> None:

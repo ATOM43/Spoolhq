@@ -1,8 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import type { RunAttempt, RunDetail } from "@/entities/run";
-import { api, body } from "@/shared/api";
+import { useRunLimits, type RunAttempt, type RunDetail } from "@/entities/run";
 import { formatUsage } from "@/shared/lib";
 
 const BACKENDS: Record<string, string> = {
@@ -85,30 +83,9 @@ const RUN_OUTCOMES: Record<string, string> = {
 export const runOutcome = (status: string): string =>
   RUN_OUTCOMES[status] ?? status;
 
-/**
- * The most attempts a run gets: the first plus its gate and review retries
- * (`limits` in project.yaml, defaults 3 and 2); null until the settings load.
- */
+/** The most attempts a run gets (first plus retries); null until the settings load. */
 export function useMaxAttempts(project: string): number | null {
-  const settings = useQuery({
-    queryKey: ["project-settings", project],
-    queryFn: () =>
-      body(
-        api.GET("/api/projects/{name}/settings", {
-          params: { path: { name: project } },
-        }),
-      ),
-    retry: false,
-    staleTime: 60_000,
-  });
-  if (!settings.data) {
-    return null;
-  }
-  const limits = settings.data.settings.limits as
-    { gate_retries?: unknown; review_retries?: unknown } | undefined;
-  const count = (value: unknown, fallback: number) =>
-    typeof value === "number" ? value : fallback;
-  return 1 + count(limits?.gate_retries, 3) + count(limits?.review_retries, 2);
+  return useRunLimits(project)?.maxAttempts ?? null;
 }
 
 /** Whether a run has a result to show in place of the step indicator. */

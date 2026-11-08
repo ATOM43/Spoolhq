@@ -1802,11 +1802,11 @@
         }
       }
     },
-    "/api/projects/{name}/runs/{run_id}/attempts/{number}/{artifact}": {
+    "/api/projects/{name}/runs/{run_id}/attempts/{number}/transcript": {
       "get": {
-        "summary": "Get Artifact",
-        "description": "One file of an attempt, as stored; 404 if the attempt has none.",
-        "operationId": "get_artifact_api_projects__name__runs__run_id__attempts__number___artifact__get",
+        "summary": "Get Transcript",
+        "description": "The attempt's raw agent streams (``transcript.jsonl``), as stored.",
+        "operationId": "get_transcript_api_projects__name__runs__run_id__attempts__number__transcript_get",
         "security": [
           {
             "HTTPBearer": []
@@ -1842,13 +1842,67 @@
               "type": "integer",
               "title": "Number"
             }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/x-ndjson": {}
+            }
           },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{name}/runs/{run_id}/attempts/{number}/gates": {
+      "get": {
+        "summary": "Get Gates",
+        "description": "Each gate's state, duration and trimmed output, with its first failure line.",
+        "operationId": "get_gates_api_projects__name__runs__run_id__attempts__number__gates_get",
+        "security": [
           {
-            "name": "artifact",
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
             "in": "path",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/Artifact"
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Number"
             }
           }
         ],
@@ -1856,7 +1910,143 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/octet-stream": {}
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatesReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{name}/runs/{run_id}/attempts/{number}/review": {
+      "get": {
+        "summary": "Get Review",
+        "description": "The reviewer's verdict, summary and each \"Done when\" item, in the ticket's order.",
+        "operationId": "get_review_api_projects__name__runs__run_id__attempts__number__review_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{name}/runs/{run_id}/attempts/{number}/diff": {
+      "get": {
+        "summary": "Get Diff",
+        "description": "The attempt's committed diff by file; a patch over 2,000 lines is cut.",
+        "operationId": "get_diff_api_projects__name__runs__run_id__attempts__number__diff_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiffReport"
+                }
+              }
             }
           },
           "default": {
@@ -2356,16 +2546,6 @@
         ],
         "title": "AgentsView"
       },
-      "Artifact": {
-        "type": "string",
-        "enum": [
-          "transcript",
-          "gates",
-          "diff",
-          "review"
-        ],
-        "title": "Artifact"
-      },
       "AttemptView": {
         "properties": {
           "number": {
@@ -2828,6 +3008,88 @@
         ],
         "title": "DaemonSettings"
       },
+      "DiffFile": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "old_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Path"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "added",
+              "modified",
+              "deleted",
+              "renamed"
+            ],
+            "title": "Status"
+          },
+          "additions": {
+            "type": "integer",
+            "title": "Additions"
+          },
+          "deletions": {
+            "type": "integer",
+            "title": "Deletions"
+          },
+          "binary": {
+            "type": "boolean",
+            "title": "Binary"
+          },
+          "patch": {
+            "type": "string",
+            "title": "Patch"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "old_path",
+          "status",
+          "additions",
+          "deletions",
+          "binary",
+          "patch",
+          "truncated"
+        ],
+        "title": "DiffFile"
+      },
+      "DiffReport": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/DiffFile"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "truncated"
+        ],
+        "title": "DiffReport"
+      },
       "Discarded": {
         "properties": {
           "ticket_id": {
@@ -3003,6 +3265,95 @@
         ],
         "title": "EventList",
         "description": "``GET …/runs/{run_id}/events``: stored events, oldest first."
+      },
+      "GateReport": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "command": {
+            "type": "string",
+            "title": "Command"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "timed_out",
+              "skipped"
+            ],
+            "title": "State"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          },
+          "output": {
+            "type": "string",
+            "title": "Output"
+          },
+          "first_failure_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Failure Line"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "command",
+          "state",
+          "duration_ms",
+          "output",
+          "first_failure_line",
+          "truncated"
+        ],
+        "title": "GateReport"
+      },
+      "GatesReport": {
+        "properties": {
+          "passed": {
+            "type": "boolean",
+            "title": "Passed"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/GateReport"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "stopped": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "passed",
+          "results",
+          "stopped"
+        ],
+        "title": "GatesReport"
       },
       "GeneratePlan": {
         "properties": {
@@ -3735,6 +4086,79 @@
           "note"
         ],
         "title": "Reject"
+      },
+      "ReviewItem": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "met": {
+            "type": "boolean",
+            "title": "Met"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "met",
+          "reason"
+        ],
+        "title": "ReviewItem"
+      },
+      "ReviewReport": {
+        "properties": {
+          "verdict": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "approve",
+                  "changes_requested",
+                  "needs_human"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "stopped": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "verdict",
+          "items",
+          "summary",
+          "stopped"
+        ],
+        "title": "ReviewReport"
       },
       "RollbackView": {
         "properties": {
@@ -4550,6 +4974,17 @@
           },
           "git": {
             "$ref": "#/components/schemas/TicketGitView"
+          },
+          "review_retries_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Retries Left"
           }
         },
         "type": "object",
@@ -5178,6 +5613,35 @@
         "title": "PolicyDecisionData",
         "type": "object"
       },
+      "GateDoneData": {
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "command",
+          "status",
+          "duration_ms"
+        ],
+        "title": "GateDoneData",
+        "type": "object"
+      },
       "StepData": {
         "additionalProperties": true,
         "properties": {
@@ -5206,6 +5670,45 @@
           "attempt": {
             "title": "Attempt",
             "type": "integer"
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Gate"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Command"
+          },
+          "done": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GateDoneData"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Done"
           }
         },
         "required": [

@@ -11,6 +11,7 @@ import { formatTime, formatUsage, timeAgo } from "@/shared/lib";
 import { Button, CopyButton } from "@/shared/ui";
 
 import { attemptSummary, lastAttempt } from "../model/summary";
+import { AttemptChecks } from "./AttemptChecks";
 
 /** Loading and error states for the sections that read the ticket's detail. */
 export function DetailState({
@@ -50,10 +51,12 @@ export function DetailState({
 
 /** Section 1: why a blocked or waiting ticket needs a person. */
 export function NeedsYouSection({
+  project,
   ticket,
   detail,
   onShowRun,
 }: {
+  project: string;
   ticket: Ticket;
   detail: TicketDetail;
   onShowRun: (attempt?: number) => void;
@@ -107,6 +110,7 @@ export function NeedsYouSection({
           ) : null}
         </>
       )}
+      {attempt ? <AttemptChecks project={project} attempt={attempt} /> : null}
       {attempt ? (
         <Button
           variant="link"
@@ -150,9 +154,11 @@ function duration(start: string, end: string | null | undefined): string {
 
 /** Section 6: every attempt; a row opens it in the Run tab. */
 export function AttemptsSection({
+  project,
   attempts,
   onShowRun,
 }: {
+  project: string;
   attempts: readonly TicketAttempt[];
   onShowRun: (attempt?: number) => void;
 }) {
@@ -161,7 +167,7 @@ export function AttemptsSection({
   }
   return (
     <ul className="flex flex-col divide-y rounded-md border text-sm">
-      {[...attempts].reverse().map((a) => (
+      {[...attempts].reverse().map((a, index) => (
         <li key={a.number}>
           <button
             type="button"
@@ -186,6 +192,11 @@ export function AttemptsSection({
               ) ?? "No usage"}
             </span>
           </button>
+          {index === 0 && a.status !== "running" ? (
+            <div className="px-3 pb-2 pl-[4.25rem]">
+              <AttemptChecks project={project} attempt={a} />
+            </div>
+          ) : null}
         </li>
       ))}
     </ul>

@@ -7,7 +7,8 @@ from typing import Literal
 from spoolhq.services.git import GitError, github_repo, ticket_branch
 from spoolhq.services.projects import Project
 from spoolhq.services.runloop.integration import tag_name
-from spoolhq.services.runs import Attempt, Run, RunLog, RunStatus, ticket_merge
+from spoolhq.services.runloop.machine import retries_used
+from spoolhq.services.runs import Attempt, AttemptKind, Run, RunLog, RunStatus, ticket_merge
 
 PrState = Literal["open", "merged", "closed"]
 
@@ -39,6 +40,9 @@ class TicketRuns:
     attempts: list[Attempt]
     """Every attempt of the ticket, oldest first."""
     git: TicketGit
+    review_retries_left: int | None = None
+    """The latest run's review retries left (``limits.review_retries`` minus those used
+    since its last reset); None without a run."""
 
 
 def _pr_state(run: Run | None) -> PrState | None:
@@ -63,8 +67,13 @@ def ticket_runs(
     commit = merged.commit_sha if merged else None
     remote = project.git.remote
     url = f"https://github.com/{github_repo(remote)}/commit/{commit}" if remote and commit else None
+    left = None
+    if latest is not None:
+        used = retries_used(run_log, latest.id, AttemptKind.REVIEW_RETRY)
+        left = max(project.limits.review_retries - used, 0)
     return TicketRuns(
         run=latest,
+        review_retries_left=left,
         attempts=attempts,
         git=TicketGit(
             branch=branch[0] if branch else None,

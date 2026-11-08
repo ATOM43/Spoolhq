@@ -223,17 +223,20 @@ describe("ticket drawer", () => {
           });
         case "/api/projects/{name}/runs/{run_id}":
           return ok({ attempts: [{ number: 3 }, { number: 4 }] });
-        case "/api/projects/{name}/runs/{run_id}/attempts/{number}/{artifact}": {
+        case "/api/projects/{name}/runs/{run_id}/attempts/{number}/review": {
           const { number } = (init as { params: { path: { number: number } } })
             .params.path;
           // The newest attempt stopped before review; the one before has items.
           return number === 4
             ? notFound()
             : ok({
+                verdict: "changes_requested",
+                summary: "",
+                stopped: null,
                 items: [
-                  { item: "Migrations run", met: true, reason: "ok" },
+                  { text: "Migrations run", met: true, reason: "ok" },
                   {
-                    item: "Rollback works",
+                    text: "Rollback works",
                     met: false,
                     reason: "no down step",
                   },

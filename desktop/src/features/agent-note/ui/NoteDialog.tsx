@@ -1,6 +1,8 @@
 import { Play } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 
+import { useRunLimits } from "@/entities/run";
+import { useTicketDetail } from "@/entities/ticket";
 import {
   Button,
   describedBy,
@@ -10,6 +12,7 @@ import {
   Textarea,
 } from "@/shared/ui";
 
+import { nextAttemptLine } from "../model/counter";
 import { NOTE_MAX, useSendNote, type NoteKind } from "../model/send";
 
 /**
@@ -39,6 +42,11 @@ export function NoteDialog({
   const [note, setNote] = useState("");
   const [reset, setReset] = useState(true);
   const send = useSendNote(project, ticketId);
+  const counter = nextAttemptLine(
+    useTicketDetail(project, ticketId).data?.ticket,
+    useRunLimits(project),
+    kind === "unblock" && reset,
+  );
   const close = () => {
     send.reset();
     onClose();
@@ -116,7 +124,10 @@ export function NoteDialog({
             Couldn't start the attempt: {send.error.message}
           </p>
         ) : null}
-        <div className="flex justify-end gap-2 border-t pt-4">
+        <div className="flex items-center justify-end gap-2 border-t pt-4">
+          {counter ? (
+            <p className="mr-auto text-xs text-ink-muted">{counter}</p>
+          ) : null}
           <Button type="button" variant="outline" onClick={close}>
             Cancel
           </Button>

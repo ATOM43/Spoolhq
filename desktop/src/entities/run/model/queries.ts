@@ -35,3 +35,39 @@ export function useRun(project: string, runId: number | null) {
     retry: false,
   });
 }
+
+export interface RunLimits {
+  gateRetries: number;
+  reviewRetries: number;
+  /** The first attempt plus both kinds of retries: the most a run takes. */
+  maxAttempts: number;
+}
+
+/** `limits` from project.yaml (defaults 3 and 2); null until the settings load. */
+export function useRunLimits(project: string): RunLimits | null {
+  const settings = useQuery({
+    queryKey: ["project-settings", project],
+    queryFn: () =>
+      body(
+        api.GET("/api/projects/{name}/settings", {
+          params: { path: { name: project } },
+        }),
+      ),
+    retry: false,
+    staleTime: 60_000,
+  });
+  if (!settings.data) {
+    return null;
+  }
+  const limits = settings.data.settings.limits as
+    { gate_retries?: unknown; review_retries?: unknown } | undefined;
+  const count = (value: unknown, fallback: number) =>
+    typeof value === "number" ? value : fallback;
+  const gateRetries = count(limits?.gate_retries, 3);
+  const reviewRetries = count(limits?.review_retries, 2);
+  return {
+    gateRetries,
+    reviewRetries,
+    maxAttempts: 1 + gateRetries + reviewRetries,
+  };
+}

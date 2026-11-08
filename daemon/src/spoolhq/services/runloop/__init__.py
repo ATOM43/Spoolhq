@@ -9,6 +9,14 @@ the one service that imports the others; no service imports it. See ``docs/run-l
 """
 
 from spoolhq.services.runloop.approval import approve, reject, unblock
+from spoolhq.services.runloop.artifacts import (
+    DiffReport,
+    GatesReport,
+    ReviewReport,
+    diff_report,
+    gates_report,
+    review_report,
+)
 from spoolhq.services.runloop.delivery import Delivery
 from spoolhq.services.runloop.details import TicketGit, TicketRuns, ticket_runs
 from spoolhq.services.runloop.integration import LocalIntegrator, recover_integrations
@@ -48,6 +56,12 @@ from spoolhq.services.runloop.polling import GitHubPoller
 from spoolhq.services.runloop.resume import RESUME_DELAY, ResumeTimer
 
 __all__ = [
+    "DiffReport",
+    "GatesReport",
+    "ReviewReport",
+    "diff_report",
+    "gates_report",
+    "review_report",
     "RESUME_DELAY",
     "RUN_LOCK",
     "Agents",

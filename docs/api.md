@@ -34,7 +34,8 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/projects/{name}/runs?cursor=&limit=` | the run history, [paged](#paged-run-history) |
 | `GET /api/projects/{name}/runs/{run_id}` | one run with its `attempts` (number, kind, status — the verdict —, backend, tokens, times) |
 | `GET /api/projects/{name}/runs/{run_id}/events?attempt=&after=&limit=` | the run's stored events, [paged](#run-events), oldest first |
-| `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/{artifact}` | an attempt's file as stored; `artifact` is `transcript`, `gates`, `diff` or `review` (422 for anything else) |
+| `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/gates`, `/review`, `/diff` | an attempt's [reports](#attempt-reports) as typed JSON |
+| `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/transcript` | the attempt's raw agent streams (`transcript.jsonl`, NDJSON) as stored |
 | `POST /api/projects/{name}/github/sync` | check open pull requests now |
 | `GET /api/templates` | the built-in templates: `name` (what `POST /api/projects` takes as `template`), `description`, `summary` (one line of at most 120 characters, for a card; null if the template has none) and `commands` (`install`, `lint`, `test` from its `spoolhq-template.yaml`, which the New project dialog pre-fills) |
 | `GET /api/agents` | what `spool agents` shows: each backend (installed, version, login, policy parts) and Graphify |
@@ -43,7 +44,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `POST /api/settings/secrets/{name}/test` | [try the stored secret](#testing-a-secret) against its provider: `{"ok", "message"}` |
 | `WS /api/projects/{name}/events?since=` | [live events](#event-websocket) |
 
-An artifact is read from the attempt folder the run log names, by a fixed file name per `artifact`; the folder must resolve inside the workspace's `runs/`, and the file must not be a symlink and must resolve inside the folder, else 404.
+An attempt's file is read from the attempt folder the run log names, by a fixed file name; the folder must resolve inside the workspace's `runs/`, and the file must not be a symlink and must resolve inside the folder. An unknown run or attempt is 404 `not_found`; a file the attempt's step hasn't written yet (or never will: no review after failed gates) is 404 `not_ready`.
 
 A secret's value is write-only: it goes to the OS keychain (service `spoolhq`, through `keyring`) and is never returned, logged or written to a file. An environment variable (`ANTHROPIC_API_KEY`, `SPOOLHQ_GITHUB_TOKEN`, `SPOOLHQ_CLICKUP_TOKEN`) wins over the keychain, as it does where the secret is used. Without a usable keychain the answer is 409 `keychain_unavailable`.
 
@@ -174,6 +175,17 @@ A ticket can be edited while it is `draft`, `ready` or `blocked`; while it is `r
 | `git.commit`, `git.commit_url`, `git.tag` | the squash commit on the default branch once merged, that commit on GitHub (with a GitHub remote) and the `ticket/<id>` tag |
 | `git.pr_number`, `git.pr_url`, `git.pr_state` | the latest run's pull request; `pr_state` is `open` (waiting), `merged` or `closed` |
 | `git.pr_checked_at` | when this daemon last checked the project's open pull requests (null before the first check since it started) |
+| `review_retries_left` | the latest run's review retries left: `limits.review_retries` minus those used since its last reset (null without a run) |
+
+## Attempt reports
+
+The files the run loop writes (`gates.json`, `review.json`, `diff.patch`) stay as they are; these routes reshape them. All text in them is untrusted.
+
+`…/gates` (written when the gates step ends, rewritten when the gates rerun on merged code): `{"passed", "results": [...], "stopped"}`. One result per command, in run order: `name` (`install`, `lint`, `test`), `command`, `state` (`passed`, `failed`, `timed_out`, `skipped`; a program that couldn't start is `failed`), `duration_ms`, `output` (the trimmed output of a gate that didn't pass, at most 8,000 characters; empty when it passed), `first_failure_line` (index of the first failure line in `output`'s lines, or null), `truncated` (lines were cut from `output`, or the log hit its 20 MB cap). `stopped` is the implementer's outcome (`max_turns`, `timed_out`, `budget_exhausted`) when it stopped early and no gate ran; `results` is then empty.
+
+`…/review` (written when the reviewer finishes): `{"verdict", "items": [...], "summary", "stopped"}`. `verdict` is `approve`, `changes_requested` or `needs_human`, null when the reviewer didn't finish (`stopped` says why). `items` are the ticket's "Done when" items in order: `text`, `met`, `reason` (the reviewer's, or the gates' for an item they check).
+
+`…/diff` (written at each attempt's commit; `git diff <base>...HEAD`): `{"files": [...], "truncated"}`. One entry per file in diff order: `path`, `old_path` (before a rename, else null), `status` (`added`, `modified`, `deleted`, `renamed`), `additions`, `deletions`, `binary`, `patch` (the hunks from the first `@@` line; empty for a binary or mode-only change) and `truncated`. A patch over 2,000 lines is cut there with `truncated: true` (the counts are the whole file's); the top-level `truncated` is true when any file was cut. Paths are unquoted from git's C-style quoting.
 
 ## Paged run history
 
@@ -188,7 +200,7 @@ What a run records, by `type` (the `data` models are in the OpenAPI components):
 | Type | `data` | |
 | --- | --- | --- |
 | `run.started`, `run.status`, `run.interrupted`, `run.phase` | `RunStartedData`, `RunStatusData` (`from`, `to`, `reason`, `reset_at`), `RunInterruptedData`, `RunPhaseData` (`phase`, `text`) | the run itself; `run.phase` is the line `spool run` prints |
-| `step` | `StepData`: `step` (`worktree`, `implement`, `gates`, `review`, `policy`, `integrate`), `state` (`running`, `passed`, `failed`, `skipped`), `attempt` | each step starting and ending; a retry starts again at `implement` with the next attempt number |
+| `step` | `StepData`: `step` (`worktree`, `implement`, `gates`, `review`, `policy`, `integrate`), `state` (`running`, `passed`, `failed`, `skipped`), `attempt`; while the gates run, `gate`, `command` and `done` (the gates finished so far: `name`, `command`, `status`, `duration_ms`) | each step starting and ending, and each gate starting (another `gates` `running` event); a retry starts again at `implement` with the next attempt number |
 | `attempt.started`, `attempt.finished` | `AttemptStartedData` (`number`, `kind`, `backend`, `model`), `AttemptFinishedData` (`number`, `status`) | |
 | `agent.message` | `text` (at most 20,000 characters) | the implementer's text |
 | `agent.tool_call`, `agent.tool_result` | `id`, `name`, `input_summary` (JSON, cut to 2,000 characters); `id`, `text` (the first 200 lines), `lines` (how many it had), `is_error` | a result answers the call with the same `id`; the time between them is the call's duration |

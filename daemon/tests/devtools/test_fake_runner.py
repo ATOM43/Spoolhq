@@ -10,12 +10,14 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
 
 from spoolhq.api import create_app
 from spoolhq.core.config import load_settings
 from spoolhq.devtools import SCENARIOS, dev_agents, fake_runner
 from spoolhq.devtools.fake_runner import fill_verdict
 from spoolhq.services.projects import load_project, save_project
+from spoolhq.services.runloop import DiffReport, GatesReport, ReviewReport
 
 ClientFactory = Callable[[str], TestClient]
 
@@ -81,6 +83,43 @@ def test_scenarios_that_merge(
         assert "test_fake_runner_review_fix" in merged
         reviewer = client.app.state.runloop.agents.reviewer  # type: ignore[attr-defined]
         assert len(reviewer.calls) == 2
+    _check_reports(client, token, current["run"]["id"], scenario)
+    ticket = client.get(
+        f"/api/projects/demo/tickets/{current['run']['ticket_id']}", headers=auth(token)
+    )
+    assert ticket.json()["review_retries_left"] == (1 if scenario == "review-changes" else 2)
+
+
+def _check_reports(client: TestClient, token: str, run_id: int, scenario: str) -> None:
+    """Each attempt's reports match their schemas; the first attempt's say why it retried."""
+    base = f"/api/projects/demo/runs/{run_id}/attempts"
+    first = {
+        name: client.get(f"{base}/1/{name}", headers=auth(token)) for name in ("gates", "diff")
+    }
+    gates = TypeAdapter(GatesReport).validate_python(first["gates"].json())
+    diff = TypeAdapter(DiffReport).validate_python(first["diff"].json())
+    assert [f.path for f in diff.files] == ["backend/tests/test_spoolhq_fake.py"]
+    assert diff.files[0].status == "added" and diff.files[0].additions > 0
+    test = next(r for r in gates.results if r.name == "test")
+    if scenario == "gate-retry":
+        assert test.state == "failed" and test.first_failure_line is not None
+        assert "test_spoolhq_fake" in test.output.split("\n")[test.first_failure_line]
+        missing = client.get(f"{base}/1/review", headers=auth(token))
+        assert (missing.status_code, missing.json()["error"]["code"]) == (404, "not_ready")
+    else:
+        assert test.state == "passed" and test.duration_ms > 0
+        review = TypeAdapter(ReviewReport).validate_python(
+            client.get(f"{base}/1/review", headers=auth(token)).json()
+        )
+        verdict = "changes_requested" if scenario == "review-changes" else "approve"
+        assert review.verdict == verdict and review.items
+    events = client.get(f"/api/projects/demo/runs/{run_id}/events?attempt=1", headers=auth(token))
+    started = [
+        e["data"] for e in events.json()["items"] if e["type"] == "step" and e["data"].get("gate")
+    ]
+    assert [d["gate"] for d in started] == ["install", "lint", "test"]
+    assert [d["name"] for d in started[-1]["done"]] == ["install", "lint"]
+    assert "pytest" in started[-1]["command"]
 
 
 @pytest.mark.integration

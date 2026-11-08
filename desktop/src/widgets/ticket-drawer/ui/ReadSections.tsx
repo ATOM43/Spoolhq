@@ -47,7 +47,7 @@ export function ReadSections({
   const review = useLatestReview(project, ticket.activity?.run_id ?? null);
   // Matched by text, so an item edited after the review shows as not reviewed yet.
   const verdicts = new Map<string, ItemVerdict>(
-    (review.data ?? []).map((v) => [v.item, v]),
+    (review.data ?? []).map((v) => [v.text, v]),
   );
   const statusOf = new Map(all.map((t) => [t.id, t.meta.status]));
   const dependsOn = ticket.meta.depends_on ?? [];

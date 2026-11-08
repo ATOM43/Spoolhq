@@ -79,6 +79,8 @@ class TicketDetail(TicketView):
     attempts: list[TicketAttemptView]
     """Every attempt of the ticket, oldest first."""
     git: TicketGitView
+    review_retries_left: int | None = None
+    """The latest run's review retries left, for "1 review retry left"."""
 
     @classmethod
     def of_runs(cls, view: TicketView, runs: TicketRuns) -> "TicketDetail":
@@ -90,6 +92,7 @@ class TicketDetail(TicketView):
                 for a in runs.attempts
             ],
             git=TicketGitView(**asdict(runs.git)),
+            review_retries_left=runs.review_retries_left,
         )
 
 

@@ -563,7 +563,9 @@ describe("Run tab, no active run", () => {
     show(READY, 2);
     const shown = await screen.findByRole("region", { name: "Attempt 2" });
     expect(within(shown).getByText("Gates failed")).toBeInTheDocument();
-    expect(screen.getByText("Full replay comes in T40.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Full replay of the transcript comes in T40."),
+    ).toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "Show current run" }),
     );

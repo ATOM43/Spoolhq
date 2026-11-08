@@ -6,7 +6,7 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 from pathlib import Path
 
@@ -38,9 +38,11 @@ def run_gates(
     log_dir: Path,
     *,
     cap_bytes: int = OUTPUT_CAP_BYTES,
+    on_gate: Callable[[GateName, tuple[GateResult, ...]], None] | None = None,
 ) -> GateRun:
     """Run install, lint and test in ``worktree``; each gate's output goes to
-    ``<log_dir>/<gate>.log``.
+    ``<log_dir>/<gate>.log``. ``on_gate(name, done)`` is called before each gate that
+    runs, with the results so far.
 
     If install doesn't pass, lint and test are skipped. Lint and test both run even
     if lint fails, so one retry sees every error. A command that isn't set is skipped.
@@ -54,6 +56,8 @@ def run_gates(
         if not command or install_failed:
             results.append(_not_run(name, command, GateStatus.SKIPPED, ""))
             continue
+        if on_gate is not None:
+            on_gate(name, tuple(results))
         results.append(
             _run_gate(
                 name,
@@ -146,11 +150,13 @@ def _run_gate(
     else:
         status = GateStatus.FAILED
     excerpt = ""
+    trimmed = False
     tests: tuple[str, ...] = ()
     if status is not GateStatus.PASSED:
         # The log is at most the cap (20 MB) plus the cut line.
         output = clean(log_path.read_bytes().decode("utf-8", errors="replace"))
         excerpt, tests = build_excerpt(output), failing_tests(output)
+        trimmed = excerpt != output
     return GateResult(
         name=name,
         command=command,
@@ -162,6 +168,7 @@ def _run_gate(
         output_lines=result.output_lines,
         output_truncated=result.output_truncated,
         log_path=log_path,
+        excerpt_trimmed=trimmed,
     )
 
 

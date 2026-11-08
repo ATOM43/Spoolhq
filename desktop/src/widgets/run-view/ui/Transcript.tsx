@@ -2,7 +2,6 @@ import {
   ArrowDown,
   ChevronDown,
   ChevronRight,
-  FilePen,
   FileText,
   Info,
   LoaderCircle,
@@ -11,10 +10,12 @@ import {
 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 
+import type { DiffReport } from "@/entities/run";
 import { cn } from "@/shared/lib";
 import { Button, Markdown } from "@/shared/ui";
 
 import type { Row } from "../model/transcript";
+import { EditRow } from "./EditRow";
 
 /** Rows rendered at once; **Show earlier** adds this many. No virtualising library. */
 export const PAGE_ROWS = 500;
@@ -27,7 +28,16 @@ const NEAR_END_PX = 40;
  * safe `Markdown` (no HTML, links inert), tool output is plain monospace text.
  * Follows new rows while scrolled to the end; scrolled up, a "Jump to latest" pill.
  */
-export function Transcript({ rows }: { rows: readonly Row[] }) {
+export function Transcript({
+  rows,
+  diff,
+  onOpenDiff,
+}: {
+  rows: readonly Row[];
+  /** The attempt's diff, for the edit rows' mini diffs; null/undefined until written. */
+  diff: DiffReport | null | undefined;
+  onOpenDiff: (path: string) => void;
+}) {
   const scroller = useRef<HTMLDivElement>(null);
   const [atEnd, setAtEnd] = useState(true);
   const [shown, setShown] = useState(PAGE_ROWS);
@@ -86,6 +96,8 @@ export function Transcript({ rows }: { rows: readonly Row[] }) {
           <RowView
             key={row.seq}
             row={row}
+            diff={diff}
+            onOpenDiff={onOpenDiff}
             open={open.has(row.seq)}
             onToggle={() => {
               setOpen((previous) => {
@@ -121,10 +133,14 @@ function RowView({
   row,
   open,
   onToggle,
+  diff,
+  onOpenDiff,
 }: {
   row: Row;
   open: boolean;
   onToggle: () => void;
+  diff: DiffReport | null | undefined;
+  onOpenDiff: (path: string) => void;
 }) {
   switch (row.kind) {
     case "message":
@@ -148,21 +164,13 @@ function RowView({
       );
     case "edit":
       return (
-        <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-          <FilePen aria-hidden className="size-4 shrink-0 text-ink-muted" />
-          <span className="text-ink-muted">Edited</span>
-          <code className="min-w-0 flex-1 truncate font-mono text-xs">
-            {row.path}
-          </code>
-          {row.added !== null ? (
-            <span className="font-mono text-xs text-success">+{row.added}</span>
-          ) : null}
-          {row.removed !== null ? (
-            <span className="font-mono text-xs text-danger">
-              −{row.removed}
-            </span>
-          ) : null}
-        </div>
+        <EditRow
+          row={row}
+          open={open}
+          onToggle={onToggle}
+          diff={diff}
+          onOpenDiff={onOpenDiff}
+        />
       );
     case "note":
       return (

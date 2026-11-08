@@ -18,7 +18,8 @@ import { formatTime, timeAgo } from "@/shared/lib";
 import { Button, EmptyState } from "@/shared/ui";
 
 import { attemptOutcome, runOutcome } from "../model/format";
-import { Failed } from "./RunView";
+import { AttemptDetails } from "./Details";
+import { Failed } from "./Failed";
 
 const ICONS: Record<string, { icon: LucideIcon; tone: string }> = {
   done: { icon: CircleCheck, tone: "text-success" },
@@ -163,10 +164,21 @@ export function FinishedAttempt({
           </span>
         )}
       </section>
-      <p className="text-sm text-ink-muted">Full replay comes in T40.</p>
+      <p className="text-sm text-ink-muted">
+        Full replay of the transcript comes in T40.
+      </p>
       <Button variant="outline" size="sm" onClick={onShowCurrent}>
         Show current run
       </Button>
+      {found ? (
+        <div className="flex w-full max-w-3xl">
+          <AttemptDetails
+            project={project}
+            runId={found.run_id}
+            attempt={attempt}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

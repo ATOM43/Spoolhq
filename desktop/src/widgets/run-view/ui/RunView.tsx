@@ -1,9 +1,13 @@
-import { Clock, LoaderCircle, RotateCw } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { Clock, LoaderCircle } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
 
-import { useRun, useRunEvents, type RunDetail } from "@/entities/run";
+import {
+  useArtifact,
+  useRun,
+  useRunEvents,
+  type RunDetail,
+} from "@/entities/run";
 import { TicketChip, useTickets } from "@/entities/ticket";
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui";
 
 import {
   attemptsUsage,
@@ -13,7 +17,10 @@ import {
   useMaxAttempts,
   useNow,
 } from "../model/format";
+import { liveDetails } from "../model/details";
 import { mergedCommit, stepStates, toRows } from "../model/transcript";
+import { Details, type DetailsTab } from "./Details";
+import { Failed } from "./Failed";
 import { ResultPanel } from "./ResultPanel";
 import { StepIndicator } from "./Steps";
 import { Transcript } from "./Transcript";
@@ -74,6 +81,14 @@ function Live({
   });
   const rows = useMemo(() => toRows(events), [events]);
   const steps = useMemo(() => stepStates(events), [events]);
+  const live = useMemo(() => liveDetails(events), [events]);
+  const [tab, setTab] = useState<DetailsTab>("gates");
+  const [file, setFile] = useState<string | null>(null);
+  const diff = useArtifact("diff", project, run.id, attempt, live.stamps.diff);
+  const openDiff = (path: string) => {
+    setFile(path);
+    setTab("diff");
+  };
   const now = useNow(!ended);
   const max = useMaxAttempts(project);
   const title = useTickets(project).data?.tickets.find(
@@ -157,53 +172,24 @@ function Live({
             <Transcript
               key={`${String(run.id)}-${String(attempt)}`}
               rows={rows}
+              diff={diff.data}
+              onOpenDiff={openDiff}
             />
           )}
         </section>
-        <Details />
+        <Details
+          project={project}
+          runId={run.id}
+          attempt={attempt}
+          live={live}
+          ended={ended || (shown?.ended_at != null && shown.number === attempt)}
+          diff={diff}
+          tab={tab}
+          onTab={setTab}
+          file={file}
+          onFile={setFile}
+        />
       </div>
-    </div>
-  );
-}
-
-/** Gates, Review and Diff arrive in T39; the labels are here so the layout is final. */
-function Details() {
-  return (
-    <section aria-label="Details" className="basis-2/5 p-4">
-      <Tabs defaultValue="gates" className="gap-3">
-        <TabsList>
-          <TabsTrigger value="gates">Gates</TabsTrigger>
-          <TabsTrigger value="review">Review</TabsTrigger>
-          <TabsTrigger value="diff">Diff</TabsTrigger>
-        </TabsList>
-        {["gates", "review", "diff"].map((tab) => (
-          <TabsContent key={tab} value={tab}>
-            <p className="text-sm text-ink-muted">Details come in T39.</p>
-          </TabsContent>
-        ))}
-      </Tabs>
-    </section>
-  );
-}
-
-export function Failed({
-  what,
-  message,
-  onRetry,
-}: {
-  what: string;
-  message: string;
-  onRetry: () => void;
-}) {
-  return (
-    <div role="alert" className="flex flex-col items-start gap-2 p-6 text-sm">
-      <p className="text-danger">
-        Couldn't load {what}: {message}
-      </p>
-      <Button variant="outline" size="sm" onClick={onRetry}>
-        <RotateCw aria-hidden />
-        Retry
-      </Button>
     </div>
   );
 }

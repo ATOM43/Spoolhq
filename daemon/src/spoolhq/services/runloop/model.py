@@ -7,11 +7,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 from spoolhq.core.daemon_lock import DaemonLock
 from spoolhq.services.agents import AgentRunner
-from spoolhq.services.gates import GateRun
+from spoolhq.services.gates import GateResult, GateRun
 from spoolhq.services.git import GitError, Worktree, WorktreeManager
 from spoolhq.services.projects import Agents as AgentSettings
 from spoolhq.services.projects import Project, ProjectError
@@ -22,8 +22,21 @@ from spoolhq.services.tickets import Ticket, TicketError
 if TYPE_CHECKING:
     from spoolhq.services.runloop.integrator import Integrator
 
-GatesFn = Callable[[Path, Mapping[str, str], Mapping[str, float], Path], GateRun]
-"""``run_gates(worktree, commands, timeouts, log_dir)``; tests pass a fake."""
+
+class GatesFn(Protocol):
+    """``run_gates(worktree, commands, timeouts, log_dir)``; tests pass a fake.
+    ``on_gate(name, done)`` is called as each gate starts, with the results so far."""
+
+    def __call__(
+        self,
+        worktree: Path,
+        commands: Mapping[str, str],
+        timeouts: Mapping[str, float],
+        log_dir: Path,
+        /,
+        *,
+        on_gate: Callable[[str, tuple[GateResult, ...]], None] | None = None,
+    ) -> GateRun: ...
 
 
 class RunLoopError(Exception):
@@ -199,13 +212,20 @@ STEP_STATES = ("running", "passed", "failed", "skipped")
 
 
 def record_step(
-    run_log: RunLog, run_id: int, name: str, state: str, attempt: Attempt | None = None
+    run_log: RunLog,
+    run_id: int,
+    name: str,
+    state: str,
+    attempt: Attempt | None = None,
+    extra: Mapping[str, Any] | None = None,
 ) -> None:
-    """Append a ``step`` event; the worktree step comes before attempt 1."""
+    """Append a ``step`` event; the worktree step comes before attempt 1. ``extra``
+    adds fields (the gates step's ``gate`` and ``done``)."""
     assert name in STEPS and state in STEP_STATES  # noqa: S101 - a programming error
+    payload = {"step": name, "state": state, "attempt": attempt.number if attempt else 1}
     run_log.append_event(
         run_id,
         EventKind.STEP,
-        {"step": name, "state": state, "attempt": attempt.number if attempt else 1},
+        {**payload, **(extra or {})},
         attempt_id=attempt.id if attempt is not None else None,
     )

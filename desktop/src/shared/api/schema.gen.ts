@@ -507,7 +507,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{name}/runs/{run_id}/attempts/{number}/{artifact}": {
+    "/api/projects/{name}/runs/{run_id}/attempts/{number}/transcript": {
         parameters: {
             query?: never;
             header?: never;
@@ -515,10 +515,70 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Artifact
-         * @description One file of an attempt, as stored; 404 if the attempt has none.
+         * Get Transcript
+         * @description The attempt's raw agent streams (``transcript.jsonl``), as stored.
          */
-        get: operations["get_artifact_api_projects__name__runs__run_id__attempts__number___artifact__get"];
+        get: operations["get_transcript_api_projects__name__runs__run_id__attempts__number__transcript_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/runs/{run_id}/attempts/{number}/gates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gates
+         * @description Each gate's state, duration and trimmed output, with its first failure line.
+         */
+        get: operations["get_gates_api_projects__name__runs__run_id__attempts__number__gates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/runs/{run_id}/attempts/{number}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Review
+         * @description The reviewer's verdict, summary and each "Done when" item, in the ticket's order.
+         */
+        get: operations["get_review_api_projects__name__runs__run_id__attempts__number__review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/runs/{run_id}/attempts/{number}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Diff
+         * @description The attempt's committed diff by file; a patch over 2,000 lines is cut.
+         */
+        get: operations["get_diff_api_projects__name__runs__run_id__attempts__number__diff_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -696,11 +756,6 @@ export interface components {
             /** Fake Runner */
             fake_runner?: string | null;
         };
-        /**
-         * Artifact
-         * @enum {string}
-         */
-        Artifact: "transcript" | "gates" | "diff" | "review";
         /** AttemptView */
         AttemptView: {
             /** Number */
@@ -855,6 +910,35 @@ export interface components {
                 [key: string]: components["schemas"]["SecretView"];
             };
         };
+        /** DiffFile */
+        DiffFile: {
+            /** Path */
+            path: string;
+            /** Old Path */
+            old_path: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "added" | "modified" | "deleted" | "renamed";
+            /** Additions */
+            additions: number;
+            /** Deletions */
+            deletions: number;
+            /** Binary */
+            binary: boolean;
+            /** Patch */
+            patch: string;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** DiffReport */
+        DiffReport: {
+            /** Files */
+            files: components["schemas"]["DiffFile"][];
+            /** Truncated */
+            truncated: boolean;
+        };
         /** Discarded */
         Discarded: {
             /** Ticket Id */
@@ -915,6 +999,35 @@ export interface components {
             items: components["schemas"]["EventEnvelope"][];
             /** Next After */
             next_after: number | null;
+        };
+        /** GateReport */
+        GateReport: {
+            /** Name */
+            name: string;
+            /** Command */
+            command: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "passed" | "failed" | "timed_out" | "skipped";
+            /** Duration Ms */
+            duration_ms: number;
+            /** Output */
+            output: string;
+            /** First Failure Line */
+            first_failure_line: number | null;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** GatesReport */
+        GatesReport: {
+            /** Passed */
+            passed: boolean;
+            /** Results */
+            results: components["schemas"]["GateReport"][];
+            /** Stopped */
+            stopped: string | null;
         };
         /** GeneratePlan */
         GeneratePlan: {
@@ -1173,6 +1286,26 @@ export interface components {
             /** Note */
             note: string;
         };
+        /** ReviewItem */
+        ReviewItem: {
+            /** Text */
+            text: string;
+            /** Met */
+            met: boolean;
+            /** Reason */
+            reason: string;
+        };
+        /** ReviewReport */
+        ReviewReport: {
+            /** Verdict */
+            verdict: ("approve" | "changes_requested" | "needs_human") | null;
+            /** Items */
+            items: components["schemas"]["ReviewItem"][];
+            /** Summary */
+            summary: string;
+            /** Stopped */
+            stopped: string | null;
+        };
         /** RollbackView */
         RollbackView: {
             /** Removed */
@@ -1405,6 +1538,8 @@ export interface components {
             /** Attempts */
             attempts: components["schemas"]["TicketAttemptView"][];
             git: components["schemas"]["TicketGitView"];
+            /** Review Retries Left */
+            review_retries_left?: number | null;
         };
         /** TicketGitView */
         TicketGitView: {
@@ -1630,6 +1765,19 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** GateDoneData */
+        GateDoneData: {
+            /** Name */
+            name: string;
+            /** Command */
+            command: string;
+            /** Status */
+            status: string;
+            /** Duration Ms */
+            duration_ms: number;
+        } & {
+            [key: string]: unknown;
+        };
         /** StepData */
         StepData: {
             /**
@@ -1644,6 +1792,21 @@ export interface components {
             state: "running" | "passed" | "failed" | "skipped";
             /** Attempt */
             attempt: number;
+            /**
+             * Gate
+             * @default null
+             */
+            gate: string | null;
+            /**
+             * Command
+             * @default null
+             */
+            command: string | null;
+            /**
+             * Done
+             * @default null
+             */
+            done: components["schemas"]["GateDoneData"][] | null;
         } & {
             [key: string]: unknown;
         };
@@ -2792,7 +2955,7 @@ export interface operations {
             };
         };
     };
-    get_artifact_api_projects__name__runs__run_id__attempts__number___artifact__get: {
+    get_transcript_api_projects__name__runs__run_id__attempts__number__transcript_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2801,7 +2964,6 @@ export interface operations {
                 name: string;
                 run_id: number;
                 number: number;
-                artifact: components["schemas"]["Artifact"];
             };
             cookie?: never;
         };
@@ -2813,7 +2975,109 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/octet-stream": unknown;
+                    "application/x-ndjson": unknown;
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gates_api_projects__name__runs__run_id__attempts__number__gates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+                run_id: number;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GatesReport"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_review_api_projects__name__runs__run_id__attempts__number__review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+                run_id: number;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewReport"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_diff_api_projects__name__runs__run_id__attempts__number__diff_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+                run_id: number;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiffReport"];
                 };
             };
             /** @description An error. */

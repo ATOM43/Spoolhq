@@ -14,7 +14,7 @@ from typing import Any
 
 from spoolhq.services.agents import AgentPolicy, Budget, Outcome, RunResult
 from spoolhq.services.context import extract_progress_note
-from spoolhq.services.gates import GateRun, check_done_when
+from spoolhq.services.gates import GateResult, GateRun, check_done_when
 from spoolhq.services.git import (
     conclude_merge,
     conflict_files,
@@ -24,7 +24,7 @@ from spoolhq.services.git import (
 )
 from spoolhq.services.review import GateLine, ReviewInputs, ReviewResult, review
 from spoolhq.services.runloop.integrator import IntegrationStatus
-from spoolhq.services.runloop.model import Ending, EndKind, RunContext
+from spoolhq.services.runloop.model import Ending, EndKind, RunContext, record_step
 from spoolhq.services.runloop.prompting import implementer_prompt
 from spoolhq.services.runloop.transcript import Recorder
 from spoolhq.services.runs import (
@@ -230,11 +230,28 @@ def commit(ctx: RunContext, attempt: Attempt, label: str) -> None:
 
 
 def run_gates(ctx: RunContext, attempt: Attempt, label: str) -> GateRun:
+    commands = ctx.project.commands.model_dump()
+
+    def started(name: str, done: tuple[GateResult, ...]) -> None:
+        # The Run tab's rows so far; output waits for gates.json.
+        rows = [
+            {
+                "name": r.name,
+                "command": r.command,
+                "status": r.status.value,
+                "duration_ms": round(r.duration_s * 1000),
+            }
+            for r in done
+        ]
+        extra = {"gate": name, "command": commands.get(name) or "", "done": rows}
+        record_step(ctx.run_log, ctx.run.id, "gates", "running", attempt, extra)
+
     gate_run = ctx.gates(
         ctx.worktree.path,
-        ctx.project.commands.model_dump(),
+        commands,
         ctx.project.gates.timeouts.model_dump(),
         attempt_dir(ctx.workspace, attempt),
+        on_gate=started,
     )
     tests = [name for result in gate_run.results for name in result.failing_tests]
     data = {

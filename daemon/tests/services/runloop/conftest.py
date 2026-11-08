@@ -226,7 +226,14 @@ class FakeGates:
     calls: list[Path] = field(default_factory=list)
 
     def __call__(
-        self, worktree: Path, commands: Mapping[str, str], timeouts: Mapping[str, float], log: Path
+        self,
+        worktree: Path,
+        commands: Mapping[str, str],
+        timeouts: Mapping[str, float],
+        log: Path,
+        /,
+        *,
+        on_gate: Callable[[str, tuple[GateResult, ...]], None] | None = None,
     ) -> GateRun:
         self.calls.append(worktree)
         return self.runs[min(len(self.calls) - 1, len(self.runs) - 1)]

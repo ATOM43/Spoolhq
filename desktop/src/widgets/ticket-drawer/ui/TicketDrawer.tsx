@@ -245,6 +245,7 @@ function Columns({
         <DetailState query={detail}>
           {data ? (
             <NeedsYouSection
+              project={project}
               ticket={ticket}
               detail={data}
               onShowRun={onShowRun}
@@ -261,7 +262,11 @@ function Columns({
       <Section title="Attempts">
         <DetailState query={detail}>
           {data ? (
-            <AttemptsSection attempts={data.attempts} onShowRun={onShowRun} />
+            <AttemptsSection
+              project={project}
+              attempts={data.attempts}
+              onShowRun={onShowRun}
+            />
           ) : null}
         </DetailState>
       </Section>

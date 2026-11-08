@@ -23,6 +23,7 @@ from spoolhq.services.gates.model import (
     GateRun,
     GateStatus,
 )
+from spoolhq.services.gates.output import first_failure, split_lines
 from spoolhq.services.gates.runner import (
     DEFAULT_TIMEOUTS,
     check_done_when,
@@ -42,8 +43,10 @@ __all__ = [
     "GateStatus",
     "check_done_when",
     "check_gate_command",
+    "first_failure",
     "gate_env",
     "run_gates",
     "split_command",
+    "split_lines",
     "try_command",
 ]

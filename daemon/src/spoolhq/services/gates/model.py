@@ -46,6 +46,8 @@ class GateResult:
     output_truncated: bool
     log_path: Path | None
     """The full output; ``None`` when the command never ran."""
+    excerpt_trimmed: bool = False
+    """``excerpt`` is shorter than the output (``build_excerpt`` cut lines from it)."""
 
 
 @dataclass(frozen=True)
