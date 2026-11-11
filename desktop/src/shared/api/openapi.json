@@ -1624,6 +1624,24 @@
               "default": 50,
               "title": "Limit"
             }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RunKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only ticket or only plan runs.",
+              "title": "Kind"
+            },
+            "description": "Only ticket or only plan runs."
           }
         ],
         "responses": {
@@ -3256,12 +3274,17 @@
               }
             ],
             "title": "Next After"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
           }
         },
         "type": "object",
         "required": [
           "items",
-          "next_after"
+          "next_after",
+          "total"
         ],
         "title": "EventList",
         "description": "``GET …/runs/{run_id}/events``: stored events, oldest first."
@@ -4323,11 +4346,19 @@
         ],
         "title": "RunDetail"
       },
+      "RunKind": {
+        "type": "string",
+        "enum": [
+          "ticket",
+          "plan"
+        ],
+        "title": "RunKind"
+      },
       "RunList": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/RunView"
+              "$ref": "#/components/schemas/RunRow"
             },
             "type": "array",
             "title": "Items"
@@ -4350,6 +4381,166 @@
           "next_cursor"
         ],
         "title": "RunList"
+      },
+      "RunRow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "ticket_id": {
+            "type": "string",
+            "title": "Ticket Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "reset_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset At"
+          },
+          "progress_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Note"
+          },
+          "pr_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Number"
+          },
+          "pr_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Url"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "last_attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempt"
+          },
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend"
+          },
+          "tokens": {
+            "type": "integer",
+            "title": "Tokens"
+          },
+          "cost_micro_usd": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micro Usd"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "ticket_id",
+          "status",
+          "reason",
+          "started_at",
+          "ended_at",
+          "reset_at",
+          "progress_note",
+          "attempts",
+          "last_attempt",
+          "backend",
+          "tokens",
+          "cost_micro_usd"
+        ],
+        "title": "RunRow",
+        "description": "A run in the history list, with its attempts summed up."
       },
       "RunView": {
         "properties": {

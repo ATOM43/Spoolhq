@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useAgentBlocker } from "@/features/settings";
 import type { CurrentRun } from "@/entities/run";
 import { ReasonButton } from "@/shared/ui";
+import { RunHistory } from "@/widgets/run-history";
 import {
-  FinishedAttempt,
   LastRun,
   LoadFailed,
   NoRunsYet,
+  Replay,
   RunView,
 } from "@/widgets/run-view";
 
@@ -16,19 +17,19 @@ import { useRunAction } from "../model/run";
 import type { PanelState } from "../model/state";
 
 /**
- * The Run tab: the run being watched (live, then its result), else a finished
- * `?attempt=N`, the last run with Run next, or "No runs yet". A run that started while
- * this one was watched (Run all) is offered through the result panel's **View T16**.
+ * The Run tab: a replay (`?run=7&attempt=2`) first, so a run that starts meanwhile never
+ * takes it over; else the run being watched (live, then its result); else the last run
+ * with Run next and the past runs, or "No runs yet". A run that started while another
+ * was watched (Run all) is offered through the result panel's **View T16**.
  */
 export function RunTab({
   project,
   current,
   state,
-  attempt,
-  ticket,
+  replay,
+  onReplay,
   onOpenTicket,
   onShowTickets,
-  onShowCurrent,
 }: {
   project: string;
   current: {
@@ -38,13 +39,12 @@ export function RunTab({
     refetch: () => unknown;
   };
   state: PanelState;
-  /** `?attempt=` from the URL, or null. */
-  attempt: number | null;
-  /** `?ticket=` from the URL, or null. */
-  ticket: string | null;
+  /** `?run=` and `?attempt=` from the URL: the attempt replayed, or null. */
+  replay: { runId: number; attempt: number | null } | null;
+  /** Open a replay, or (null) leave it. */
+  onReplay: (replay: { runId: number; attempt: number | null } | null) => void;
   onOpenTicket: (id: string) => void;
   onShowTickets: () => void;
-  onShowCurrent: () => void;
 }) {
   const [watched, setWatched] = useState<number | null>(null);
   const run = current.data?.run?.kind === "ticket" ? current.data.run : null;
@@ -71,15 +71,25 @@ export function RunTab({
       />
     );
   }
-  const attemptOf = ticket ?? run?.ticket_id;
-  if (attempt !== null && attemptOf) {
+  if (replay !== null) {
     return (
-      <FinishedAttempt
+      <Replay
         project={project}
-        ticket={attemptOf}
-        attempt={attempt}
+        runId={replay.runId}
+        attempt={replay.attempt}
+        active={live !== null}
+        onAttempt={(attempt) => {
+          onReplay({ runId: replay.runId, attempt });
+        }}
+        onShowCurrent={() => {
+          setWatched(live?.id ?? watched);
+          onReplay(null);
+        }}
+        onShowPast={() => {
+          setWatched(null);
+          onReplay(null);
+        }}
         onOpenTicket={onOpenTicket}
-        onShowCurrent={onShowCurrent}
       />
     );
   }
@@ -96,16 +106,30 @@ export function RunTab({
           setWatched(next?.id ?? watched);
         }}
         onOpenTicket={onOpenTicket}
+        onShowPast={() => {
+          setWatched(null);
+        }}
         runNext={runNext}
       />
     );
   }
+  const history = (
+    <RunHistory
+      project={project}
+      empty={<NoRunsYet onShowTickets={onShowTickets} />}
+      onOpenRun={(runId, attempt) => {
+        onReplay({ runId, attempt });
+      }}
+      onOpenTicket={onOpenTicket}
+    />
+  );
+  // The latest run may be a plan run while ticket runs exist: the table still lists them.
   return run ? (
-    <LastRun run={run} onOpenTicket={onOpenTicket} runNext={runNext} />
+    <LastRun run={run} onOpenTicket={onOpenTicket} runNext={runNext}>
+      {history}
+    </LastRun>
   ) : (
-    <div className="p-6">
-      <NoRunsYet onShowTickets={onShowTickets} />
-    </div>
+    <div className="overflow-auto p-6">{history}</div>
   );
 }
 

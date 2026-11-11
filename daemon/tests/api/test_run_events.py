@@ -34,6 +34,7 @@ def test_1200_events_come_in_pages_of_500_500_and_200(
     after = 0
     while True:
         page = _get(client, token, run.id, after=after, limit=500).json()
+        assert page["total"] == 1200  # the same on every page
         sizes.append(len(page["items"]))
         seqs += [item["seq"] for item in page["items"]]
         if page["next_after"] is None:
@@ -73,8 +74,10 @@ def test_attempt_n_gives_its_window_with_the_run_level_events(
         ("agent.message", 2),
         ("log", None),
     ]
-    after = _get(client, token, run.id, attempt=2, after=two[0]["seq"]).json()["items"]
-    assert [e["type"] for e in after] == ["agent.message", "log"]
+    after = _get(client, token, run.id, attempt=2, after=two[0]["seq"]).json()
+    assert [e["type"] for e in after["items"]] == ["agent.message", "log"]
+    assert after["total"] == 3  # the attempt's window, not what is left of it
+    assert _get(client, token, run.id, attempt=1).json()["total"] == 4
 
 
 def test_unknown_run_or_attempt_is_404(client: TestClient, token: str, workspace: Path) -> None:

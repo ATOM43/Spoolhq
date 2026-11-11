@@ -218,6 +218,59 @@ def test_history_pages_are_stable_under_inserts(
     assert len(first["items"]) == 50 and first["items"][0]["id"] == 121
 
 
+def test_history_rows_carry_every_table_column(
+    client: TestClient, token: str, workspace: Path
+) -> None:
+    log = _log(client, workspace)
+    merged = log.start_run("T01")  # one attempt on an API key: a cost
+    attempt = log.start_attempt(merged.id, AttemptKind.INITIAL, backend="fake", model="m")
+    log.record_usage(attempt.id, 100, 20, cost_micro_usd=1500)
+    log.finish_attempt(attempt.id, AttemptStatus.APPROVED)
+    log.set_run_status(merged.id, "done")
+    blocked = log.start_run("T02")  # two attempts on a subscription: tokens
+    for kind in (AttemptKind.INITIAL, AttemptKind.GATE_RETRY):
+        attempt = log.start_attempt(blocked.id, kind, backend="fake")
+        log.record_usage(attempt.id, 1000, 200)
+        log.finish_attempt(attempt.id, AttemptStatus.GATES_FAILED)
+    log.set_run_status(blocked.id, "blocked", "gates failed 2 times")
+    cancelled = log.start_run("T03")  # cancelled before its first attempt
+    log.set_run_status(cancelled.id, "cancelled")
+    log.start_plan_run()
+
+    url = "/api/projects/demo/runs"
+    rows = client.get(url, params={"kind": "ticket"}, headers=auth(token)).json()["items"]
+    assert [row["ticket_id"] for row in rows] == ["T03", "T02", "T01"]
+    assert all(row["ended_at"] >= row["started_at"] for row in rows)
+    columns = ("status", "attempts", "last_attempt", "backend", "tokens", "cost_micro_usd")
+    assert [tuple(row[c] for c in columns) for row in rows] == [
+        ("cancelled", 0, None, None, 0, None),
+        ("blocked", 2, 2, "fake", 2400, None),
+        ("done", 1, 1, "fake", 0, 1500),
+    ]
+    assert rows[1]["reason"] == "gates failed 2 times"
+    everything = client.get(url, headers=auth(token)).json()["items"]
+    assert [row["kind"] for row in everything] == ["plan", "ticket", "ticket", "ticket"]
+    bad = client.get(url, params={"kind": "nope"}, headers=auth(token))
+    assert bad.status_code == 422
+
+
+def test_a_run_finishing_between_pages_is_not_repeated(
+    client: TestClient, token: str, workspace: Path
+) -> None:
+    log = _log(client, workspace)
+    runs = [log.start_run("T01") for _ in range(5)]
+    url = "/api/projects/demo/runs"
+    first = client.get(url, params={"limit": 2}, headers=auth(token)).json()
+    log.set_run_status(runs[4].id, "done")  # one from page 1 and one from page 2 finish
+    log.set_run_status(runs[1].id, "blocked", "x")
+    rest = client.get(
+        url, params={"limit": 10, "cursor": first["next_cursor"]}, headers=auth(token)
+    ).json()
+    ids = [row["id"] for row in first["items"] + rest["items"]]
+    assert ids == [5, 4, 3, 2, 1]
+    assert rest["items"][1]["status"] == "blocked" and rest["next_cursor"] is None
+
+
 def test_history_refusals(client: TestClient, token: str, workspace: Path) -> None:
     over = client.get("/api/projects/demo/runs?limit=201", headers=auth(token))
     assert (over.status_code, over.json()["error"]["code"]) == (400, "limit_too_large")

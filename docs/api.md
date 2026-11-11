@@ -31,7 +31,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `POST /api/projects/{name}/run/next`, `/run/all`, `/run/ticket/{id}` | start a run (201) |
 | `POST /api/projects/{name}/run/pause`, `/run/resume`, `/run/cancel` | the current run (or `?run_id=`) |
 | `GET /api/projects/{name}/runs/current` | the active (else latest) run with its phase lines, tokens and `cost_micro_usd` (null unless an API-key backend reported a cost), and `latest_seq` |
-| `GET /api/projects/{name}/runs?cursor=&limit=` | the run history, [paged](#paged-run-history) |
+| `GET /api/projects/{name}/runs?cursor=&limit=&kind=` | the run history, [paged](#paged-run-history), each run with its attempts summed up |
 | `GET /api/projects/{name}/runs/{run_id}` | one run with its `attempts` (number, kind, status — the verdict —, backend, tokens, times) |
 | `GET /api/projects/{name}/runs/{run_id}/events?attempt=&after=&limit=` | the run's stored events, [paged](#run-events), oldest first |
 | `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/gates`, `/review`, `/diff` | an attempt's [reports](#attempt-reports) as typed JSON |
@@ -191,9 +191,21 @@ The files the run loop writes (`gates.json`, `review.json`, `diff.patch`) stay a
 
 `GET …/runs` returns runs newest first, `{"items": [...], "next_cursor": "..." | null}`. `limit` is 50 by default, at most 200 (400 `limit_too_large` above). Pass `next_cursor` back as `cursor` for the next page; it is `null` on the last page. The cursor is opaque (base64 of the last run's `started_at` and id); the next page holds the runs strictly older than it, so a run started while you page sorts before the cursor and never shows up twice.
 
+`kind=ticket` or `kind=plan` keeps only those runs (anything else is 422); the desktop's past-runs table asks for `ticket`. Each item is the run as `GET …/runs/{run_id}` has it, without the attempt list but with these sums:
+
+| Field | Meaning |
+| --- | --- |
+| `attempts` | how many attempts the run has (0 when it ended before its first) |
+| `last_attempt` | the newest attempt's number (numbers count per ticket, so it can be higher than `attempts`), null without one; the one `…/events?attempt=` and the attempt reports take |
+| `backend` | the newest attempt's backend, null without one |
+| `tokens` | input plus output tokens of the attempts that reported no cost (subscription backends) |
+| `cost_micro_usd` | the cost summed over the attempts that reported one (API-key backends), null when none did |
+
+The outcome is `status` (with `reason`), the duration `ended_at − started_at`. A run that ends between two pages keeps its place: the order is by `started_at`, which never changes, so it is neither repeated nor skipped.
+
 ## Run events
 
-`GET …/runs/{run_id}/events` returns `{"items": [...], "next_after": <seq> | null}`; each item is the [WebSocket's envelope](#event-websocket). `after` (default 0) skips the events up to that `seq`; `limit` is 500 by default, at most 2,000 (400 `limit_too_large` above). Pass `next_after` back as `after` for the next page; it is null on the last page. With `attempt=N` (the attempt's number, as in the artifact URL) only that attempt's window comes back: from its `attempt.started` event until the next attempt's, with the run-level events in between (the integration, the end of the run), and for the run's first attempt everything from the run's start (the worktree). An unknown run or attempt is 404. The Run tab loads the current attempt this way, then subscribes with `since=` the last `seq` it loaded.
+`GET …/runs/{run_id}/events` returns `{"items": [...], "next_after": <seq> | null, "total": <count>}`; `total` counts every event of the run (of the attempt's window with `attempt=`) whatever `after` is, so a replay can show "Loading events… 1,200 of 3,400"; each item is the [WebSocket's envelope](#event-websocket). `after` (default 0) skips the events up to that `seq`; `limit` is 500 by default, at most 2,000 (400 `limit_too_large` above). Pass `next_after` back as `after` for the next page; it is null on the last page. With `attempt=N` (the attempt's number, as in the artifact URL) only that attempt's window comes back: from its `attempt.started` event until the next attempt's, with the run-level events in between (the integration, the end of the run), and for the run's first attempt everything from the run's start (the worktree). An unknown run or attempt is 404. The Run tab loads the current attempt this way, then subscribes with `since=` the last `seq` it loaded.
 
 What a run records, by `type` (the `data` models are in the OpenAPI components):
 

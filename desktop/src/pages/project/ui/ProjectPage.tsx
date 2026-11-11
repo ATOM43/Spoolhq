@@ -9,7 +9,7 @@ import {
   useSpec,
   type ProjectDetail,
 } from "@/entities/project";
-import { useCurrentRun } from "@/entities/run";
+import { useCurrentRun, useDropRunEvents } from "@/entities/run";
 import { DaemonError } from "@/shared/api";
 import {
   Button,
@@ -184,14 +184,31 @@ function Loaded({
   const closeTicket = useCallback(() => {
     openTicket(null);
   }, [openTicket]);
-  const attemptParam = Number(params.get("attempt"));
-  const showCurrent = useCallback(() => {
-    setParams((previous) => {
-      const next = new URLSearchParams(previous);
-      next.delete("attempt");
-      return next;
-    });
-  }, [setParams]);
+  // A replay lives in the URL too (?run=7&attempt=2), so a reload reopens it.
+  const positive = (key: string) => {
+    const value = Number(params.get(key));
+    return Number.isInteger(value) && value > 0 ? value : null;
+  };
+  const replayRun = positive("run");
+  const replayAttempt = positive("attempt");
+  const showReplay = useCallback(
+    (replay: { runId: number; attempt: number | null } | null) => {
+      setParams((previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete("run");
+        next.delete("attempt");
+        if (replay !== null) {
+          next.set("run", String(replay.runId));
+          if (replay.attempt !== null) {
+            next.set("attempt", String(replay.attempt));
+          }
+        }
+        return next;
+      });
+    },
+    [setParams],
+  );
+  useDropRunEvents(project.name);
   const [chosen, setChosen] = useState<Tab | null>(asked ?? initialTab);
 
   const ready = !current.isPending && !spec.isPending;
@@ -281,17 +298,16 @@ function Loaded({
               project={project.name}
               current={current}
               state={state}
-              attempt={
-                Number.isInteger(attemptParam) && attemptParam > 0
-                  ? attemptParam
-                  : null
+              replay={
+                replayRun === null
+                  ? null
+                  : { runId: replayRun, attempt: replayAttempt }
               }
-              ticket={ticket}
+              onReplay={showReplay}
               onOpenTicket={openTicket}
               onShowTickets={() => {
                 setChosen("tickets");
               }}
-              onShowCurrent={showCurrent}
             />
           </TabsContent>
           {ticket ? (
@@ -301,15 +317,7 @@ function Loaded({
               onOpen={openTicket}
               onClose={closeTicket}
               onShowRun={(attempt) => {
-                setParams((previous) => {
-                  const next = new URLSearchParams(previous);
-                  if (attempt === undefined) {
-                    next.delete("attempt");
-                  } else {
-                    next.set("attempt", String(attempt));
-                  }
-                  return next;
-                });
+                showReplay(attempt ?? null);
                 setChosen("run");
               }}
             />

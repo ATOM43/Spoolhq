@@ -106,6 +106,9 @@ class EventList(BaseModel):
     items: list[EventEnvelope]
     next_after: int | None
     """Pass it as ``after`` for the next page; null on the last page."""
+    total: int
+    """Every event of the run (or of the attempt, with ``attempt=``), whatever ``after``
+    is: the denominator of a loading bar."""
 
 
 class GateDoneData(_Data):

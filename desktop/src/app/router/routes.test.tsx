@@ -88,6 +88,8 @@ const BODIES: Record<string, string> = {
     last_merged: null,
     latest_seq: 0,
   }),
+  "/api/projects/demo/runs?kind=ticket&limit=50":
+    '{"items":[],"next_cursor":null}',
   "/api/projects/demo/spec": '{"content":""}',
   "/api/projects/demo/tickets": '{"tickets":[],"invalid":[]}',
   "/api/projects/demo/plan": JSON.stringify({
@@ -178,6 +180,6 @@ describe("app shell", () => {
       ),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Run" }));
-    expect(screen.getByText("No runs yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No runs yet.")).toBeInTheDocument();
   });
 });

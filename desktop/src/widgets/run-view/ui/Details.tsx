@@ -1,10 +1,10 @@
 import { LoaderCircle } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { useArtifact } from "@/entities/run";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui";
 
-import { NO_EVENTS, type LiveDetails } from "../model/details";
+import type { LiveDetails } from "../model/details";
 import { DiffPanel } from "./DiffPanel";
 import { Failed } from "./Failed";
 import { GatesPanel } from "./GatesPanel";
@@ -140,33 +140,4 @@ function Loaded({
     );
   }
   return children;
-}
-
-/** A finished attempt's details (`?attempt=N`): no events, each report loaded once. */
-export function AttemptDetails({
-  project,
-  runId,
-  attempt,
-}: {
-  project: string;
-  runId: number;
-  attempt: number;
-}) {
-  const [tab, setTab] = useState<DetailsTab>("gates");
-  const [file, setFile] = useState<string | null>(null);
-  const diff = useArtifact("diff", project, runId, attempt);
-  return (
-    <Details
-      project={project}
-      runId={runId}
-      attempt={attempt}
-      live={NO_EVENTS}
-      ended
-      diff={diff}
-      tab={tab}
-      onTab={setTab}
-      file={file}
-      onFile={setFile}
-    />
-  );
 }

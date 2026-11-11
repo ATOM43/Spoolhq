@@ -11,7 +11,6 @@ import {
   type Schemas,
 } from "@/shared/api";
 
-import { FinishedAttempt } from "./NoRun";
 import { RunView } from "./RunView";
 
 vi.mock("@/shared/api", async (importOriginal) => {
@@ -211,6 +210,7 @@ async function showLive() {
       next={null}
       onViewNext={() => undefined}
       onOpenTicket={() => undefined}
+      onShowPast={() => undefined}
       runNext={null}
     />,
   );
@@ -245,15 +245,11 @@ beforeEach(() => {
       case "/api/projects/{name}/runs/{run_id}":
         return ok(RUN);
       case "/api/projects/{name}/runs/{run_id}/events":
-        return ok({ items: stored, next_after: null });
+        return ok({ items: stored, next_after: null, total: stored.length });
       case "/api/projects/{name}/tickets":
         return ok({ tickets: [], invalid: [] });
       case "/api/projects/{name}/settings":
         return ok({ settings: { limits: {} } });
-      case "/api/projects/{name}/tickets/{ticket_id}":
-        return ok({
-          attempts: [{ ...RUN.attempts[0], status: "gates_failed", run_id: 7 }],
-        });
     }
     throw new Error(`unexpected GET ${path}`);
   });
@@ -457,29 +453,5 @@ describe("Transcript mini diff", () => {
     expect(
       within(details()).getByRole("button", { name: /big\.py/ }),
     ).toHaveAttribute("aria-pressed", "true");
-  });
-});
-
-describe("A finished ?attempt=N", () => {
-  it("shows that attempt's reports", async () => {
-    reports.gates = GATES;
-    wrap(
-      <FinishedAttempt
-        project="demo"
-        ticket="T15"
-        attempt={1}
-        onOpenTicket={() => undefined}
-        onShowCurrent={() => undefined}
-      />,
-    );
-    expect(
-      await within(
-        await screen.findByRole("region", { name: "Details" }),
-      ).findByText("Failed"),
-    ).toBeInTheDocument();
-    await tab(/Review/);
-    expect(
-      await within(details()).findByText("No review in this attempt."),
-    ).toBeInTheDocument();
   });
 });

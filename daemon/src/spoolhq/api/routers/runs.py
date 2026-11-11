@@ -34,7 +34,7 @@ from spoolhq.services.runloop import (
     gates_report,
     review_report,
 )
-from spoolhq.services.runs import ArtifactName, attempt_dir, page_events, page_runs
+from spoolhq.services.runs import ArtifactName, RunKind, attempt_dir, page_events, page_runs
 
 router = APIRouter(prefix="/api/projects/{name}", dependencies=[Security(bearer_scheme)])
 RunIdQuery = Annotated[
@@ -121,12 +121,13 @@ def list_runs(
     request: Request,
     cursor: Annotated[str | None, Query(max_length=200)] = None,
     limit: Annotated[int, Query(ge=1)] = 50,
+    kind: Annotated[RunKind | None, Query(description="Only ticket or only plan runs.")] = None,
 ) -> RunList:
     """Runs, newest first, a page at a time; pass ``next_cursor`` back as ``cursor``."""
     if limit > 200:
         raise ApiError(400, "limit_too_large", "limit is at most 200", field="limit")
     try:
-        return RunList.of(page_runs(run_log(request, name), cursor, limit))
+        return RunList.of(page_runs(run_log(request, name), cursor, limit, kind))
     except ValueError as exc:
         raise ApiError(400, "invalid_cursor", str(exc), field="cursor") from exc
 
@@ -169,7 +170,7 @@ def list_events(
         EventEnvelope.of(e, run.ticket_id, numbers.get(e.attempt_id) if e.attempt_id else None)
         for e in page.events
     ]
-    return EventList(items=items, next_after=page.next_after)
+    return EventList(items=items, next_after=page.next_after, total=page.total)
 
 
 def _artifact(request: Request, name: str, run_id: int, number: int, file: ArtifactName) -> Path:

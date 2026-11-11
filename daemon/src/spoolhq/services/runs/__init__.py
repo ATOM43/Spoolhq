@@ -26,6 +26,7 @@ from spoolhq.services.runs.files import (
 from spoolhq.services.runs.history import (
     EventPage,
     RunPage,
+    RunStats,
     decode_cursor,
     encode_cursor,
     page_events,
@@ -78,6 +79,7 @@ __all__ = [
     "project_totals",
     "ticket_activity",
     "RunPage",
+    "RunStats",
     "decode_cursor",
     "encode_cursor",
     "page_runs",

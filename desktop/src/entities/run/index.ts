@@ -11,9 +11,14 @@ export {
 export {
   mergeEvents,
   runEventsKey,
+  useDropRunEvents,
   useRunEvents,
+  type LoadProgress,
   type RunEvent,
 } from "./model/events";
+export { useRunHistory, type RunRow } from "./model/history";
+export { runOutcome } from "./model/outcome";
+export { Outcome } from "./ui/Outcome";
 export {
   useArtifact,
   type DiffFile,

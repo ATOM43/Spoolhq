@@ -8,6 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProjectEvents } from "@/entities/project";
@@ -112,7 +113,7 @@ const step = (name: string, state: string, n = 1) =>
 let stored: EventEnvelope[];
 let runs: Map<number, Run>;
 let current: CurrentRun;
-let ticketAttempts: (Attempt & { run_id: number })[];
+let history: Schemas["RunRow"][];
 let listeners: Set<(event: EventEnvelope) => void>;
 let currentFails: boolean;
 
@@ -137,36 +138,41 @@ const RUNNING: PanelState = {
 };
 const READY: PanelState = { kind: "ready", next: "T11", tab: "tickets" };
 
+type ReplayAt = { runId: number; attempt: number | null } | null;
 const calls = {
   open: vi.fn<(id: string) => void>(),
   tickets: vi.fn<() => void>(),
-  current: vi.fn<() => void>(),
+  replay: vi.fn<(replay: ReplayAt) => void>(),
 };
 
+/** Holds the replay as the page's URL does. */
 function Harness({
   state,
   attemptParam,
 }: {
   state: PanelState;
-  attemptParam: number | null;
+  attemptParam: ReplayAt;
 }) {
   const run = useCurrentRun("demo");
   useProjectEvents([{ name: "demo", latest_seq: current.latest_seq }]);
+  const [replay, setReplay] = useState(attemptParam);
   return (
     <RunTab
       project="demo"
       current={run}
       state={state}
-      attempt={attemptParam}
-      ticket={null}
+      replay={replay}
+      onReplay={(next) => {
+        calls.replay(next);
+        setReplay(next);
+      }}
       onOpenTicket={calls.open}
       onShowTickets={calls.tickets}
-      onShowCurrent={calls.current}
     />
   );
 }
 
-function show(state: PanelState = RUNNING, attemptParam: number | null = null) {
+function show(state: PanelState = RUNNING, attemptParam: ReplayAt = null) {
   render(
     <QueryClientProvider
       client={
@@ -196,7 +202,7 @@ beforeEach(() => {
   currentFails = false;
   runs = new Map([[7, runOf()]]);
   current = currentOf(runs.get(7) ?? null, true);
-  ticketAttempts = [];
+  history = [];
   vi.mocked(subscribeEvents).mockImplementation((_options, onEvent) => {
     listeners.add(onEvent);
     return () => {
@@ -235,15 +241,15 @@ beforeEach(() => {
         const items = stored.filter(
           (e) => e.seq > after && e.run_id === params?.path?.run_id,
         );
-        return ok({ items, next_after: null });
+        return ok({ items, next_after: null, total: items.length });
       }
+      case "/api/projects/{name}/runs":
+        return ok({ items: history, next_cursor: null });
       case "/api/projects/{name}/tickets":
         return ok({
           tickets: [{ id: "T15", meta: { title: "Demands page and dialogs" } }],
           invalid: [],
         });
-      case "/api/projects/{name}/tickets/{ticket_id}":
-        return ok({ attempts: ticketAttempts });
       case "/api/projects/{name}/settings":
         return ok({
           settings: { limits: { gate_retries: 3, review_retries: 0 } },
@@ -551,35 +557,93 @@ describe("Run tab, no active run", () => {
     expect(within(last).getByText("All tickets done")).toBeInTheDocument();
   });
 
-  it("shows a finished ?attempt=N with Show current run", async () => {
-    current = currentOf(runOf({ status: "blocked" }), false);
-    ticketAttempts = [
+  it("lists the past runs under the summary, and a row opens its replay", async () => {
+    const done = runOf({
+      status: "blocked",
+      ended_at: "2026-11-07T14:05:00Z",
+      attempts: [
+        { ...attempt(1, "gates_failed"), ended_at: "2026-11-07T14:02:00Z" },
+        {
+          ...attempt(2, "gates_failed"),
+          started_at: "2026-11-07T14:02:00Z",
+          ended_at: "2026-11-07T14:05:00Z",
+        },
+      ],
+    });
+    runs.set(7, done);
+    current = currentOf(done, false);
+    history = [
       {
-        ...attempt(2, "gates_failed"),
-        ended_at: new Date().toISOString(),
-        run_id: 7,
+        ...done,
+        attempts: 2,
+        last_attempt: 2,
+        backend: "claude-code-cli",
+        tokens: 84_000,
+        cost_micro_usd: null,
       },
     ];
-    show(READY, 2);
-    const shown = await screen.findByRole("region", { name: "Attempt 2" });
-    expect(within(shown).getByText("Gates failed")).toBeInTheDocument();
-    expect(
-      screen.getByText("Full replay of the transcript comes in T40."),
-    ).toBeInTheDocument();
+    show(READY);
+    const table = await screen.findByRole("table");
+    expect(eventLoads()).toHaveLength(0); // the table never reads events
+    await userEvent.click(within(table).getByText("Demands page and dialogs"));
+    expect(calls.replay).toHaveBeenCalledWith({ runId: 7, attempt: 2 });
+    const banner = await screen.findByRole("region", { name: "Replay" });
+    expect(within(banner).getByText(/Viewing attempt 2 of 2/)).toBeVisible();
     await userEvent.click(
-      screen.getByRole("button", { name: "Show current run" }),
+      within(banner).getByRole("button", { name: "Back to past runs" }),
     );
-    expect(calls.current).toHaveBeenCalled();
+    expect(await screen.findByRole("table")).toBeInTheDocument();
   });
+});
 
-  it("sends ?attempt=N of the running attempt to the live view", async () => {
-    ticketAttempts = [{ ...attempt(1), run_id: 7 }];
-    show(RUNNING, 1);
-    await waitFor(() => {
-      expect(calls.current).toHaveBeenCalled();
+describe("Run tab, live and replay never mix", () => {
+  const finished = () =>
+    runOf({
+      id: 3,
+      ticket_id: "T09",
+      status: "blocked",
+      ended_at: "2026-11-07T13:05:00Z",
+      attempts: [
+        { ...attempt(1, "gates_failed"), ended_at: "2026-11-07T13:05:00Z" },
+      ],
     });
+
+  it("keeps the replay when a run starts, and adds Show current run", async () => {
+    runs.set(3, finished());
+    current = currentOf(runs.get(3) ?? null, false);
+    stored = [ev("agent.message", { text: "the old attempt" }, 1, 3)];
+    show(READY, { runId: 3, attempt: 1 });
+    const banner = await screen.findByRole("region", { name: "Replay" });
+    expect(await screen.findByText("the old attempt")).toBeInTheDocument();
+    expect(
+      within(banner).getByRole("button", { name: "Back to past runs" }),
+    ).toBeInTheDocument();
+
+    current = currentOf(runs.get(7) ?? null, true);
+    await emit(ev("run.started", { ticket_id: "T15" }, null, 7));
+    const showCurrent = await within(banner).findByRole("button", {
+      name: "Show current run",
+    });
+    expect(screen.getByText("the old attempt")).toBeInTheDocument();
+    expect(within(banner).getByText(/Viewing attempt 1 of 1/)).toBeVisible();
+
+    await userEvent.click(showCurrent);
+    expect(calls.replay).toHaveBeenLastCalledWith(null);
+    expect(await screen.findByText("Attempt 1 of 4")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Replay" })).toBeNull();
   });
 
+  it("sends a replay of the running attempt to the live view", async () => {
+    show(RUNNING, { runId: 7, attempt: 1 });
+    await waitFor(() => {
+      expect(calls.replay).toHaveBeenCalledWith(null);
+    });
+    expect(await screen.findByText("Attempt 1 of 4")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Replay" })).toBeNull();
+  });
+});
+
+describe("Run tab, loading", () => {
   it("shows loading, then an error with Retry", async () => {
     currentFails = true;
     show();

@@ -1,11 +1,12 @@
 """Request and response models of the run endpoints."""
 
+from dataclasses import asdict
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from spoolhq.services.runloop import Current, Merged, describe
-from spoolhq.services.runs import Attempt, Run, RunPage
+from spoolhq.services.runs import Attempt, Run, RunPage, RunStats
 
 NOTE_MAX = 100_000
 
@@ -166,12 +167,31 @@ class RunDetail(RunView):
     attempts: list[AttemptView]
 
 
+class RunRow(RunView):
+    """A run in the history list, with its attempts summed up."""
+
+    attempts: int
+    last_attempt: int | None
+    """The newest attempt's number (per ticket), for its artifacts and events."""
+    backend: str | None
+    """The newest attempt's backend."""
+    tokens: int
+    """Input and output tokens of the attempts that reported no cost (subscriptions)."""
+    cost_micro_usd: int | None
+    """The cost of the attempts on an API-key backend; null when none reported one."""
+
+
 class RunList(BaseModel):
-    items: list[RunView]
+    items: list[RunRow]
     """Newest first."""
     next_cursor: str | None
     """Pass it as ``cursor`` for the next page; null on the last page."""
 
     @classmethod
     def of(cls, page: RunPage) -> "RunList":
-        return cls(items=[RunView.of(run) for run in page.runs], next_cursor=page.next_cursor)
+        none = RunStats()
+        items = [
+            RunRow(**RunView.of(run).model_dump(), **asdict(page.stats.get(run.id, none)))
+            for run in page.runs
+        ]
+        return cls(items=items, next_cursor=page.next_cursor)

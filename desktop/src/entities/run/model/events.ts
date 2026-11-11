@@ -30,12 +30,19 @@ export function mergeEvents(
   return merged;
 }
 
-/** Every stored event of one attempt (its window, see the daemon route), all pages;
- * with no attempt yet (the worktree step), the run's events. */
+export interface LoadProgress {
+  loaded: number;
+  /** Every event of the attempt, as the daemon counts them. */
+  total: number;
+}
+
+/** Every stored event of one attempt (its window, see the daemon route), all pages,
+ * oldest first; with no attempt yet (the worktree step), the run's events. */
 async function loadAttempt(
   project: string,
   runId: number,
   attempt: number | null,
+  onProgress: (progress: LoadProgress) => void,
 ): Promise<RunEvent[]> {
   let events: RunEvent[] = [];
   let after = 0;
@@ -53,6 +60,7 @@ async function loadAttempt(
       }),
     );
     events = mergeEvents(events, page.items);
+    onProgress({ loaded: events.length, total: page.total });
     if (page.next_after == null) {
       return events;
     }
@@ -65,7 +73,9 @@ async function loadAttempt(
  * live stream from the last `seq` loaded (or `since` when the attempt had none yet), so
  * the seam has no gap; a replayed duplicate is dropped by `mergeEvents`. Each event goes
  * to its attempt's cache entry (run-level ones to the newest attempt), and the view
- * moves to a new attempt as soon as it starts. `live` false loads without streaming.
+ * moves to a new attempt as soon as it starts. `live` false (a replay) loads without
+ * ever opening a stream. Loaded attempts stay cached until `useDropRunEvents` drops
+ * them; `progress` counts the pages of the load in flight.
  */
 export function useRunEvents({
   project,
@@ -86,10 +96,12 @@ export function useRunEvents({
   if (startAttempt !== null && (attempt === null || startAttempt > attempt)) {
     setAttempt(startAttempt); // the run detail saw a newer attempt first
   }
+  const [progress, setProgress] = useState<LoadProgress | null>(null);
   const query = useQuery({
     queryKey: runEventsKey(project, runId, attempt),
-    queryFn: () => loadAttempt(project, runId, attempt),
+    queryFn: () => loadAttempt(project, runId, attempt, setProgress),
     staleTime: Infinity,
+    gcTime: Infinity,
     retry: false,
   });
   const loaded = query.isSuccess;
@@ -132,5 +144,16 @@ export function useRunEvents({
     // Started once per run: the stream reconnects itself with `since`.
   }, [live, loaded, project, runId, queryClient]);
 
-  return { attempt, events: query.data ?? [], query };
+  return { attempt, events: query.data ?? [], query, progress };
+}
+
+/** Drops the project's cached run events when the project changes or its panel closes. */
+export function useDropRunEvents(project: string) {
+  const queryClient = useQueryClient();
+  useEffect(
+    () => () => {
+      queryClient.removeQueries({ queryKey: ["run-events", project] });
+    },
+    [project, queryClient],
+  );
 }

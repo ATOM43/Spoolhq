@@ -513,7 +513,7 @@ describe("sections", () => {
     expect(row).toHaveTextContent("182k tokens");
     expect(row).toHaveTextContent("claude-code-cli");
     await userEvent.click(row);
-    expect(onShowRun).toHaveBeenCalledWith(3);
+    expect(onShowRun).toHaveBeenCalledWith({ runId: 7, attempt: 3 });
     const git = within(drawer.getByRole("region", { name: "Git" }));
     expect(git.getByText("feat/T06-x")).toBeVisible();
     expect(git.getByText("4 ahead of main · 612 changed lines")).toBeVisible();

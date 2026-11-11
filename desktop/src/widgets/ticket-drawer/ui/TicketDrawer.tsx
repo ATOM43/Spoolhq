@@ -38,8 +38,8 @@ export function TicketDrawer(props: {
   ticketId: string;
   onOpen: (id: string) => void;
   onClose: () => void;
-  /** Switch to the Run tab, at an attempt when given. */
-  onShowRun: (attempt?: number) => void;
+  /** Switch to the Run tab, at an attempt's replay when given. */
+  onShowRun: (attempt?: { runId: number; attempt: number }) => void;
 }) {
   // Keyed, so opening another ticket leaves edit mode.
   return <Drawer key={props.ticketId} {...props} />;
@@ -56,7 +56,7 @@ function Drawer({
   ticketId: string;
   onOpen: (id: string) => void;
   onClose: () => void;
-  onShowRun: (attempt?: number) => void;
+  onShowRun: (attempt?: { runId: number; attempt: number }) => void;
 }) {
   const tickets = useTickets(project);
   const detail = useTicketDetail(project, ticketId);
@@ -235,7 +235,7 @@ function Columns({
   branch: string;
   detail: ReturnType<typeof useTicketDetail>;
   onOpen: (id: string) => void;
-  onShowRun: (attempt?: number) => void;
+  onShowRun: (attempt?: { runId: number; attempt: number }) => void;
 }) {
   const status = ticket.meta.status;
   const data = detail.data?.ticket;

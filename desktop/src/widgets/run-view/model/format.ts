@@ -12,18 +12,6 @@ const BACKENDS: Record<string, string> = {
 export const backendLabel = (name: string | null | undefined): string | null =>
   name ? (BACKENDS[name] ?? name) : null;
 
-/** "45s", "6m 12s", "1h 02m". */
-export function formatElapsed(ms: number): string {
-  const seconds = Math.max(Math.floor(ms / 1000), 0);
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (h > 0) {
-    return `${String(h)}h ${String(m).padStart(2, "0")}m`;
-  }
-  return m > 0 ? `${String(m)}m ${String(s)}s` : `${String(s)}s`;
-}
-
 /** Now, every second while `ticking`. */
 export function useNow(ticking: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -69,19 +57,6 @@ const OUTCOMES: Record<string, string> = {
 
 export const attemptOutcome = (status: string): string =>
   OUTCOMES[status] ?? status;
-
-const RUN_OUTCOMES: Record<string, string> = {
-  running: "Running",
-  paused: "Paused",
-  awaiting_approval: "Needs approval",
-  done: "Merged",
-  blocked: "Blocked",
-  cancelled: "Cancelled",
-  interrupted: "Interrupted",
-};
-
-export const runOutcome = (status: string): string =>
-  RUN_OUTCOMES[status] ?? status;
 
 /** The most attempts a run gets (first plus retries); null until the settings load. */
 export function useMaxAttempts(project: string): number | null {

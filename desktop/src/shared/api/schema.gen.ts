@@ -999,6 +999,8 @@ export interface components {
             items: components["schemas"]["EventEnvelope"][];
             /** Next After */
             next_after: number | null;
+            /** Total */
+            total: number;
         };
         /** GateReport */
         GateReport: {
@@ -1348,12 +1350,56 @@ export interface components {
             /** Attempts */
             attempts: components["schemas"]["AttemptView"][];
         };
+        /**
+         * RunKind
+         * @enum {string}
+         */
+        RunKind: "ticket" | "plan";
         /** RunList */
         RunList: {
             /** Items */
-            items: components["schemas"]["RunView"][];
+            items: components["schemas"]["RunRow"][];
             /** Next Cursor */
             next_cursor: string | null;
+        };
+        /**
+         * RunRow
+         * @description A run in the history list, with its attempts summed up.
+         */
+        RunRow: {
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Ticket Id */
+            ticket_id: string;
+            /** Status */
+            status: string;
+            /** Reason */
+            reason: string | null;
+            /** Started At */
+            started_at: string;
+            /** Ended At */
+            ended_at: string | null;
+            /** Reset At */
+            reset_at: string | null;
+            /** Progress Note */
+            progress_note: string | null;
+            /** Pr Number */
+            pr_number?: number | null;
+            /** Pr Url */
+            pr_url?: string | null;
+            policy?: components["schemas"]["PolicyView"] | null;
+            /** Attempts */
+            attempts: number;
+            /** Last Attempt */
+            last_attempt: number | null;
+            /** Backend */
+            backend: string | null;
+            /** Tokens */
+            tokens: number;
+            /** Cost Micro Usd */
+            cost_micro_usd: number | null;
         };
         /** RunView */
         RunView: {
@@ -2855,6 +2901,8 @@ export interface operations {
             query?: {
                 cursor?: string | null;
                 limit?: number;
+                /** @description Only ticket or only plan runs. */
+                kind?: components["schemas"]["RunKind"] | null;
             };
             header?: never;
             path: {

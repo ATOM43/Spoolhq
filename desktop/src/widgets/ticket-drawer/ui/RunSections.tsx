@@ -59,7 +59,7 @@ export function NeedsYouSection({
   project: string;
   ticket: Ticket;
   detail: TicketDetail;
-  onShowRun: (attempt?: number) => void;
+  onShowRun: (attempt?: { runId: number; attempt: number }) => void;
 }) {
   const run = detail.run;
   const attempt = lastAttempt(detail);
@@ -117,7 +117,7 @@ export function NeedsYouSection({
           size="sm"
           className="self-start px-0"
           onClick={() => {
-            onShowRun(attempt.number);
+            onShowRun({ runId: attempt.run_id, attempt: attempt.number });
           }}
         >
           <SquareTerminal aria-hidden />
@@ -160,7 +160,7 @@ export function AttemptsSection({
 }: {
   project: string;
   attempts: readonly TicketAttempt[];
-  onShowRun: (attempt?: number) => void;
+  onShowRun: (attempt?: { runId: number; attempt: number }) => void;
 }) {
   if (attempts.length === 0) {
     return <p className="text-sm text-ink-muted">No attempts yet.</p>;
@@ -173,7 +173,7 @@ export function AttemptsSection({
             type="button"
             aria-label={`Attempt ${String(a.number)}: ${OUTCOME[a.status] ?? a.status}. Open it in the Run tab`}
             onClick={() => {
-              onShowRun(a.number);
+              onShowRun({ runId: a.run_id, attempt: a.number });
             }}
             className="grid w-full grid-cols-[2.5rem_1fr_4.5rem_1fr] gap-x-3 gap-y-0.5 px-3 py-2 text-left outline-none hover:bg-surface-sunken focus-visible:ring-[3px] focus-visible:ring-accent/50"
           >

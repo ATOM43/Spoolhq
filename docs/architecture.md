@@ -156,7 +156,7 @@ src/
   pages/      # one slice per route: home/, project/ (header, run controls, tabs)
   widgets/    # self-contained screen blocks: top-bar/, daemon-down-panel/,
               # spec-editor/ (Spec tab: autosave, conflict bar, preview, Generate plan)
-              # run-view/ (Run tab: header, steps, live transcript, result panel, Gates/Review/Diff)
+              # run-view/ (Run tab: header, steps, live transcript, result panel, Gates/Review/Diff, replay), run-history/ (past runs)
   features/   # user actions and behaviours: daemon-status/ (polling + retry),
               # settings/ (Settings dialog), project-create/ (New project dialog)
   entities/   # domain models and their query hooks: daemon/, project/, ticket/, run/, agent/

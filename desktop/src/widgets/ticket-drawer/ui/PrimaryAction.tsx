@@ -48,7 +48,7 @@ export function PrimaryAction({
   detail: TicketDetail | undefined;
   all: readonly Ticket[];
   onOpen: (id: string) => void;
-  onShowRun: (attempt?: number) => void;
+  onShowRun: (attempt?: { runId: number; attempt: number }) => void;
 }) {
   const queryClient = useQueryClient();
   const current = useCurrentRun(project);

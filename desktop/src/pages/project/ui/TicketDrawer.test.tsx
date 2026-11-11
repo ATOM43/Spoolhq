@@ -222,7 +222,34 @@ describe("ticket drawer", () => {
             problems: [],
           });
         case "/api/projects/{name}/runs/{run_id}":
-          return ok({ attempts: [{ number: 3 }, { number: 4 }] });
+          return ok({
+            ...T04_RUN,
+            ended_at: "2026-11-06T11:00:00Z",
+            attempts: [2, 3, 4].map((number) => ({ ...T04_ATTEMPT, number })),
+          });
+        case "/api/projects/{name}/runs/{run_id}/events":
+          return ok({
+            items: [
+              {
+                seq: 1,
+                run_id: 7,
+                attempt: 2,
+                ticket: "T04",
+                type: "agent.message",
+                ts: "2026-11-06T10:01:00Z",
+                data: { text: "what attempt 2 said" },
+              },
+            ],
+            next_after: null,
+            total: 1,
+          });
+        case "/api/projects/{name}/runs/{run_id}/attempts/{number}/gates":
+        case "/api/projects/{name}/runs/{run_id}/attempts/{number}/diff":
+          return notFound();
+        case "/api/projects/{name}/settings":
+          return ok({ settings: { limits: {} } });
+        case "/api/projects/{name}/runs":
+          return ok({ items: [], next_cursor: null });
         case "/api/projects/{name}/runs/{run_id}/attempts/{number}/review": {
           const { number } = (init as { params: { path: { number: number } } })
             .params.path;
@@ -360,7 +387,7 @@ describe("ticket drawer", () => {
     expect(drawer()).toBeNull();
   });
 
-  it("follows a Waits-for chip, and an attempt link opens the Run tab", async () => {
+  it("follows a Waits-for chip, and an attempt link opens that attempt's replay", async () => {
     const router = show("/p/demo?tab=tickets&ticket=T05");
     const aside = within(
       await screen.findByRole("complementary", { name: "Ticket T05" }),
@@ -381,12 +408,30 @@ describe("ticket drawer", () => {
       }),
     );
     expect(router.state.location.search).toBe(
-      "?tab=tickets&ticket=T04&attempt=2",
+      "?tab=tickets&ticket=T04&run=7&attempt=2",
     );
     expect(screen.getByRole("tab", { name: /Run/ })).toHaveAttribute(
       "data-state",
       "active",
     );
+    const banner = await screen.findByRole("region", { name: "Replay" });
+    expect(within(banner).getByText(/^Viewing attempt 2 of 4/)).toBeVisible();
+    expect(await screen.findByText("what attempt 2 said")).toBeInTheDocument();
+  });
+
+  it("reopens the same replay from ?run=&attempt= on a reload, and leaves it", async () => {
+    const router = show("/p/demo?tab=run&run=7&attempt=3");
+    const banner = await screen.findByRole("region", { name: "Replay" });
+    expect(within(banner).getByText(/^Viewing attempt 3 of 4/)).toBeVisible();
+    await userEvent.click(
+      within(banner).getByRole("button", { name: "Next attempt" }),
+    );
+    expect(router.state.location.search).toBe("?tab=run&run=7&attempt=4");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Back to past runs" }),
+    );
+    expect(router.state.location.search).toBe("?tab=run");
+    expect(screen.queryByRole("region", { name: "Replay" })).toBeNull();
   });
 
   it("says when the ticket no longer exists", async () => {

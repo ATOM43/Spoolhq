@@ -39,3 +39,15 @@ export function timeAgo(iso: string, now: number = Date.now()): string {
 /** The local date and time, for the hover text of a relative time. */
 export const formatTime = (iso: string): string =>
   new Date(iso).toLocaleString();
+
+/** "45s", "6m 12s", "1h 02m". */
+export function formatElapsed(ms: number): string {
+  const seconds = Math.max(Math.floor(ms / 1000), 0);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) {
+    return `${String(h)}h ${String(m).padStart(2, "0")}m`;
+  }
+  return m > 0 ? `${String(m)}m ${String(s)}s` : `${String(s)}s`;
+}

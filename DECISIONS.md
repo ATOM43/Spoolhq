@@ -380,3 +380,6 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 374 · Each gate starting is a `step` event with the gates done so far · docs/decisions/runloop.md
 375 · The Run tab's Gates, Review and Diff panels · docs/decisions/desktop.md
 376 · Where the spec won over the V2 PNGs · docs/decisions/desktop.md
+377 · The run list carries the table's sums, and the events route its total · docs/decisions/api.md
+378 · Past runs and replay · docs/decisions/desktop.md
+379 · Where the spec won over the V2 · Run tab, idle PNG · docs/decisions/desktop.md
