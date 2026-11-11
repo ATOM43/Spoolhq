@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **39 tickets in 6 phases, about 91 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **41 tickets in 6 phases, about 96 hours** for one developer.
 
 **What v1 includes**
 
@@ -84,7 +84,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
 | T21 | Tickets tab and plan review | 4 Desktop UI | T15, T36 | 2.5 |
 | T22 | Live run | 4 Desktop UI | T37 | 2 |
-| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37 | 3 |
+| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42 | 3 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T40 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
@@ -101,7 +101,9 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T38 | Add ticket | 4 Desktop UI | T37 | 1.5 |
 | T39 | Run details | 4 Desktop UI | T22 | 2 |
 | T40 | Past runs and replay | 4 Desktop UI | T39 | 2 |
-|  | **Total** |  |  | **91** |
+| T41 | Draft tickets with the planner | 4 Desktop UI | T38, T15 | 2.5 |
+| T42 | Existing repo onboarding | 4 Desktop UI | T36 | 2.5 |
+|  | **Total** |  |  | **96** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T26 (44 h).
 
@@ -424,7 +426,7 @@ Done when:
 
 ## Phase 4 — Desktop UI (v0 screens)
 
-Fourteen tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Sixteen tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -574,6 +576,22 @@ Done when:
 - [ ] A ticket added in the app appears as a file with the next free number
 - [ ] A new ticket with an unknown dependency or a cycle can't be saved, and the error names the field
 
+### T41 · Draft tickets with the planner
+
+Turn a few lines into one or more well-formed draft tickets. *Depends on: T38, T15 · 2.5 h*
+
+- A short request in the Add ticket form.
+- The planner in single-ticket mode, given the request, the spec if any, the existing ticket titles and the code map.
+- One ticket, or two or three when the work is over 4 h, in the ticket schema; the same validation as a plan.
+- Drafts open in the T38 form and are never saved without the user; ids assigned by code.
+- A `ticket-draft` fake-runner scenario.
+
+Done when:
+
+- [ ] A few lines produce a valid draft ticket that opens in the form, unsaved
+- [ ] Work over 4 h is split into two or three drafts with dependencies between them
+- [ ] An invalid draft is shown with its problems and can't be saved until fixed
+
 ### T22 · Live run
 
 Watch the current run as it happens. *Depends on: T37 · 2 h*
@@ -619,9 +637,26 @@ Done when:
 - [ ] A past run opens in replay with the same layout and no controls
 - [ ] A drawer attempt link opens that attempt's replay
 
+### T42 · Existing repo onboarding
+
+Make an existing repo safe and ready to run tickets. *Depends on: T36 · 2.5 h*
+
+- First, check that every agent adapter ignores agent settings stored in the repo (for example `.claude/settings.json`, hooks, project-level Codex config) so they can never loosen SpoolHQ's per-run limits; fix any that don't.
+- Detect stack commands from a justfile, `package.json` scripts, `pyproject.toml` or a Makefile and pre-fill them.
+- When the commands fail during creation, say "Your tests fail before any change" with the output.
+- `PROGRESS.md` and `DECISIONS.md` are created on the first merge only when missing; existing ones are only appended to; `CLAUDE.md` is never written.
+- Detect a GitHub `origin` and offer it as the remote; a push rejected by branch protection blocks the ticket with "main is protected on GitHub; use the Always pull request preset".
+- Recommend Graphify in the dialog for existing repos.
+
+Done when:
+
+- [ ] A repo containing its own agent settings or hooks can't loosen the per-run limits (tested per adapter)
+- [ ] Commands are pre-filled for a justfile, an npm and a Python fixture repo
+- [ ] A failing baseline is reported as the repo's own failure
+
 ### T23 · Packaging
 
-One installer that brings its own daemon. *Depends on: T21, T40, T36, T37 · 3 h*
+One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42 · 3 h*
 
 - The daemon is bundled with PyInstaller and shipped as a Tauri sidecar; the app starts it when it is not running.
 - Closing the window leaves the daemon and any run going, with a tray icon to quit.
