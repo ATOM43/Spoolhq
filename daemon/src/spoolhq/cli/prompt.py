@@ -19,7 +19,7 @@ from spoolhq.services.context import (
     build_implementer_prompt,
     read_repo_docs,
 )
-from spoolhq.services.projects import ProjectError, load_project, project_dir
+from spoolhq.services.projects import ProjectError, has_spec, load_project, project_dir
 from spoolhq.services.tickets import TicketError, list_tickets
 
 prompt_app = typer.Typer(
@@ -78,7 +78,9 @@ def show_command(
             depends_on=dependencies,
             review_required=ticket.meta.review_required,
         ),
-        spec=_read(workspace / CONTEXT_FILE),
+        spec=_read(workspace / CONTEXT_FILE)
+        if has_spec(project, projects_dir=projects_dir)
+        else None,
         repo_docs=read_repo_docs(repo, project_settings.context.decisions_lines),
         commands=project_settings.commands.for_implementer(),
         max_chars=project_settings.context.max_chars,

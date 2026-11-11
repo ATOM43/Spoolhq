@@ -204,7 +204,11 @@ export interface paths {
         /** Get Tickets */
         get: operations["get_tickets_api_projects__name__tickets_get"];
         put?: never;
-        post?: never;
+        /**
+         * Post Ticket
+         * @description Add a ticket by hand; the daemon assigns the id. The ETag is in the header.
+         */
+        post: operations["post_ticket_api_projects__name__tickets_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1114,6 +1118,36 @@ export interface components {
             commit: string;
             /** Tag */
             tag: string;
+        };
+        /**
+         * NewTicket
+         * @description What the Add ticket form and ``spool tickets new`` send. No id: the daemon
+         *     assigns it.
+         */
+        NewTicket: {
+            /** Title */
+            title: string;
+            /**
+             * Scope
+             * @default
+             */
+            scope: string;
+            /** Done When */
+            done_when: string;
+            /** Depends On */
+            depends_on?: string[];
+            /**
+             * Estimate H
+             * @default 1
+             */
+            estimate_h: number;
+            /**
+             * Review Required
+             * @default false
+             */
+            review_required: boolean;
+            /** Phase */
+            phase?: number | null;
         };
         /** Note */
         Note: {
@@ -2395,6 +2429,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TicketList"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_ticket_api_projects__name__tickets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewTicket"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketView"];
                 };
             };
             /** @description An error. */

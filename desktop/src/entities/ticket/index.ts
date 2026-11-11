@@ -14,9 +14,11 @@ export {
   type DoneItem,
 } from "./model/body";
 export {
+  createTicket,
   ruleLabel,
   saveTicket,
   useTicketDetail,
+  type NewTicket,
   type RuleHit,
   type TicketAttempt,
   type TicketDetail,

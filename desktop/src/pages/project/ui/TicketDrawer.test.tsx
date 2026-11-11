@@ -415,14 +415,18 @@ describe("ticket drawer", () => {
       "active",
     );
     const banner = await screen.findByRole("region", { name: "Replay" });
-    expect(within(banner).getByText(/^Viewing attempt 2 of 4/)).toBeVisible();
+    expect(
+      within(banner).getByText(/^Run 7 · attempt 2 \(1 of 3 in this run\)/),
+    ).toBeVisible();
     expect(await screen.findByText("what attempt 2 said")).toBeInTheDocument();
   });
 
   it("reopens the same replay from ?run=&attempt= on a reload, and leaves it", async () => {
     const router = show("/p/demo?tab=run&run=7&attempt=3");
     const banner = await screen.findByRole("region", { name: "Replay" });
-    expect(within(banner).getByText(/^Viewing attempt 3 of 4/)).toBeVisible();
+    expect(
+      within(banner).getByText(/^Run 7 · attempt 3 \(2 of 3 in this run\)/),
+    ).toBeVisible();
     await userEvent.click(
       within(banner).getByRole("button", { name: "Next attempt" }),
     );
@@ -445,5 +449,157 @@ describe("ticket drawer", () => {
     );
     expect(drawer()).toBeNull();
     expect(router.state.location.search).toBe("?tab=tickets");
+  });
+
+  describe("Add ticket", () => {
+    const POST = vi.mocked(api.POST) as unknown as ReturnType<
+      typeof vi.fn<Handler>
+    >;
+    const T06: Ticket = {
+      ...T05,
+      id: "T06",
+      file_name: "T06-new-thing.md",
+      meta: { ...T05.meta, id: "T06", title: "New thing", depends_on: ["T01"] },
+    };
+    let saved: boolean;
+    const newDrawer = () =>
+      within(screen.getByRole("complementary", { name: "New ticket" }));
+    const open = async () => {
+      const router = show("/p/demo?tab=tickets");
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Add ticket" }),
+      );
+      expect(router.state.location.search).toBe("?tab=tickets&ticket=new");
+      return router;
+    };
+
+    beforeEach(() => {
+      saved = false;
+      const base = GET.getMockImplementation() as Handler;
+      GET.mockImplementation((path, init) => {
+        if (saved && path === "/api/projects/{name}/tickets") {
+          return ok({ tickets: [T01, T04, T05, T06], invalid: [] });
+        }
+        const id = (init as { params?: { path?: { ticket_id?: string } } })
+          .params?.path?.ticket_id;
+        return saved && id === "T06" ? ok(detailOf(T06)) : base(path, init);
+      });
+      POST.mockImplementation(() => {
+        saved = true;
+        return ok(T06);
+      });
+    });
+
+    it("opens an empty form, and Save shows the new id and its row", async () => {
+      const router = await open();
+      const form = newDrawer();
+      expect(form.getByRole("heading", { name: "New ticket" })).toBeVisible();
+      expect(form.getByText("Assigned on save")).toBeVisible();
+      expect(form.getByRole("textbox", { name: "Title" })).toHaveValue("");
+      expect(form.getByRole("textbox", { name: "Scope" })).toHaveValue("");
+      expect(form.getByRole("textbox", { name: "Done when" })).toHaveValue("");
+      expect(form.queryByRole("alert")).toBeNull(); // no errors before typing
+      const save = form.getByRole("button", { name: "Save" });
+      expect(save).toBeDisabled();
+      expect(save).toHaveAccessibleDescription("Give the ticket a title first");
+
+      await userEvent.type(
+        form.getByRole("textbox", { name: "Title" }),
+        "New thing",
+      );
+      await userEvent.type(
+        form.getByRole("textbox", { name: "Done when" }),
+        "- [[ ] It works",
+      );
+      await userEvent.click(form.getByRole("checkbox", { name: /T01/ }));
+      // Enabled now; the disabled one was another element (ReasonButton).
+      await userEvent.click(form.getByRole("button", { name: "Save" }));
+      expect(POST).toHaveBeenCalledWith("/api/projects/{name}/tickets", {
+        params: { path: { name: "demo" } },
+        body: {
+          title: "New thing",
+          scope: "",
+          done_when: "- [ ] It works",
+          depends_on: ["T01"],
+          estimate_h: 1,
+          review_required: false,
+        },
+      });
+      await vi.waitFor(() => {
+        expect(router.state.location.search).toBe("?tab=tickets&ticket=T06");
+      });
+      const aside = within(
+        await screen.findByRole("complementary", { name: "Ticket T06" }),
+      );
+      expect(
+        await aside.findByRole("heading", { name: "New thing" }),
+      ).toBeVisible();
+      expect(
+        document.querySelector('tr[data-ticket="T06"]'),
+      ).toBeInTheDocument();
+    });
+
+    it("Cancel closes an untouched form, and asks first once there is text", async () => {
+      const router = await open();
+      await userEvent.click(
+        newDrawer().getByRole("button", { name: "Cancel" }),
+      );
+      expect(drawer()).toBeNull();
+      expect(router.state.location.search).toBe("?tab=tickets");
+
+      await userEvent.click(screen.getByRole("button", { name: "Add ticket" }));
+      await userEvent.type(
+        newDrawer().getByRole("textbox", { name: "Scope" }),
+        "half an idea",
+      );
+      await userEvent.click(
+        newDrawer().getByRole("button", { name: "Cancel" }),
+      );
+      const confirm = within(
+        screen.getByRole("dialog", { name: "Discard the new ticket?" }),
+      );
+      await userEvent.click(
+        confirm.getByRole("button", { name: "Keep going" }),
+      );
+      expect(newDrawer().getByRole("textbox", { name: "Scope" })).toHaveValue(
+        "half an idea",
+      );
+      await userEvent.click(
+        newDrawer().getByRole("button", { name: "Cancel" }),
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "Discard changes" }),
+      );
+      expect(drawer()).toBeNull();
+      expect(POST).not.toHaveBeenCalled();
+    });
+
+    it("shows a 422 next to its field and keeps the form", async () => {
+      POST.mockImplementation(() =>
+        Promise.reject(
+          new DaemonError({
+            kind: "api",
+            status: 422,
+            code: "validation_error",
+            message: "“Done when” needs at least one checklist item",
+            field: "done_when",
+            etag: null,
+            current: null,
+          }),
+        ),
+      );
+      await open();
+      const form = newDrawer();
+      await userEvent.type(form.getByRole("textbox", { name: "Title" }), "X");
+      await userEvent.click(form.getByRole("button", { name: "Save" }));
+      const field = form.getByRole("textbox", { name: "Done when" });
+      await vi.waitFor(() => {
+        expect(field).toHaveAccessibleDescription(
+          /“Done when” needs at least one checklist item/,
+        );
+      });
+      expect(field).toBeInvalid();
+      expect(form.getByRole("textbox", { name: "Title" })).toHaveValue("X");
+    });
   });
 });

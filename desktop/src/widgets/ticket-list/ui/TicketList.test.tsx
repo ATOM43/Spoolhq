@@ -81,6 +81,8 @@ function project(extra: Partial<ProjectDetail> = {}): ProjectDetail {
 
 const onOpen = vi.fn<(id: string) => void>();
 const onOpenSpec = vi.fn<() => void>();
+const onAdd = vi.fn<() => void>();
+let running: boolean;
 
 function show(detail: ProjectDetail = project()) {
   render(
@@ -89,7 +91,12 @@ function show(detail: ProjectDetail = project()) {
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <TicketList project={detail} onOpen={onOpen} onOpenSpec={onOpenSpec} />
+      <TicketList
+        project={detail}
+        onOpen={onOpen}
+        onAdd={onAdd}
+        onOpenSpec={onOpenSpec}
+      />
     </QueryClientProvider>,
   );
 }
@@ -108,6 +115,7 @@ describe("Tickets tab", () => {
     vi.clearAllMocks();
     tickets = [];
     plan = PLAN;
+    running = false;
     GET.mockImplementation((path) => {
       switch (path) {
         case "/api/projects/{name}/tickets":
@@ -115,7 +123,7 @@ describe("Tickets tab", () => {
         case "/api/projects/{name}/plan":
           return ok(plan);
         case "/api/projects/{name}/runs/current":
-          return ok({ run: null, phases: [] });
+          return ok({ active: running, run: null, phases: [] });
         case "/api/agents":
           return ok({
             backends: [{ installed: true, logged_in: true }],
@@ -337,16 +345,37 @@ describe("Tickets tab", () => {
     });
   });
 
-  it("without a spec, points to the Spec tab", async () => {
+  it("without a spec, points to the Spec tab or to Add ticket", async () => {
     plan = { ...PLAN, state: "none" };
     show(project({ has_spec: false }));
     expect(
       await screen.findByText(
-        "Write a spec first; the planner turns it into tickets.",
+        "Write a spec and generate a plan, or add a ticket yourself.",
       ),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Open Spec" }));
     expect(onOpenSpec).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Add ticket" }));
+    expect(onAdd).toHaveBeenCalled();
+  });
+
+  it("has Add ticket in the toolbar", async () => {
+    tickets = [ticket("T01", "ready")];
+    show();
+    const add = await screen.findByRole("button", { name: "Add ticket" });
+    await userEvent.click(add);
+    expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables Add ticket with its reason during a run", async () => {
+    tickets = [ticket("T01", "running")];
+    running = true;
+    show();
+    const add = await screen.findByRole("button", { name: "Add ticket" });
+    await vi.waitFor(() => {
+      expect(add).toBeDisabled();
+    });
+    expect(add).toHaveAccessibleDescription("Wait for the run to finish");
   });
 
   it("with a spec but no plan, offers Generate plan", async () => {
@@ -354,6 +383,8 @@ describe("Tickets tab", () => {
     POST.mockImplementation(() => ok({ run_id: 1 }));
     show();
     expect(await screen.findByText("No plan yet.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add ticket" }));
+    expect(onAdd).toHaveBeenCalled();
     const generate = await screen.findByRole("button", {
       name: "Generate plan",
     });

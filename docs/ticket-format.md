@@ -104,6 +104,7 @@ If a frontmatter cannot be updated line by line (it is written as one `{...}` fl
 | --- | --- |
 | `spool tickets list <project> [--status S] [--phase N]` | Table of id, status, phase, title, dependencies and estimate, sorted by id. Invalid files are listed at the end with their errors, and the command then exits 1. |
 | `spool tickets show <project> <id>` | The frontmatter fields, the Done-when checklist and the body. Warnings go to stderr. |
+| `spool tickets new <project> --title … --done-when … [--done-when …] [--depends-on T02,T03] [--estimate 2] [--phase 4] [--review-required] [--scope-file FILE]` | Adds a ticket with the next id (the number after the highest one; gaps are never filled) and prints its file. Each `--done-when` is one checklist item. The scope is read from `--scope-file` or, when piped, from stdin, never through a shell. `ready`, or `draft` while a draft plan waits. Same service and checks as the app's Add ticket ([API](api.md#adding-a-ticket)). |
 | `spool tickets edit <project> <id>` | Opens the file in your editor, then checks it. |
 | `spool tickets set-status <project> <id> <status>` | Changes the status if the [transition table](scheduler.md#status-transitions) allows it; only the `status` line changes. |
 

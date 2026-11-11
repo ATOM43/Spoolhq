@@ -1,4 +1,4 @@
-"""Ticket endpoints: list, read and edit tickets (ETag + If-Match), and unblock one with
+"""Ticket endpoints: list, read, add and edit tickets (ETag + If-Match), and unblock one with
 a note (token required). Edits go through the ticket store, so unchanged keys keep their
 bytes, and status changes through the scheduler's transition table."""
 
@@ -29,7 +29,7 @@ from spoolhq.api.security import bearer_scheme
 from spoolhq.services.projects import EditConflict, load_project, read_with_etag, write_if_match
 from spoolhq.services.runloop import GitHubPoller, RunLoop, ticket_runs
 from spoolhq.services.runs import ticket_activity
-from spoolhq.services.scheduler import edit_ticket
+from spoolhq.services.scheduler import NewTicket, create_ticket, edit_ticket
 from spoolhq.services.tickets import (
     TicketStatus,
     find_ticket_file,
@@ -57,6 +57,18 @@ def get_tickets(
         tickets=[TicketView.of(ticket, activity.get(ticket.id)) for ticket in listing.tickets],
         invalid=[InvalidTicketView.of(invalid) for invalid in listing.invalid],
     )
+
+
+@router.post("", status_code=201)
+def post_ticket(
+    name: ProjectName, body: NewTicket, request: Request, response: Response
+) -> TicketView:
+    """Add a ticket by hand; the daemon assigns the id. The ETag is in the header."""
+    workspace(request, name)
+    with service_errors():
+        ticket = create_ticket(name, body, projects_dir=settings(request).projects_dir)
+    view, response.headers["ETag"] = _read(name, ticket.id, request)
+    return view
 
 
 def _read(name: str, ticket_id: str, request: Request) -> tuple[TicketView, str]:

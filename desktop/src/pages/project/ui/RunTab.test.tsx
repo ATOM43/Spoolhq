@@ -588,7 +588,9 @@ describe("Run tab, no active run", () => {
     await userEvent.click(within(table).getByText("Demands page and dialogs"));
     expect(calls.replay).toHaveBeenCalledWith({ runId: 7, attempt: 2 });
     const banner = await screen.findByRole("region", { name: "Replay" });
-    expect(within(banner).getByText(/Viewing attempt 2 of 2/)).toBeVisible();
+    expect(
+      within(banner).getByText(/^Run 7 · attempt 2 \(2 of 2 in this run\)/),
+    ).toBeVisible();
     await userEvent.click(
       within(banner).getByRole("button", { name: "Back to past runs" }),
     );
@@ -625,7 +627,9 @@ describe("Run tab, live and replay never mix", () => {
       name: "Show current run",
     });
     expect(screen.getByText("the old attempt")).toBeInTheDocument();
-    expect(within(banner).getByText(/Viewing attempt 1 of 1/)).toBeVisible();
+    expect(
+      within(banner).getByText(/^Run 3 · attempt 1 \(1 of 1 in this run\)/),
+    ).toBeVisible();
 
     await userEvent.click(showCurrent);
     expect(calls.replay).toHaveBeenLastCalledWith(null);

@@ -20,7 +20,7 @@ from spoolhq.services.context import (
     read_repo_docs,
 )
 from spoolhq.services.git import conflict_files, run_git
-from spoolhq.services.projects import Project
+from spoolhq.services.projects import Project, has_spec
 from spoolhq.services.runloop.model import RunContext
 from spoolhq.services.runs import ArtifactName, AttemptKind, AttemptStatus, EventKind, attempt_files
 from spoolhq.services.tickets import list_tickets
@@ -144,7 +144,10 @@ def implementer_prompt(ctx: RunContext, kind: AttemptKind) -> str:
             ),
             review_required=meta.review_required,
         ),
-        spec=_read(ctx.workspace / CONTEXT_FILE),
+        # A blank or starter CONTEXT.md is no spec: its section is left out.
+        spec=_read(ctx.workspace / CONTEXT_FILE)
+        if has_spec(ctx.project.name, projects_dir=ctx.projects_dir)
+        else None,
         repo_docs=read_repo_docs(repo, ctx.project.context.decisions_lines),
         commands=ctx.project.commands.for_implementer(),
         previous=previous_attempt(ctx, kind),

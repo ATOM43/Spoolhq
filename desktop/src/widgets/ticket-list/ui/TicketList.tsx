@@ -3,6 +3,7 @@ import {
   ChevronRight,
   FilePen,
   LoaderCircle,
+  Plus,
   RotateCw,
   SearchX,
   Sparkles,
@@ -62,14 +63,34 @@ function problemTags(plan: Plan | undefined): Map<string, string> {
 export function TicketList({
   project,
   onOpen,
+  onAdd,
   onOpenSpec,
 }: {
   project: ProjectDetail;
   onOpen: (id: string) => void;
+  /** Open the drawer on a new, empty ticket. */
+  onAdd: () => void;
   onOpenSpec: () => void;
 }) {
   const tickets = useTickets(project.name);
   const plan = usePlan(project.name);
+  const running = useCurrentRun(project.name).data?.active ?? false;
+  const add = (
+    <ReasonButton
+      variant="outline"
+      reason={
+        plan.data?.state === "planning"
+          ? "Wait for the planner to finish"
+          : running
+            ? "Wait for the run to finish"
+            : null
+      }
+      onClick={onAdd}
+    >
+      <Plus aria-hidden />
+      Add ticket
+    </ReasonButton>
+  );
 
   if (tickets.isPending || plan.isPending) {
     return (
@@ -105,13 +126,18 @@ export function TicketList({
   }
   if (tickets.data.tickets.length === 0 && plan.data.problems.length === 0) {
     return project.has_spec ? (
-      <NoPlan project={project.name} />
+      <NoPlan project={project.name} add={add} />
     ) : (
       <EmptyState
         icon={<FilePen aria-hidden />}
-        title="Write a spec first; the planner turns it into tickets."
-        description="The spec (CONTEXT.md) says what the project should do."
-        action={<Button onClick={onOpenSpec}>Open Spec</Button>}
+        title="Write a spec and generate a plan, or add a ticket yourself."
+        description="The spec (CONTEXT.md) says what the project should do; a ticket you add runs without one."
+        action={
+          <span className="flex flex-wrap items-center justify-center gap-2">
+            <Button onClick={onOpenSpec}>Open Spec</Button>
+            {add}
+          </span>
+        }
       />
     );
   }
@@ -120,6 +146,7 @@ export function TicketList({
       project={project}
       plan={plan.data}
       tickets={tickets.data.tickets}
+      add={add}
       onOpen={onOpen}
     />
   );
@@ -129,11 +156,13 @@ function Board({
   project,
   plan,
   tickets,
+  add,
   onOpen,
 }: {
   project: ProjectDetail;
   plan: Plan;
   tickets: Ticket[];
+  add: ReactNode;
   onOpen: (id: string) => void;
 }) {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
@@ -191,6 +220,7 @@ function Board({
           />
           Show done
         </label>
+        <span className="ml-auto">{add}</span>
       </div>
       {shown.length === 0 ? (
         <EmptyState
@@ -352,7 +382,7 @@ function Planning({ project }: { project: string }) {
   );
 }
 
-function NoPlan({ project }: { project: string }) {
+function NoPlan({ project, add }: { project: string; add: ReactNode }) {
   const generate = useGeneratePlan(project);
   const agent = useAgentBlocker();
   const blocker = generate.isPending ? "Starting the planner…" : agent;
@@ -363,22 +393,25 @@ function NoPlan({ project }: { project: string }) {
       description="The planner reads the spec and drafts tickets for you to review and approve."
       action={
         <span className="flex flex-col items-center gap-2">
-          <ReasonButton
-            reason={blocker}
-            onClick={() => {
-              generate.mutate(undefined, {
-                onError: (error) => {
-                  showToast(
-                    `Couldn't start the planner: ${error.message}`,
-                    "error",
-                  );
-                },
-              });
-            }}
-          >
-            <Sparkles aria-hidden />
-            Generate plan
-          </ReasonButton>
+          <span className="flex flex-wrap items-center justify-center gap-2">
+            <ReasonButton
+              reason={blocker}
+              onClick={() => {
+                generate.mutate(undefined, {
+                  onError: (error) => {
+                    showToast(
+                      `Couldn't start the planner: ${error.message}`,
+                      "error",
+                    );
+                  },
+                });
+              }}
+            >
+              <Sparkles aria-hidden />
+              Generate plan
+            </ReasonButton>
+            {add}
+          </span>
           <OpenSettingsLink reason={agent} />
         </span>
       }

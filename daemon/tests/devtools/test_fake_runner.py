@@ -189,3 +189,27 @@ def test_fill_verdict_fits_the_prompts_items() -> None:
     # Item 1 is checked by the gates, so item 2 is the unmet one.
     assert '{\\"index\\": 2, \\"met\\": false' in changes
     assert fill_verdict("no list", "@@ITEMS@@") == "[]"
+
+
+@pytest.mark.integration
+def test_a_hand_added_ticket_runs_without_a_spec(
+    dev_client: ClientFactory, token: str, dev_project: Path, git_repo: Path
+) -> None:
+    """Tickets only: the starter CONTEXT.md, no plan, one ticket added through the API."""
+    for path in (dev_project / "tickets").iterdir():
+        path.unlink()
+    client = dev_client("happy")
+    assert not client.get("/api/projects/demo", headers=auth(token)).json().get("has_spec")
+    added = client.post(
+        "/api/projects/demo/tickets",
+        json={"title": "Add a fake test", "done_when": "- [ ] A test exists"},
+        headers=auth(token),
+    )
+    assert (added.status_code, added.json()["id"]) == (201, "T01")
+    current = run_next(client, token)
+    assert (current["run"]["ticket_id"], current["run"]["status"]) == ("T01", "done")
+    assert (git_repo / "backend" / "tests" / "test_spoolhq_fake.py").is_file()
+    implementer = client.app.state.runloop.agents.implementer  # type: ignore[attr-defined]
+    prompt = implementer.calls[0][0]
+    assert "Add a fake test" in prompt
+    assert "<spec>\n" not in prompt and "## The project spec" not in prompt

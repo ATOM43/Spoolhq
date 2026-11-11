@@ -1,16 +1,25 @@
-"""`spool tickets`: list, show and edit a project's ticket files, and change a status.
+"""`spool tickets`: list, show, add and edit a project's ticket files, and change a status.
 
 These are local file operations, so they call the tickets service directly; the daemon
 is not needed.
 """
 
+import sys
+from pathlib import Path
 from typing import Annotated
 
 import typer
+from pydantic import ValidationError
 
 from spoolhq.cli.common import fail, hours, settings, table
 from spoolhq.cli.runs import _run_log, _workspace
-from spoolhq.services.scheduler import SchedulerError, apply_transition
+from spoolhq.services.scheduler import (
+    NewTicket,
+    SchedulerError,
+    TicketEditError,
+    apply_transition,
+    create_ticket,
+)
 from spoolhq.services.tickets import (
     TICKET_STATUSES,
     Ticket,
@@ -130,6 +139,56 @@ def show_command(project: ProjectArg, ticket_id: TicketIdArg) -> None:
     typer.echo(ticket.body.replace("\r\n", "\n").strip("\n"))
     for warning in ticket.warnings:
         typer.echo(f"warning: {warning}", err=True)
+
+
+@tickets_app.command("new")
+def new_command(
+    project: ProjectArg,
+    title: Annotated[str, typer.Option(help="The ticket's title.")],
+    done_when: Annotated[
+        list[str],
+        typer.Option("--done-when", help="One checklist item the reviewer checks; repeat it."),
+    ],
+    depends_on: Annotated[
+        str, typer.Option("--depends-on", help="Ticket ids, comma-separated: T02,T03.")
+    ] = "",
+    estimate: Annotated[float, typer.Option(help="Hours.")] = 1,
+    phase: Annotated[
+        int | None, typer.Option(min=0, help="Default: the project's highest phase.")
+    ] = None,
+    review_required: Annotated[bool, typer.Option("--review-required")] = False,
+    scope_file: Annotated[
+        Path | None,
+        typer.Option("--scope-file", help="Markdown file with the scope; default: stdin."),
+    ] = None,
+) -> None:
+    """Add a ticket; SpoolHQ assigns the next id. The scope is read from --scope-file
+    or, when piped, from stdin."""
+    try:
+        if scope_file is not None:
+            scope = scope_file.read_text(encoding="utf-8")
+        else:
+            scope = "" if sys.stdin.isatty() else sys.stdin.read()
+        new = NewTicket(
+            title=title,
+            scope=scope,
+            done_when="\n".join(f"- [ ] {item}" for item in done_when),
+            depends_on=[dep.strip() for dep in depends_on.split(",") if dep.strip()],
+            estimate_h=estimate,
+            review_required=review_required,
+            phase=phase,
+        )
+        ticket = create_ticket(project, new, projects_dir=settings().projects_dir)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        fail(f"error: {'.'.join(str(part) for part in first['loc'])}: {first['msg']}")
+    except TicketValidationError as exc:
+        fail("\n".join(exc.errors))
+    except TicketEditError as exc:
+        fail(f"error: {exc.field}: {exc}")
+    except (OSError, TicketError, SchedulerError) as exc:
+        fail(f"error: {exc}")
+    typer.echo(f"Added {ticket.id} ({ticket.meta.status}): tickets/{ticket.file_name}")
 
 
 @tickets_app.command("edit")

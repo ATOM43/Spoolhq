@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import {
   asTyped,
+  createTicket,
   joinBody,
   saveTicket,
   splitBody,
@@ -34,6 +35,16 @@ export function draftOf(ticket: TicketDetail): Draft {
   };
 }
 
+/** The Add ticket form before anything is typed; T41 passes a filled one instead. */
+export const EMPTY_DRAFT: Draft = {
+  title: "",
+  scope: "",
+  doneWhen: "",
+  dependsOn: [],
+  estimate: "1",
+  reviewRequired: false,
+};
+
 export const sameDraft = (a: Draft, b: Draft) =>
   JSON.stringify(a) === JSON.stringify(b);
 
@@ -58,6 +69,12 @@ const FIELDS: Record<string, FieldName> = {
   "meta.review_required": "reviewRequired",
   done_when: "doneWhen",
   body: "scope",
+  // A new ticket's fields (`POST …/tickets`).
+  title: "title",
+  scope: "scope",
+  depends_on: "dependsOn",
+  estimate_h: "estimate",
+  review_required: "reviewRequired",
 };
 
 export type SaveError =
@@ -79,11 +96,22 @@ export function saveError(error: unknown): SaveError {
   };
 }
 
-/** Save the draft over the file whose ETag is `etag`; refetch the tickets after. */
-export function useSaveDraft(project: string, ticket: TicketDetail) {
+/** Save the draft over the file whose ETag is `etag`, or as a new ticket when there
+ * is none yet; refetch the tickets after. Resolves to the ticket's id. */
+export function useSaveDraft(project: string, ticket: TicketDetail | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ draft, etag }: { draft: Draft; etag: string }) => {
+    mutationFn: async ({ draft, etag }: { draft: Draft; etag: string }) => {
+      if (ticket === null) {
+        return createTicket(project, {
+          title: draft.title,
+          scope: draft.scope,
+          done_when: draft.doneWhen,
+          depends_on: draft.dependsOn,
+          estimate_h: Number(draft.estimate),
+          review_required: draft.reviewRequired,
+        });
+      }
       const meta: TicketMeta = {
         ...ticket.meta,
         title: draft.title,
@@ -96,9 +124,16 @@ export function useSaveDraft(project: string, ticket: TicketDetail) {
         draft.scope,
         draft.doneWhen,
       );
-      return saveTicket(project, ticket.id, meta, body, etag);
+      await saveTicket(project, ticket.id, meta, body, etag);
+      return ticket.id;
     },
     onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.tickets(project) }),
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.tickets(project) }),
+        // A new ticket changes the project's count and what runs next.
+        ticket === null
+          ? queryClient.invalidateQueries({ queryKey: queryKeys.projects })
+          : null,
+      ]),
   });
 }

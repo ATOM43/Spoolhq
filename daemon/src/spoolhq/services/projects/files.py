@@ -36,7 +36,8 @@ def read_with_etag(path: Path) -> tuple[bytes, str]:
     return data, etag_of(data)
 
 
-def _lock(workspace: Path) -> threading.Lock:
+def edit_lock(workspace: Path) -> threading.Lock:
+    """The project's edit lock: every API write to a workspace file holds it."""
     with _locks_guard:
         return _locks.setdefault(workspace.resolve(), threading.Lock())
 
@@ -46,7 +47,7 @@ def write_if_match(workspace: Path, path: Path, if_match: str, write: Callable[[
 
     Raises EditConflict (with the current ETag and bytes) when it differs.
     """
-    with _lock(workspace):
+    with edit_lock(workspace):
         data, current = read_with_etag(path)
         if if_match.strip() != current:
             raise EditConflict(current, data)

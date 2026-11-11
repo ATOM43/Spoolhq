@@ -317,3 +317,114 @@ def test_the_detail_has_the_run_attempts_and_git(run_client: TestClient, token: 
     git = detail["git"]
     assert len(git["commit"]) == 40 and git["tag"] == "ticket/T07"
     assert git["commit_url"] is None and git["pr_state"] is None
+
+
+# --- adding a ticket (T38) ------------------------------------------------------------
+
+
+def add(client: TestClient, token: str, **fields: object) -> tuple[int, dict[str, object], str]:
+    body = {"title": "Add a thing", "scope": "- Do it.", "done_when": "- [ ] It works", **fields}
+    answer = client.post("/api/projects/demo/tickets", json=body, headers=auth(token))
+    return answer.status_code, answer.json(), answer.headers.get("ETag", "")
+
+
+def test_a_new_ticket_gets_the_next_number_and_its_file(
+    client: TestClient, token: str, workspace: Path
+) -> None:
+    for number in range(1, 43):
+        write_ticket(workspace, f"T{number:02d}", "")
+    status, ticket, tag = add(client, token, title='Fix "quotes"; rm -rf /', depends_on=["T42"])
+    assert (status, ticket["id"]) == (201, "T43")
+    assert ticket["file_name"] == "T43-fix-quotes-rm-rf.md"
+    file = workspace / "tickets" / "T43-fix-quotes-rm-rf.md"
+    assert tag == etag(file)
+    meta = ticket["meta"]
+    assert isinstance(meta, dict)
+    assert (meta["title"], meta["status"]) == ('Fix "quotes"; rm -rf /', "ready")
+    assert (meta["phase"], meta["depends_on"]) == (0, ["T42"])
+    assert ticket["body"] == "\n- Do it.\n\n## Done when\n- [ ] It works\n"
+    # The written file round-trips byte for byte.
+    loaded = load_ticket("demo", "T43", projects_dir=workspace.parent)
+    assert render_ticket(loaded).encode() == file.read_bytes()
+    got = client.get("/api/projects/demo/tickets/T43", headers=auth(token))
+    put = client.put(
+        "/api/projects/demo/tickets/T43",
+        json={"meta": got.json()["meta"], "body": got.json()["body"]},
+        headers=auth(token, **{"If-Match": tag}),
+    )
+    assert (put.status_code, put.headers["ETag"]) == (200, tag)
+
+
+def test_gaps_and_invalid_files_are_never_reused(
+    client: TestClient, token: str, workspace: Path
+) -> None:
+    for ticket_id in ("T01", "T02", "T05"):
+        write_ticket(workspace, ticket_id, "")
+    assert add(client, token)[1]["id"] == "T06"
+    (workspace / "tickets" / "T09-broken.md").write_text("not a ticket", encoding="utf-8")
+    assert add(client, token)[1]["id"] == "T10"
+
+
+def test_a_new_ticket_is_ready_or_draft_with_a_waiting_plan(
+    client: TestClient, token: str, workspace: Path
+) -> None:
+    def status_of(answer: tuple[int, dict[str, object], str]) -> object:
+        meta = answer[1]["meta"]
+        assert isinstance(meta, dict)
+        return meta["status"]
+
+    assert status_of(add(client, token)) == "ready"  # no plan
+    write_ticket(workspace, "T02", "", "done")
+    assert status_of(add(client, token, phase=3, estimate_h=2.5)) == "ready"  # approved plan
+    write_ticket(workspace, "T04", "", "draft")
+    assert status_of(add(client, token)) == "draft"  # a draft waits for approval
+    approved = client.post("/api/projects/demo/plan/approve", headers=auth(token))
+    assert approved.status_code == 200, approved.json()
+    assert load_ticket("demo", "T05", projects_dir=workspace.parent).meta.status == "ready"
+    assert load_ticket("demo", "T03", projects_dir=workspace.parent).meta.estimate_h == 2.5
+
+
+@pytest.mark.parametrize(
+    ("fields", "field"),
+    [
+        ({"depends_on": ["T99"]}, "depends_on"),
+        ({"depends_on": ["T01"]}, "depends_on"),
+        ({"done_when": "nothing to check"}, "done_when"),
+        ({"title": "   "}, "title"),
+        ({"id": "T77"}, "id"),
+    ],
+    ids=["unknown-dependency", "cycle", "empty-done-when", "blank-title", "client-id"],
+)
+def test_a_refused_new_ticket_is_422_with_the_field_and_writes_nothing(
+    client: TestClient, token: str, workspace: Path, fields: dict[str, object], field: str
+) -> None:
+    write_ticket(workspace, "T01", "T03")
+    write_ticket(workspace, "T03", "T01")
+    before = sorted(p.name for p in (workspace / "tickets").iterdir())
+    status, answer, _ = add(client, token, **fields)
+    error = answer["error"]
+    assert isinstance(error, dict)
+    assert (status, error["code"], error["field"]) == (422, "validation_error", field)
+    assert sorted(p.name for p in (workspace / "tickets").iterdir()) == before
+
+
+def test_two_creates_at_once_get_different_ids(
+    client: TestClient, token: str, workspace: Path
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(8) as pool:
+        ids = list(pool.map(lambda n: add(client, token, title=f"Ticket {n}")[1]["id"], range(8)))
+    assert sorted(ids) == [f"T{n:02d}" for n in range(1, 9)]
+    assert len(list((workspace / "tickets").glob("T*.md"))) == 8
+
+
+def test_run_next_needs_a_ticket_not_a_spec(
+    client: TestClient, token: str, workspace: Path
+) -> None:
+    """Nothing to run without tickets; a hand-added one is next, starter spec or not."""
+    before = client.get("/api/projects/demo", headers=auth(token)).json()
+    assert (before["has_spec"], before["total"], before["next_ticket"]) == (False, 0, None)
+    add(client, token)
+    after = client.get("/api/projects/demo", headers=auth(token)).json()
+    assert (after["has_spec"], after["next_ticket"], after["idle"]) == (False, "T01", None)

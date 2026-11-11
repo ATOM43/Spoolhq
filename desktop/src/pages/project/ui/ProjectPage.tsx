@@ -25,7 +25,7 @@ import {
   DaemonErrorPanel,
 } from "@/widgets/daemon-down-panel";
 import { SpecEditor } from "@/widgets/spec-editor";
-import { TicketDrawer } from "@/widgets/ticket-drawer";
+import { NewTicketDrawer, TicketDrawer } from "@/widgets/ticket-drawer";
 import { TicketList } from "@/widgets/ticket-list";
 
 import { formatUsage, guidance, panelState, type Tab } from "../model/state";
@@ -147,6 +147,8 @@ const TAB_LIST =
 const TAB =
   "h-10 flex-none rounded-none border-0 border-b-2 border-transparent px-0 data-[state=active]:border-accent data-[state=active]:bg-transparent data-[state=active]:shadow-none";
 const TABS: readonly Tab[] = ["spec", "tickets", "run"];
+/** `?ticket=new`: the drawer on a ticket that isn't saved yet. */
+const NEW_TICKET = "new";
 
 function Loaded({
   project,
@@ -288,6 +290,9 @@ function Loaded({
             <TicketList
               project={project}
               onOpen={openTicket}
+              onAdd={() => {
+                openTicket(NEW_TICKET);
+              }}
               onOpenSpec={() => {
                 setChosen("spec");
               }}
@@ -310,7 +315,13 @@ function Loaded({
               }}
             />
           </TabsContent>
-          {ticket ? (
+          {ticket === NEW_TICKET ? (
+            <NewTicketDrawer
+              project={project.name}
+              onSaved={openTicket}
+              onClose={closeTicket}
+            />
+          ) : ticket ? (
             <TicketDrawer
               project={project.name}
               ticketId={ticket}

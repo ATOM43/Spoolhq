@@ -23,6 +23,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET`, `PUT /api/projects/{name}/spec` | `CONTEXT.md` as `{"content": "..."}`; ETag |
 | `GET /api/projects/{name}/tickets?status=&phase=` | `{"tickets": [...], "invalid": [...]}`; each ticket is `id`, `file_name`, `meta` (the frontmatter), `body` and `activity` (null before its first run: `attempts`, `tokens` of attempts without a cost, `cost_micro_usd` summed over those with one, the latest run's `run_id` and `reason`) |
 | `GET /api/projects/{name}/tickets/{id}` | one ticket (`activity` null) with its ETag and [what the drawer shows](#ticket-detail): `run`, `attempts`, `git` |
+| `POST /api/projects/{name}/tickets` | [add a ticket](#adding-a-ticket) by hand: 201 with the ticket and its `ETag`; the daemon assigns the id |
 | `PUT /api/projects/{name}/tickets/{id}` | `{"meta", "body"}` with `If-Match`; see [Editing a ticket](#editing-a-ticket) |
 | `POST /api/projects/{name}/tickets/{id}/unblock` | `{"note", "reset_retries"}`: continue a blocked ticket's run with a new attempt whose prompt has the note (`note` 1 character or more, else 422; `reset_retries` default true gives the run its full gate and review retries again; 409 `not_blocked`) |
 | `POST /api/projects/{name}/tickets/{id}/approve` (`/integrate`), `/reject`, `/discard` | see [run-loop.md](run-loop.md#api-and-cli) |
@@ -162,6 +163,34 @@ A ticket can be edited while it is `draft`, `ready` or `blocked`; while it is `r
 | a changed `depends_on` naming a ticket that doesn't exist | `meta.depends_on` | `T01 depends on T99, which does not exist` |
 | a changed `depends_on` that makes a cycle through this ticket | `meta.depends_on` | `cycle: T01 → T03 → T01` |
 | a changed body without "Done when" items | `done_when` | `“Done when” needs at least one checklist item` |
+
+### Adding a ticket
+
+`POST …/tickets` takes what the Add ticket form holds; `spool tickets new` calls the same service:
+
+| Field | |
+| --- | --- |
+| `title` | required, not blank |
+| `scope` | markdown, default empty: everything above the "Done when" heading |
+| `done_when` | required: the checklist as markdown, one `- [ ] …` line per item |
+| `depends_on` | ticket ids, default none |
+| `estimate_h` | default 1 |
+| `review_required` | default false |
+| `phase` | default: the highest phase the project has (0 without tickets) |
+
+There is no `id` field (sending one is 422 `id`). The daemon takes the number after the highest one in `tickets/` (`T43` after `T42`), counting files that don't load, so a gap is never filled; with `T01`, `T02` and `T05` the next is `T06`. The file is `<id>-<slug>.md`, the slug built from the title like a branch name. The id is taken and the file written under the project's edit lock, so two requests at once get different ids.
+
+The status is `ready`, since you wrote it; while a draft plan waits for approval (plan `state` `draft`) it is `draft`, and approving the plan approves it too.
+
+Refusals are 422 `validation_error` with the field, and nothing is written:
+
+| Refused | `field` | Message |
+| --- | --- | --- |
+| a dependency that doesn't exist | `depends_on` | `depends on T99, which does not exist` |
+| a dependency that sits in a cycle | `depends_on` | `cycle: T01 → T03 → T01` |
+| no "Done when" items | `done_when` | `“Done when” needs at least one checklist item` |
+
+A project needs no spec to run such a ticket: `next_ticket` names it, and `run/next` starts it (the `test` command is still required).
 
 ### Ticket detail
 

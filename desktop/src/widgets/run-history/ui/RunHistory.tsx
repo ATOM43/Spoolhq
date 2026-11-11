@@ -77,6 +77,9 @@ export function RunHistory({
           <thead className="border-b bg-surface-sunken">
             <tr>
               <th scope="col" className={HEAD}>
+                Run
+              </th>
+              <th scope="col" className={HEAD}>
                 Ticket
               </th>
               <th scope="col" className={HEAD}>
@@ -165,6 +168,12 @@ function Row({
   );
   return (
     <tr onClick={open} className="cursor-pointer hover:bg-surface-sunken">
+      <td className={`${CELL} whitespace-nowrap text-ink-muted`}>
+        Run {run.id}
+        {run.last_attempt == null
+          ? ""
+          : ` · attempt ${String(run.last_attempt)}`}
+      </td>
       <td className={CELL}>
         <TicketChip id={run.ticket_id} onOpen={onOpenTicket} />
       </td>

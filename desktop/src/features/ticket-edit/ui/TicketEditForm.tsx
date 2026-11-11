@@ -15,6 +15,7 @@ import {
 import {
   checkDraft,
   draftOf,
+  EMPTY_DRAFT,
   sameDraft,
   saveError,
   useSaveDraft,
@@ -27,40 +28,51 @@ import {
  * The drawer in edit mode: title, Scope and "Done when" as markdown, dependencies,
  * estimate and review required, with Save and Cancel at the bottom. Saves with the
  * file's ETag; a 412 shows "Changed on disk · Reload · Keep mine", a 422 its field.
+ * With `ticket` null it is the Add ticket form: Save creates the ticket, and `draft`
+ * (a planner draft, T41) fills it in first, still unsaved.
  */
 export function TicketEditForm({
   project,
   ticket,
-  etag,
+  etag = "",
+  draft: filled,
   others,
   onDone,
   onReload,
   onDirtyChange,
 }: {
   project: string;
-  ticket: TicketDetail;
+  /** Null: a new ticket, not saved yet. */
+  ticket: TicketDetail | null;
   /** The ETag of the file `ticket` was read from. */
-  etag: string;
+  etag?: string;
+  /** What a new ticket's form starts with; default: empty. */
+  draft?: Draft | undefined;
   /** The project's other tickets, for the dependency picker. */
   others: readonly Ticket[];
-  /** Leave edit mode (saved, or cancelled). */
-  onDone: () => void;
+  /** Leave edit mode: saved (with the ticket's id), or cancelled. */
+  onDone: (saved?: string) => void;
   /** Read the ticket from disk again (this form is then remounted). */
-  onReload: () => void;
+  onReload?: () => void;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const id = useId();
-  const [initial] = useState(() => draftOf(ticket));
+  const [initial] = useState(() =>
+    ticket ? draftOf(ticket) : (filled ?? EMPTY_DRAFT),
+  );
   const [draft, setDraft] = useState(initial);
+  const name = ticket ? `Edit ${ticket.id}` : "New ticket";
   const [error, setError] = useState<SaveError | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const save = useSaveDraft(project, ticket);
-  const dirty = !sameDraft(draft, initial);
+  // A pre-filled new ticket is unsaved text too: it can be saved, and leaving asks.
+  const dirty = !sameDraft(draft, ticket ? initial : EMPTY_DRAFT);
   useEffect(() => {
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
 
-  const problems = checkDraft(draft);
+  // An untouched new form isn't shown its errors yet.
+  const problems = ticket || dirty ? checkDraft(draft) : {};
   const fieldError = (name: FieldName) =>
     problems[name] ??
     (error?.kind === "field" && error.field === name ? error.message : null);
@@ -74,10 +86,10 @@ export function TicketEditForm({
     save.mutate(
       { draft, etag: over },
       {
-        onSuccess: () => {
+        onSuccess: (id) => {
           setError(null);
           onDirtyChange(false);
-          onDone();
+          onDone(id);
         },
         onError: (failure) => {
           setError(saveError(failure));
@@ -90,7 +102,9 @@ export function TicketEditForm({
     : Object.keys(problems).length > 0
       ? "Fix the fields marked in red first"
       : !dirty
-        ? "Nothing changed yet"
+        ? ticket
+          ? "Nothing changed yet"
+          : "Give the ticket a title first"
         : error?.kind === "conflict"
           ? "Reload or keep yours first"
           : null;
@@ -98,7 +112,7 @@ export function TicketEditForm({
   return (
     <>
       <form
-        aria-label={`Edit ${ticket.id}`}
+        aria-label={name}
         className="flex flex-col gap-4"
         onSubmit={(event) => {
           event.preventDefault();
@@ -254,8 +268,12 @@ export function TicketEditForm({
       </form>
       <ConfirmDialog
         open={confirmCancel}
-        title="Discard your changes?"
-        consequence={`Your edits to ${ticket.id} aren't saved and will be lost.`}
+        title={ticket ? "Discard your changes?" : "Discard the new ticket?"}
+        consequence={
+          ticket
+            ? `Your edits to ${ticket.id} aren't saved and will be lost.`
+            : "The new ticket isn't saved and will be lost."
+        }
         action="Discard changes"
         destructive
         onCancel={() => {

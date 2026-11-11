@@ -99,7 +99,12 @@ describe("Past runs", () => {
   it("renders each outcome as icon + label, with the row's columns", async () => {
     pages[""] = {
       items: [
-        row(1, "done", { attempts: 3, tokens: 0, cost_micro_usd: 880_000 }),
+        row(1, "done", {
+          attempts: 3,
+          last_attempt: 5,
+          tokens: 0,
+          cost_micro_usd: 880_000,
+        }),
         row(2, "blocked"),
         row(3, "awaiting_approval"),
         row(4, "cancelled", { attempts: 0, last_attempt: null, tokens: 0 }),
@@ -125,6 +130,9 @@ describe("Past runs", () => {
     }
     const first = within(rows[0] as HTMLElement);
     expect(first.getByText("App shell")).toBeInTheDocument();
+    expect(first.getByText("Run 1 · attempt 5")).toBeInTheDocument();
+    // A run cancelled before its first attempt has only its number.
+    expect(within(rows[3] as HTMLElement).getByText("Run 4")).toBeVisible();
     expect(first.getByText("3")).toBeInTheDocument();
     expect(first.getByText("6m 12s")).toBeInTheDocument();
     expect(first.getByText("$0.88")).toBeInTheDocument();

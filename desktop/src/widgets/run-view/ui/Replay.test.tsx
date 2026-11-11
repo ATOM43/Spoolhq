@@ -201,7 +201,9 @@ describe("Replay", () => {
     show(2);
     const region = within(await banner());
     expect(
-      region.getByText(/^Viewing attempt 2 of 3 · finished \d\d:02/),
+      region.getByText(
+        /^Run 7 · attempt 2 \(2 of 3 in this run\) · finished \d\d:02/,
+      ),
     ).toBeVisible();
     expect(region.getByText("Gates failed")).toBeVisible(); // its own verdict
     await userEvent.click(
@@ -222,7 +224,9 @@ describe("Replay", () => {
   it("opens the last attempt with the run's outcome and no Next", async () => {
     show(null, true);
     const region = within(await banner());
-    expect(region.getByText(/^Viewing attempt 3 of 3/)).toBeVisible();
+    expect(
+      region.getByText(/^Run 7 · attempt 3 \(3 of 3 in this run\)/),
+    ).toBeVisible();
     expect(region.getByText("Blocked")).toBeVisible();
     expect(region.queryByRole("button", { name: "Next attempt" })).toBeNull();
     await userEvent.click(
@@ -234,14 +238,20 @@ describe("Replay", () => {
     ).toBeNull();
   });
 
-  it("says so when the run has no such attempt", async () => {
-    show(9);
+  it("fails fast on an attempt the run doesn't have, fetching no events", async () => {
+    show(9, true);
+    const region = within(await banner());
     expect(
-      within(await banner()).getByText("T15's run has no attempt 9"),
+      region.getByText("This attempt doesn't exist in run 7."),
     ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Back to past runs" }),
-    ).toBeInTheDocument();
+    await userEvent.click(
+      region.getByRole("button", { name: "Back to past runs" }),
+    );
+    expect(calls.past).toHaveBeenCalled();
+    expect(GET.mock.calls.some(([path]) => path.includes("/events"))).toBe(
+      false,
+    );
+    expect(subscribeEvents).not.toHaveBeenCalled();
   });
 
   it("pages the events in, counting, and never opens a live stream", async () => {

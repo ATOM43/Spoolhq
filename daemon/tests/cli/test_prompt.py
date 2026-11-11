@@ -44,6 +44,7 @@ def add_tickets(workspace: Path) -> None:
 def test_show_prints_the_prompt(workspace: Path, git_repo: Path, projects_dir: Path) -> None:
     add_tickets(workspace)
     shutil.copyfile(CONTEXT / "CLAUDE.md", git_repo / "CLAUDE.md")
+    shutil.copyfile(CONTEXT / "CONTEXT.md", workspace / "CONTEXT.md")  # a real spec
 
     result = runner.invoke(app, ["prompt", "show", "demo", "T04"])
 
@@ -140,3 +141,20 @@ def test_missing_dependency_is_shown(workspace: Path) -> None:
     result = runner.invoke(app, ["prompt", "show", "demo", "T04"])
     assert result.exit_code == 0, result.stderr
     assert "- T02 · (not found) (missing)" in result.stdout
+
+
+def test_a_starter_spec_is_left_out_and_a_real_one_renders_as_before(
+    workspace: Path, git_repo: Path
+) -> None:
+    add_tickets(workspace)
+    starter = runner.invoke(app, ["prompt", "show", "demo", "T04"]).stdout
+    assert "<spec>\n" not in starter and "## The project spec" not in starter
+    (workspace / "CONTEXT.md").write_text("", encoding="utf-8")
+    assert runner.invoke(app, ["prompt", "show", "demo", "T04"]).stdout == starter
+
+    shutil.copyfile(CONTEXT / "CONTEXT.md", workspace / "CONTEXT.md")
+    real = runner.invoke(app, ["prompt", "show", "demo", "T04"]).stdout
+    start, end = real.index("\n## The project spec\n"), real.index("</spec>\n") + len("</spec>\n")
+    assert "Agent Orchestrator" in real[start:end] or len(real[start:end]) > 200
+    # Nothing but the spec section differs: no placeholder stands in for it.
+    assert real[:start] + real[end:] == starter

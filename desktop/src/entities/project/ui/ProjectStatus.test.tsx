@@ -71,6 +71,13 @@ const CASES: [string, Partial<ProjectSummary>, string, string][] = [
     "No spec yet",
     "lucide-file-pen",
   ],
+  // A hand-added ticket: the project runs without a spec.
+  [
+    "no spec but a ticket",
+    { total: 1, done: 0, has_spec: false },
+    "Idle",
+    "lucide-moon",
+  ],
   ["no plan", { total: 0, done: 0 }, "No plan yet", "lucide-file-text"],
   ["plan in draft", { draft: 5 }, "Plan in draft", "lucide-circle-dashed"],
   ["all done", { done: 5 }, "All done", "lucide-circle-check"],

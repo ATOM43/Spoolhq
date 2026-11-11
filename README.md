@@ -34,6 +34,15 @@ uv run --directory daemon spool templates check fastapi-react   # generate in a 
 
 `spool init` options: `--template` (a built-in name, a local folder or a git URL; the app offers only the built-in ones), `--template-ref` (a git template's branch, tag or commit), `--branch` (a template or empty repo's first branch, default `main`; an existing repo keeps its checked-out branch, so `--branch` is refused there), `--source`, `--install`/`--lint`/`--test` (a template's own commands fill any you leave out), `--remote`, `--merge-preset`, `--clickup-list`.
 
+A project needs no spec to run a ticket you add yourself:
+
+```sh
+uv run --directory daemon spool tickets new my-app --title "Export as CSV" \
+  --done-when "The file opens in a spreadsheet" --depends-on T02 --estimate 2 < scope.md
+```
+
+`spool tickets new` options: `--title`, `--done-when` (repeat it, one checklist item each), `--depends-on T02,T03`, `--estimate` (hours, default 1), `--phase`, `--review-required`, `--scope-file` (default: stdin).
+
 Write the spec in the workspace's `CONTEXT.md`, then let the planner draft the tickets, review them and approve ([planner](docs/planner.md)). Nothing runs until you approve:
 
 ```sh

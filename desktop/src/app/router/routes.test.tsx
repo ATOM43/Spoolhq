@@ -176,7 +176,7 @@ describe("app shell", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Tickets 0" }));
     expect(
       await screen.findByText(
-        "Write a spec first; the planner turns it into tickets.",
+        "Write a spec and generate a plan, or add a ticket yourself.",
       ),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Run" }));

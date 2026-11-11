@@ -1,6 +1,7 @@
 import shutil
 from pathlib import Path
 
+from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from spoolhq.cli import app
@@ -215,3 +216,50 @@ def test_show_missing_ticket(projects_dir: Path) -> None:
     result = runner.invoke(app, ["tickets", "show", "demo", "T09"])
     assert result.exit_code == 1
     assert result.output == "error: no ticket T09 in project 'demo'\n"
+
+
+def test_new_writes_the_same_file_as_the_api(
+    workspace: Path, projects_dir: Path, client: TestClient, token: str
+) -> None:
+    scope = "- Parse the thing.\n- Keep it small.\n"
+    result = runner.invoke(
+        app,
+        ["tickets", "new", "demo", "--title", "Parse; it", "--done-when", "It parses",
+         "--done-when", "`just test` passes", "--estimate", "2", "--phase", "4",
+         "--review-required"],
+        input=scope,
+    )  # fmt: skip
+    assert result.exit_code == 0, result.stderr
+    assert result.stdout == "Added T01 (ready): tickets/T01-parse-it.md\n"
+    from_cli = workspace / "tickets" / "T01-parse-it.md"
+    answer = client.post(
+        "/api/projects/demo/tickets",
+        json={
+            "title": "Parse; it",
+            "scope": scope,
+            "done_when": "- [ ] It parses\n- [ ] `just test` passes",
+            "estimate_h": 2,
+            "phase": 4,
+            "review_required": True,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert answer.status_code == 201, answer.json()
+    from_api = (workspace / "tickets" / "T02-parse-it.md").read_text(encoding="utf-8")
+    expected = from_cli.read_text(encoding="utf-8").replace("id: T01", "id: T02")
+    assert from_api == expected
+
+
+def test_new_reads_the_scope_file_and_names_the_bad_field(workspace: Path, tmp_path: Path) -> None:
+    scope = tmp_path / "scope.md"
+    scope.write_text("From a file.\n", encoding="utf-8")
+    args = ["tickets", "new", "demo", "--title", "T", "--done-when", "ok", "--scope-file"]
+    assert runner.invoke(app, [*args, str(scope)]).exit_code == 0
+    text = (workspace / "tickets" / "T01-t.md").read_text(encoding="utf-8")
+    assert "From a file.\n\n## Done when\n- [ ] ok\n" in text
+    bad = runner.invoke(app, [*args, str(scope), "--depends-on", "T50,T51"])
+    assert bad.exit_code == 1
+    assert "depends_on: depends on T50, T51, which does not exist" in bad.stderr
+    blank = runner.invoke(app, ["tickets", "new", "demo", "--title", " ", "--done-when", "ok"])
+    assert (blank.exit_code, "title" in blank.stderr) == (1, True)
+    assert len(list((workspace / "tickets").iterdir())) == 1

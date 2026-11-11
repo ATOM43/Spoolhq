@@ -383,3 +383,8 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 377 · The run list carries the table's sums, and the events route its total · docs/decisions/api.md
 378 · Past runs and replay · docs/decisions/desktop.md
 379 · Where the spec won over the V2 · Run tab, idle PNG · docs/decisions/desktop.md
+380 · A hand-added ticket gets the next number, and is Ready unless a draft plan waits · docs/decisions/projects-tickets.md
+381 · `POST …/tickets` takes the form's fields, not `{meta, body}` · docs/decisions/api.md
+382 · A ready ticket runs without a spec; the spec is needed only for Generate plan · docs/decisions/runloop.md
+383 · Add ticket in the Tickets tab · docs/decisions/desktop.md
+384 · The replay names the run and the attempt · docs/decisions/desktop.md

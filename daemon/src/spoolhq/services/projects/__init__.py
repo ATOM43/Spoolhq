@@ -1,7 +1,13 @@
 """Projects: creating, listing and loading SpoolHQ projects."""
 
 from spoolhq.services.projects.errors import ProjectError, ProjectValidationError, split_error
-from spoolhq.services.projects.files import EditConflict, etag_of, read_with_etag, write_if_match
+from spoolhq.services.projects.files import (
+    EditConflict,
+    edit_lock,
+    etag_of,
+    read_with_etag,
+    write_if_match,
+)
 from spoolhq.services.projects.model import (
     DEFAULT_PROTECTED_PATHS,
     LOCKFILES,
@@ -35,6 +41,7 @@ from spoolhq.services.projects.workspace import (
 __all__ = [
     "CONTEXT_FILE",
     "EditConflict",
+    "edit_lock",
     "etag_of",
     "read_with_etag",
     "write_if_match",

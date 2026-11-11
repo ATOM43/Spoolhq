@@ -69,6 +69,23 @@ export function Replay(props: ReplayProps) {
     );
   }
   const number = props.attempt ?? run.data.attempts.at(-1)?.number ?? null;
+  // Checked against the run's own attempts first, so no event is fetched for one it
+  // doesn't have.
+  if (number !== null && !run.data.attempts.some((a) => a.number === number)) {
+    return (
+      <div
+        role="region"
+        aria-label="Replay"
+        className="flex flex-col items-start gap-3 p-6 text-sm"
+      >
+        <p>This attempt doesn't exist in run {run.data.id}.</p>
+        <Button variant="outline" size="sm" onClick={props.onShowPast}>
+          <ArrowLeft aria-hidden />
+          Back to past runs
+        </Button>
+      </div>
+    );
+  }
   return (
     // Keyed: each attempt has its own events, scroll position and open rows.
     <Loaded
@@ -104,11 +121,10 @@ function Loaded({
       onShowCurrent(); // the running attempt is the live view's
     }
   }, [running, onShowCurrent]);
-  const missing = number !== null && shown === undefined;
   const { events, query, progress } = useRunEvents({
     project,
     runId: run.id,
-    startAttempt: missing ? null : number,
+    startAttempt: number,
     since: 0,
     live: false,
   });
@@ -118,7 +134,7 @@ function Loaded({
     shown && shown !== last
       ? { status: shown.status, label: attemptOutcome(shown.status) }
       : { status: run.status, label: runOutcome(run.status) };
-  const finished = missing ? null : (shown?.ended_at ?? run.ended_at);
+  const finished = shown?.ended_at ?? run.ended_at;
   const start = shown?.started_at ?? run.started_at;
 
   return (
@@ -129,14 +145,12 @@ function Loaded({
         className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-surface-sunken px-6 py-2 text-sm text-ink-muted"
       >
         <span title={finished ? formatTime(finished) : undefined}>
-          {shown && last
-            ? `Viewing attempt ${String(shown.number)} of ${String(last.number)}`
-            : missing
-              ? `${run.ticket_id}'s run has no attempt ${String(number)}`
-              : `Viewing ${run.ticket_id}'s run · no attempt started`}
+          {shown
+            ? `Run ${String(run.id)} · attempt ${String(shown.number)} (${String(index + 1)} of ${String(run.attempts.length)} in this run)`
+            : `Run ${String(run.id)} · no attempt started`}
           {finished ? ` · finished ${time(finished)}` : ""}
         </span>
-        {missing ? null : <Outcome {...outcome} />}
+        <Outcome {...outcome} />
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {previous ? (
             <Button
@@ -165,7 +179,7 @@ function Loaded({
           {leave}
         </div>
       </div>
-      {missing || running ? null : (
+      {running ? null : (
         <RunLayout
           project={project}
           run={run}

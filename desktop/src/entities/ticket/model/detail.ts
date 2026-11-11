@@ -43,6 +43,20 @@ export async function saveTicket(
   });
 }
 
+export type NewTicket = Schemas["NewTicket"];
+
+/** `POST …/tickets`: the daemon assigns the id; rejects 422 with the field. */
+export async function createTicket(
+  project: string,
+  ticket: NewTicket,
+): Promise<string> {
+  const { data } = await api.POST("/api/projects/{name}/tickets", {
+    params: { path: { name: project } },
+    body: ticket,
+  });
+  return (data as Schemas["TicketView"]).id;
+}
+
 /** A merge-policy rule that fired, as a short chip label. */
 export function ruleLabel({ rule, detail }: RuleHit): string {
   switch (rule) {

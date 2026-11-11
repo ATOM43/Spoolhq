@@ -110,6 +110,18 @@ describe("run controls", () => {
     expectDisabled("Write a spec first");
   });
 
+  it("no spec but a ready ticket: Run next works", () => {
+    show(
+      project({ total: 1, has_spec: false, next_ticket: "T01" }),
+      current(null, false),
+      true,
+    );
+    expect(button("Run next (T01)")).toBeEnabled();
+    expect(button("Run next (T01)")).not.toHaveAccessibleDescription(
+      "Write a spec first",
+    );
+  });
+
   it("spec but no plan: Generate a plan first", () => {
     show(project({ total: 0 }), current(null, false));
     expectDisabled("Generate a plan first");
@@ -266,6 +278,18 @@ describe("the guidance line", () => {
     expect(line(project({ total: 18, draft: 18, remaining_h: 38.5 }))).toBe(
       "Draft · 18 tickets · 38.5 h",
     );
+  });
+
+  it("doesn't say No spec yet once a ticket exists", () => {
+    const added = project({
+      done: 0,
+      total: 1,
+      remaining_h: 1,
+      has_spec: false,
+      next_ticket: "T01",
+    });
+    expect(line(added)).not.toContain("No spec yet");
+    expect(line(added)).toMatch(/^0 of 1 done · 1 h left/);
   });
 
   it("shows progress and usage once the plan is approved", () => {

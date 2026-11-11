@@ -713,6 +713,62 @@
             }
           }
         }
+      },
+      "post": {
+        "summary": "Post Ticket",
+        "description": "Add a ticket by hand; the daemon assigns the id. The ETag is in the header.",
+        "operationId": "post_ticket_api_projects__name__tickets_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewTicket"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketView"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/projects/{name}/tickets/{ticket_id}": {
@@ -3605,6 +3661,66 @@
           "tag"
         ],
         "title": "MergedView"
+      },
+      "NewTicket": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "\\S",
+            "title": "Title"
+          },
+          "scope": {
+            "type": "string",
+            "maxLength": 400000,
+            "title": "Scope",
+            "default": ""
+          },
+          "done_when": {
+            "type": "string",
+            "maxLength": 100000,
+            "title": "Done When"
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Depends On"
+          },
+          "estimate_h": {
+            "type": "number",
+            "maximum": 40.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Estimate H",
+            "default": 1
+          },
+          "review_required": {
+            "type": "boolean",
+            "title": "Review Required",
+            "default": false
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "done_when"
+        ],
+        "title": "NewTicket",
+        "description": "What the Add ticket form and ``spool tickets new`` send. No id: the daemon\nassigns it."
       },
       "Note": {
         "properties": {
