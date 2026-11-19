@@ -55,8 +55,10 @@ def _read(path: Path) -> str | None:
 
 
 def _first(repo: Path, names: tuple[str, ...]) -> tuple[str, str] | None:
+    # The real names from the listing: on a case-insensitive disk, "makefile" also opens "Makefile".
+    present = {entry.name for entry in repo.iterdir()}
     for name in names:
-        if (text := _read(repo / name)) is not None:
+        if name in present and (text := _read(repo / name)) is not None:
             return name, text
     return None
 
