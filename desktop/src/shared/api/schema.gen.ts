@@ -137,6 +137,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/repos/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inspect
+         * @description 422 with field ``path`` for a path a creation would refuse; a dirty repo is
+         *     reported, not refused.
+         */
+        post: operations["inspect_api_repos_inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -914,6 +935,17 @@ export interface components {
                 [key: string]: components["schemas"]["SecretView"];
             };
         };
+        /** DetectedCommandsView */
+        DetectedCommandsView: {
+            /** Install */
+            install: string | null;
+            /** Lint */
+            lint: string | null;
+            /** Test */
+            test: string | null;
+            /** Source */
+            source: string | null;
+        };
         /** DiffFile */
         DiffFile: {
             /** Path */
@@ -1077,6 +1109,11 @@ export interface components {
             ticket_ids: string[];
             /** Message */
             message: string;
+        };
+        /** InspectRepo */
+        InspectRepo: {
+            /** Path */
+            path: string;
         };
         /** InvalidTicketView */
         InvalidTicketView: {
@@ -1321,6 +1358,22 @@ export interface components {
         Reject: {
             /** Note */
             note: string;
+        };
+        /** RepoInspectionView */
+        RepoInspectionView: {
+            /** Branch */
+            branch: string;
+            /** Clean */
+            clean: boolean;
+            /** Dirty */
+            dirty: string[];
+            /** Origin */
+            origin: string | null;
+            commands: components["schemas"]["DetectedCommandsView"];
+            /** Agent Settings */
+            agent_settings: string[];
+            /** Notes Missing */
+            notes_missing: string[];
         };
         /** ReviewItem */
         ReviewItem: {
@@ -2300,6 +2353,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommandTestResult"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    inspect_api_repos_inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InspectRepo"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoInspectionView"];
                 };
             };
             /** @description An error. */

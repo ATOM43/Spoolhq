@@ -4,12 +4,15 @@ Steps: create the workspace, prepare the repo (Copier, a check only, or ``git in
 check the stack commands through the gates, make the initial commit. Every path the
 job creates is recorded as it is created; on a failure or cancel exactly those are
 deleted, newest first, without following symlinks. An empty folder that existed keeps
-existing, emptied of what the job wrote; an existing repo is never written to.
+existing, emptied of what the job wrote; an existing repo is never written to: its
+commands run in a temporary detached worktree of ``HEAD`` (``checks_worktree``).
 """
 
 import logging
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -45,6 +48,11 @@ STEPS = (
 )
 TIMEOUTS_S: dict[GateName, float] = {"install": 600.0, "lint": 300.0, "test": 300.0}
 EMPTY_COMMIT_MESSAGE = "Initial commit (SpoolHQ)"
+CHECKS_WORKTREE = "T00"
+"""The temporary worktree's folder under ``<worktrees>/<project>``: shaped like a ticket
+id that is never assigned (numbers start at T01), so the T08 startup cleanup removes one
+a crashed daemon left behind."""
+BASELINE_MESSAGE = "Your tests fail before any change: {command}"
 GATE_MESSAGES = {
     GateStatus.FAILED: "The {gate} command failed",
     GateStatus.TIMED_OUT: "The {gate} command timed out",
@@ -104,6 +112,31 @@ Created = list[tuple[Path, Literal["path", "contents", "empty_dir"]]]
 ``empty_dir``: delete the folder only if it is still empty."""
 
 
+def _remove_worktree(repo: Path, path: Path) -> None:
+    run_git(["worktree", "remove", "--force", str(path)], repo)
+    if path.exists() or path.is_symlink():
+        remove_path(path)
+    run_git(["worktree", "prune"], repo)
+
+
+@contextmanager
+def checks_worktree(repo: Path, path: Path) -> Iterator[Path]:
+    """A detached worktree of ``repo``'s ``HEAD`` at ``path``, removed when the block ends,
+    whatever happens (a leftover from a crash is removed first)."""
+    _remove_worktree(repo, path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    run_git(["worktree", "add", "--detach", "--quiet", str(path), "HEAD"], repo).check()
+    try:
+        yield path
+    finally:
+        try:
+            _remove_worktree(repo, path)
+            if not any(path.parent.iterdir()):
+                path.parent.rmdir()
+        except (GitError, OSError):
+            logger.warning("couldn't remove the checks worktree", extra={"path": str(path)})
+
+
 def roll_back(created: Created) -> Rollback:
     """Delete what the job recorded, newest first, never following a symlink."""
     outcome = Rollback()
@@ -136,10 +169,12 @@ class Runner:
         checked: Checked,
         *,
         projects_dir: Path,
+        worktrees_dir: Path,
         cancel: threading.Event,
         lock: threading.Lock,
     ) -> None:
         self.job, self.checked, self.projects_dir = job, checked, projects_dir
+        self.worktrees_dir = worktrees_dir
         self.cancel, self.lock = cancel, lock
         self.created: Created = []
         self.template_ref = checked.template_ref
@@ -265,17 +300,31 @@ class Runner:
     def _commands(self) -> bool:
         if not self.checked.commands:
             return True
+        repo = self.checked.repo
+        if self.checked.request.source != "existing":
+            self._check_commands(repo, existing=False)
+            return False
+        path = self.worktrees_dir.expanduser() / self.job.project / CHECKS_WORKTREE
+        try:
+            with checks_worktree(repo, path) as worktree:
+                self._check_commands(worktree, existing=True)
+        except GitError as exc:
+            raise _Failed("Couldn't make a copy of your last commit", None, str(exc)) from exc
+        return False
+
+    def _check_commands(self, cwd: Path, *, existing: bool) -> None:
         step = self.job.steps[2]
         for gate, command in self.checked.commands.items():
             name: GateName = gate  # type: ignore[assignment]  # keys are gate names
-            result = try_command(name, command, self.checked.repo, TIMEOUTS_S[name], self.cancel)
+            result = try_command(name, command, cwd, TIMEOUTS_S[name], self.cancel)
             if self.cancel.is_set():
                 raise _Cancelled
             if result.status is not GateStatus.PASSED:
                 message = GATE_MESSAGES[result.status].format(gate=gate)
+                if existing and result.status is GateStatus.FAILED:
+                    message = BASELINE_MESSAGE.format(command=command)
                 raise _Failed(message, f"commands.{gate}", result.excerpt)
             self._set(step, passed=[*step.passed, gate])
-        return False
 
     def _commit(self) -> bool:
         request, repo = self.checked.request, self.checked.repo

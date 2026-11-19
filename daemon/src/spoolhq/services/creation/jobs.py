@@ -57,7 +57,12 @@ class CreationJobs:
             job = Job(id=uuid.uuid4().hex, project=request.name, source=request.source)
             cancel = threading.Event()
             runner = Runner(
-                job, checked, projects_dir=self.projects_dir, cancel=cancel, lock=self._lock
+                job,
+                checked,
+                projects_dir=self.projects_dir,
+                worktrees_dir=self.worktrees_dir,
+                cancel=cancel,
+                lock=self._lock,
             )
             thread = threading.Thread(target=runner.run, name=f"create-{job.id}", daemon=True)
             self._jobs[job.id] = (job, cancel, thread)

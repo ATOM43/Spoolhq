@@ -3,6 +3,7 @@ import { LoaderCircle, Wrench, X } from "lucide-react";
 import { useEffect, useState, type SyntheticEvent } from "react";
 import { flushSync } from "react-dom";
 
+import { useAgents } from "@/entities/agent";
 import { queryKeys } from "@/shared/api";
 import { Button, ConfirmDialog, ReasonButton, showToast } from "@/shared/ui";
 
@@ -10,15 +11,25 @@ import {
   cancelJob,
   cleanupToast,
   fieldError,
+  inspectRepo,
   startJob,
+  type Inspection,
   useJob,
   useProjectsDir,
   useTemplates,
 } from "../model/api";
-import { initialForm, missing, toRequest, withTemplate } from "../model/form";
+import {
+  initialForm,
+  missing,
+  toRequest,
+  withInspection,
+  withTemplate,
+  type Form,
+} from "../model/form";
 import { Checklist } from "./Checklist";
 import { Commands, NameAndRepo, SourceSwitch, TemplateCards } from "./Fields";
 import { More } from "./More";
+import { RepoNotices } from "./RepoNotices";
 
 /** The element to focus for a request field. */
 const FIELD_IDS: Record<string, string> = {
@@ -54,6 +65,14 @@ export function NewProjectForm({
   const [jobId, setJobId] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // What inspect said about a picked folder, kept with its path so typing another
+  // path drops it.
+  const [inspected, setInspected] = useState<{
+    path: string;
+    found?: Inspection;
+    error?: string;
+  } | null>(null);
+  const graphify = useAgents().data?.graphify.installed;
   const job = useJob(jobId).data;
   const start = useMutation({
     mutationFn: startJob,
@@ -90,17 +109,55 @@ export function NewProjectForm({
     }
   }, [job?.state, job?.project, onCreated]);
 
+  const current =
+    form.source === "existing" && inspected?.path === form.repo
+      ? inspected
+      : null;
+  const found = current?.found;
+
+  const inspect = (path: string) => {
+    if (form.source !== "existing") {
+      return;
+    }
+    setInspected({ path });
+    inspectRepo(path)
+      .then((result) => {
+        setInspected({ path, found: result });
+        setForm((now) =>
+          now.repo === path ? withInspection(now, result) : now,
+        );
+      })
+      .catch((error: unknown) => {
+        const message =
+          fieldError(error)?.message ?? "Couldn't read the repository";
+        setInspected({ path, error: message });
+      });
+  };
+
+  const changeForm = (next: Form) => {
+    if (next.source !== form.source) {
+      setInspected(null); // a source switch resets the commands it filled in
+    }
+    setForm(next);
+  };
+
   const apiError = start.error ? fieldError(start.error) : null;
   const errorFor = (field: string) =>
-    apiError?.field === field ? apiError.message : null;
+    apiError?.field === field
+      ? apiError.message
+      : field === "repo_path"
+        ? (current?.error ?? null)
+        : null;
   const formError =
     start.error && (apiError === null || !(apiError.field in FIELD_IDS))
       ? (apiError?.message ?? start.error.message)
       : null;
 
+  const reason = missing(form, found ? !found.clean : false);
+
   const submit = (event: SyntheticEvent) => {
     event.preventDefault();
-    if (missing(form) === null && !running) {
+    if (reason === null && !running) {
       start.mutate(toRequest(form));
     }
   };
@@ -165,7 +222,7 @@ export function NewProjectForm({
       >
         <SourceSwitch
           form={form}
-          setForm={setForm}
+          setForm={changeForm}
           templates={templates.data}
         />
         {form.source === "template" ? (
@@ -181,14 +238,27 @@ export function NewProjectForm({
           setForm={setForm}
           projectsDir={projectsDir.data}
           errorFor={errorFor}
+          onPicked={inspect}
         />
-        <Commands form={form} setForm={setForm} job={job} errorFor={errorFor} />
+        {found ? <RepoNotices found={found} graphify={graphify} /> : null}
+        <Commands
+          form={form}
+          setForm={setForm}
+          job={job}
+          errorFor={errorFor}
+          detectedFrom={found?.commands.source ?? undefined}
+        />
         <More
           form={form}
           setForm={setForm}
           open={moreOpen}
           setOpen={setMoreOpen}
           errorFor={errorFor}
+          remoteHint={
+            found?.origin && form.remote === found.origin
+              ? "Detected from origin"
+              : undefined
+          }
         />
       </fieldset>
       {job ? <Checklist job={job} form={form} /> : null}
@@ -212,7 +282,7 @@ export function NewProjectForm({
             Creating…
           </Button>
         ) : (
-          <ReasonButton type="submit" reason={missing(form)}>
+          <ReasonButton type="submit" reason={reason}>
             Create project
           </ReasonButton>
         )}

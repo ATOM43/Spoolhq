@@ -1,10 +1,13 @@
 """Project creation: a job that makes a project from a template, an existing repo or an
 empty repo, step by step, and rolls back only what it created. ``check_request`` refuses
-an unsafe path or template before any job starts. This package may import
-``services.projects``, ``services.templates``, ``services.gates`` and ``services.git``.
+an unsafe path or template before any job starts; ``inspect_repo`` reads what an
+existing repo already has. This package may import ``services.projects``,
+``services.templates``, ``services.gates``, ``services.git`` and (for its settings list)
+``services.agents``.
 See ``docs/api.md``.
 """
 
+from spoolhq.services.creation.inspect import DetectedCommands, RepoInspection, inspect_repo
 from spoolhq.services.creation.job import (
     EMPTY_COMMIT_MESSAGE,
     STEPS,
@@ -35,6 +38,8 @@ __all__ = [
     "CreateProject",
     "CreationError",
     "CreationJobs",
+    "DetectedCommands",
+    "RepoInspection",
     "Job",
     "Local",
     "Rollback",
@@ -43,5 +48,6 @@ __all__ = [
     "Step",
     "UnknownJobError",
     "check_request",
+    "inspect_repo",
     "roll_back",
 ]

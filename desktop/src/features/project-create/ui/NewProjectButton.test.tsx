@@ -1,14 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, useLocation } from "react-router";
 import { RouterProvider } from "react-router/dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api, DaemonError, type Schemas } from "@/shared/api";
+import { api, DaemonError, pickFolder, type Schemas } from "@/shared/api";
 import { Toaster } from "@/shared/ui";
 
-import { NAME_RULE } from "../model/form";
+import { DIRTY_REASON, NAME_RULE } from "../model/form";
+import { CHECKS_HELP } from "./Checklist";
 import { CREATED_TOAST, NewProjectButton } from "./NewProjectButton";
 
 vi.mock("@/shared/api", async (importOriginal) => {
@@ -173,7 +180,7 @@ describe("New project", () => {
     expect(within(dialog).queryByText("fastapi-react")).toBeNull();
     expect(
       screen.getByText(
-        "The stack commands run in your checkout; files they create (like .venv) stay even if creation fails",
+        "A clean git repository; the stack commands run on a temporary copy, never in your checkout",
       ),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("test")).toHaveValue("");
@@ -432,5 +439,150 @@ describe("New project", () => {
     fail = false;
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("fastapi-react")).toBeVisible();
+  });
+});
+
+type Inspection = Schemas["RepoInspectionView"];
+
+const INSPECTION: Inspection = {
+  branch: "main",
+  clean: true,
+  dirty: [],
+  origin: "https://github.com/me/demo",
+  commands: {
+    install: "just install",
+    lint: null,
+    test: "just test",
+    source: "justfile",
+  },
+  agent_settings: [],
+  notes_missing: [],
+};
+
+describe("New project from an existing repo", () => {
+  let inspection: Inspection;
+  let graphify: boolean;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    inspection = INSPECTION;
+    graphify = true;
+    vi.mocked(pickFolder).mockResolvedValue("/home/me/code/demo");
+    GET.mockImplementation((path) => {
+      if (path === "/api/templates") {
+        return ok([TEMPLATE]);
+      }
+      if (path === "/api/settings") {
+        return ok({ projects_dir: "/home/me/spoolhq-projects" });
+      }
+      if (path === "/api/agents") {
+        return ok({
+          backends: [],
+          graphify: { installed: graphify, version: null, tested: null },
+          fake_runner: null,
+        });
+      }
+      if (path === "/api/jobs/{job_id}") {
+        return ok(
+          job("running", [["passed"], ["passed"], ["running"], ["pending"]], {
+            source: "existing",
+          }),
+        );
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    POST.mockImplementation((path) => {
+      if (path === "/api/repos/inspect") {
+        return ok(inspection);
+      }
+      if (path === "/api/projects") {
+        return ok({ job_id: JOB_ID });
+      }
+      throw new Error(`unexpected POST ${path}`);
+    });
+  });
+
+  async function pick() {
+    await openDialog();
+    await userEvent.click(screen.getByRole("radio", { name: "Existing repo" }));
+    await userEvent.type(screen.getByLabelText("Project name"), "demo");
+    await userEvent.click(screen.getByRole("button", { name: "Choose…" }));
+    await waitFor(() => {
+      expect(POST).toHaveBeenCalledWith("/api/repos/inspect", {
+        body: { path: "/home/me/code/demo" },
+      });
+    });
+  }
+
+  it("pre-fills the detected commands and says where they came from", async () => {
+    await pick();
+    expect(await screen.findByText(/Detected from justfile\./)).toBeVisible();
+    expect(screen.getByLabelText("install")).toHaveValue("just install");
+    expect(screen.getByLabelText("test")).toHaveValue("just test");
+    expect(screen.getByLabelText("lint")).toHaveValue("");
+    expect(screen.getByLabelText("lint")).toHaveAttribute(
+      "placeholder",
+      "e.g. just lint",
+    );
+    expect(screen.getByText("Clean · on main")).toBeVisible();
+  });
+
+  it("pre-fills a GitHub origin as the remote", async () => {
+    await pick();
+    await userEvent.click(screen.getByText("More"));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/GitHub remote/)).toHaveValue(
+        "https://github.com/me/demo",
+      );
+    });
+    expect(screen.getByText("Detected from origin")).toBeVisible();
+  });
+
+  it("says the repo's own agent settings are ignored", async () => {
+    inspection = {
+      ...INSPECTION,
+      agent_settings: [".claude/settings.json", ".mcp.json"],
+    };
+    await pick();
+    expect(
+      await screen.findByText(
+        "This repo has its own agent settings (.claude/settings.json, .mcp.json). SpoolHQ ignores them during runs.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("recommends Graphify only when it isn't installed", async () => {
+    const line =
+      "Recommended for existing repos: install Graphify so the agent can find its way around.";
+    await pick();
+    await screen.findByText("Clean · on main");
+    expect(screen.queryByText(line)).toBeNull();
+    cleanup();
+    graphify = false;
+    await pick();
+    expect(await screen.findByText(line)).toBeVisible();
+  });
+
+  it("lists a dirty repo's files and keeps Create disabled", async () => {
+    inspection = {
+      ...INSPECTION,
+      clean: false,
+      dirty: [" M src/app.py", "?? notes.txt"],
+    };
+    await pick();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(DIRTY_REASON);
+    expect(alert).toHaveTextContent("M src/app.py");
+    expect(alert).toHaveTextContent("?? notes.txt");
+    await userEvent.type(screen.getByLabelText("lint"), "just lint");
+    expect(create()).toBeDisabled();
+  });
+
+  it("shows the checks help on the existing repo's checklist", async () => {
+    await pick();
+    await screen.findByText(/Detected from justfile\./);
+    await userEvent.type(screen.getByLabelText("lint"), "just lint");
+    await userEvent.click(create());
+    expect(await screen.findByText(CHECKS_HELP)).toBeVisible();
   });
 });

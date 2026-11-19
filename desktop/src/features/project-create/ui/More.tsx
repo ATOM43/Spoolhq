@@ -11,12 +11,15 @@ export function More({
   open,
   setOpen,
   errorFor,
+  remoteHint,
 }: {
   form: Form;
   setForm: (form: Form) => void;
   open: boolean;
   setOpen: (open: boolean) => void;
   errorFor: (field: string) => string | null;
+  /** "Detected from origin" when the remote came from the repo. */
+  remoteHint?: string | undefined;
 }) {
   const preset = PRESETS.find((p) => p.value === form.preset) ?? PRESETS[0];
   return (
@@ -41,6 +44,7 @@ export function More({
         <Field
           id="project-remote"
           label="GitHub remote (optional)"
+          hint={remoteHint}
           error={errorFor("git_remote")}
         >
           <Input

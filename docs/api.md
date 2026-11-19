@@ -14,6 +14,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/version` | the daemon's version |
 | `GET /api/projects` | each project: `name`, `done`/`total`/`draft` tickets, `remaining_h`, `run_state` (`running`, `paused`, `creating`, `cleanup_failed` or `idle`; see [A project being created](#a-project-being-created) and [Rollback](#rollback)), `needs_you` (tickets `awaiting_approval` or `blocked`), `latest_seq` (see [Starting from REST](#event-websocket)), `has_spec` (`CONTEXT.md` isn't blank or init's starter), `template` (null for an existing repo), `run` (the active, else latest run) and `run_step` (its latest phase), `last_activity` (the latest event's time), `usage` (`tokens` of attempts without a cost, `cost_usd` summed over those with one), and `settings_error` (`{file, field, message}`, the first problem of a `project.yaml` that doesn't load; the project is listed anyway) |
 | `POST /api/projects` | start a [creation job](#creating-a-project), like `spool init`: 202 `{"job_id"}`, or 422 with the field before any job starts |
+| `POST /api/repos/inspect` | `{path}`: what an [existing repo](#inspecting-an-existing-repo) already has, read without running anything; 422 with `field: "path"` for a path a creation would refuse |
 | `GET /api/jobs/{job_id}` | the creation job: `state` and its `steps`, plus `rollback` after a failure or cancel |
 | `POST /api/jobs/{job_id}/cancel` | stop the job and roll back; answers when the rollback is done (at most 15 s) |
 | `POST /api/jobs/{job_id}/dismiss` | 204: forget a job that ended, so the list stops showing what its rollback [left behind](#rollback); a running job stays |
@@ -68,7 +69,7 @@ The job then runs four steps, each `pending`, `running`, `passed`, `failed` or `
 
 1. **Create workspace** (`workspace`): `<projects>/<name>/` with `project.yaml`, the starter `CONTEXT.md`, `tickets/` and `runs/` (and `TEMPLATE.md` for a template).
 2. **Prepare repo** (`repo`): Copier generates the template into `repo_path` (no trust, [templates](templates.md#no-trust)); `existing` is only checked again, never written to; `empty` creates the folder if needed and runs `git init -b main`.
-3. **Check commands** (`commands`): install (600 s), then lint and test (300 s each), once each in the repo through the gates code (no shell, scrubbed environment). An unset command is skipped; with none the step is `skipped`. `passed` lists the commands that passed so far (the app shows "2 of 3 passed"). For `existing` they run in your checkout, as a gate would.
+3. **Check commands** (`commands`): install (600 s), then lint and test (300 s each), once each in the repo through the gates code (no shell, scrubbed environment). An unset command is skipped; with none the step is `skipped`. `passed` lists the commands that passed so far (the app shows "2 of 3 passed"). For `existing` they run in a temporary detached worktree of the repo's `HEAD` at `<worktrees>/<name>/T00` (made through `run_git`, hooks off), never in your checkout: they run on your last commit, and ignored files like `.env` aren't there. The worktree is removed afterwards, also on a failure or cancel; one a crashed daemon left behind is removed by the startup worktree cleanup (`T00` is never a ticket id). For `existing`, a command that fails reads "Your tests fail before any change: <command>", with its output.
 4. **Initial commit** (`commit`): `chore: generate from <template> <ref>` for a template, `git commit --allow-empty -m "Initial commit (SpoolHQ)"` for `empty` (hooks and signing off, your git identity required); skipped for `existing`.
 
 A failed step has a fixed `message` ("The test command failed"), the trimmed `output` and the request `field` that caused it (`commands.test`, `repo_path`, `template`). The job's `state` is `running`, then `succeeded`, `failed` or `cancelled`. Jobs live in the daemon's memory for an hour after they end; a restart forgets them. The app polls `GET /api/jobs/{job_id}` every 500 ms only while a job runs, since no project event stream exists before the project does.
@@ -127,6 +128,19 @@ Settings' **Test** button. `{name}` is `anthropic`, `github` or `clickup` (422 o
 | `clickup` | `https://api.clickup.com/api/v2/user` with `Authorization: …` |
 
 The URLs are fixed in the code (`services/secrets/check.py`); redirects are not followed and the timeout is 10 s. The answer is always 200 with `ok` and one fixed `message`: `Key works` (200), `Not set` (no call made), `Rejected (401)`, `Rejected (403)`, `Timed out`, `Couldn't reach <provider>` (no answer), or `Unexpected response (<status>)` (anything else, a redirect included). The secret, the provider's body and its headers never reach the answer; the log gets one line with the secret's name and the message. The result isn't stored.
+
+### Inspecting an existing repo
+
+`POST /api/repos/inspect` with `{"path"}` applies the `repo_path` checks above (absolute, not the disk root, home or SpoolHQ's folders, not a symlink, a git repository with a branch that has a commit) but reports a dirty repo instead of refusing it. It reads files and asks git; it never runs a command from the repo. Repo files are untrusted: symlinks are skipped and each is read up to 1 MB. It returns:
+
+| Field | |
+| --- | --- |
+| `branch` | the checked-out branch |
+| `clean`, `dirty` | whether there are uncommitted changes, and their `git status` entries (`" M src/a.py"`) |
+| `origin` | `origin`'s URL when it is a GitHub HTTPS or SSH URL, else null |
+| `commands` | `install`, `lint`, `test` and the `source` file, from the first of: a `justfile` with matching recipes (`just install`…), a `Makefile` with matching targets (`make install`…), `package.json` (`<pm> install`, `<pm> run lint` and `<pm> test` when those scripts exist; `pm` is pnpm with `pnpm-lock.yaml`, yarn with `yarn.lock`, else npm), `pyproject.toml` with `uv.lock` (`uv sync`, `uv run ruff check .` when ruff is configured, `uv run pytest` when pytest is a dependency). Anything not detected is null |
+| `agent_settings` | the repo's own agent settings files ([repo safety](agents.md#repo-safety)), which runs ignore |
+| `notes_missing` | which of `PROGRESS.md` and `DECISIONS.md` don't exist; the first merge creates them |
 
 ## Trying a stack command
 

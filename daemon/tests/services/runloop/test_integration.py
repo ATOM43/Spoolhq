@@ -127,7 +127,8 @@ def test_three_tickets_give_three_squash_commits_with_green_gates(
         assert f"Added mod{n} and its test." in message
         assert git(repo, "rev-parse", f"ticket/{tid}^{{commit}}") == sha
         files = git(repo, "show", "--name-only", "--format=", sha).split()
-        assert sorted(files) == ["PROGRESS.md", f"mod{n}.py", f"test_mod{n}.py"]
+        notes = ["DECISIONS.md", "PROGRESS.md"] if n == 1 else ["PROGRESS.md"]
+        assert sorted(files) == [*notes, f"mod{n}.py", f"test_mod{n}.py"]
         progress = git(repo, "show", f"{sha}:PROGRESS.md")
         assert progress.count("\n## ") == n
         assert progress.startswith("# Progress\n")
@@ -188,6 +189,7 @@ def test_main_moved_before_integration_is_merged_in_and_gated(
     head = git(repo, "rev-parse", "main")
     assert git(repo, "rev-parse", f"{head}^") == moved[0]
     assert sorted(git(repo, "show", "--name-only", "--format=", head).split()) == [
+        "DECISIONS.md",
         "PROGRESS.md",
         "hello.py",
     ]
@@ -431,7 +433,7 @@ def test_build_junk_is_left_out_and_listed(
     log = log_of(registry)
     assert log.get_run(run_id).status is RunStatus.DONE
     committed = git(repo, "show", "--name-only", "--format=", "main").split()
-    assert sorted(committed) == [".env.example", "PROGRESS.md", "hello.py"]
+    assert sorted(committed) == [".env.example", "DECISIONS.md", "PROGRESS.md", "hello.py"]
     listed = [e.payload for e in log.events_since(0, run_id=run_id) if e.kind is EventKind.LOG]
     assert listed == [
         {
@@ -459,7 +461,7 @@ def test_untracked_graphify_out_is_left_out(
 
     assert log_of(registry).get_run(run_id).status is RunStatus.DONE
     committed = git(repo, "show", "--name-only", "--format=", "main").split()
-    assert sorted(committed) == ["PROGRESS.md", "hello.py"]
+    assert sorted(committed) == ["DECISIONS.md", "PROGRESS.md", "hello.py"]
 
 
 def test_a_tracked_file_in_a_build_folder_is_committed_and_logged(
@@ -482,7 +484,12 @@ def test_a_tracked_file_in_a_build_folder_is_committed_and_logged(
     log = log_of(registry)
     assert log.get_run(run_id).status is RunStatus.DONE
     committed = git(repo, "show", "--name-only", "--format=", "main").split()
-    assert sorted(committed) == ["PROGRESS.md", "graphify-out/x.json", "hello.py"]
+    assert sorted(committed) == [
+        "DECISIONS.md",
+        "PROGRESS.md",
+        "graphify-out/x.json",
+        "hello.py",
+    ]
     assert git(repo, "show", "main:graphify-out/x.json").strip() == '{"new": 2}'
     listed = [e.payload for e in log.events_since(0, run_id=run_id) if e.kind is EventKind.LOG]
     assert listed == [
@@ -684,6 +691,11 @@ def test_the_pnpm_store_symlink_from_m1_is_left_out(
     log = log_of(registry)
     assert log.get_run(run_id).status is RunStatus.DONE
     committed = git(repo, "show", "--name-only", "--format=", "main").split()
-    assert sorted(committed) == ["PROGRESS.md", "docs/readme", "hello.py"]  # inside: allowed
+    assert sorted(committed) == [
+        "DECISIONS.md",
+        "PROGRESS.md",
+        "docs/readme",
+        "hello.py",
+    ]  # inside: allowed
     listed = [e.payload for e in log.events_since(0, run_id=run_id) if e.kind is EventKind.LOG]
     assert listed[0]["files"] == [store]

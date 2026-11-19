@@ -218,7 +218,8 @@ def test_a_failing_test_command_names_its_field(
     assert job.state == "failed"
     assert states(job) == ["passed", "passed", "failed", "pending"]
     step = job.steps[2]
-    assert (step.message, step.field) == ("The test command failed", "commands.test")
+    assert step.message == f"Your tests fail before any change: {commands['test']}"
+    assert step.field == "commands.test"
     assert step.passed == ["install", "lint"]
     assert step.output is not None
     assert "FAILED tests/test_math.py::test_add" in step.output

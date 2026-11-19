@@ -254,7 +254,14 @@ def init(
         _fail(f"error: {exc.field}: {exc.message}")
     job = Job(id="cli", project=name, source=request.source)
     lock, cancel = threading.Lock(), threading.Event()
-    Runner(job, checked, projects_dir=settings.projects_dir, cancel=cancel, lock=lock).run()
+    Runner(
+        job,
+        checked,
+        projects_dir=settings.projects_dir,
+        worktrees_dir=settings.worktrees_dir,
+        cancel=cancel,
+        lock=lock,
+    ).run()
     for step in job.steps:
         typer.echo(f"{step.state:<8} {step.title}")
     if job.state != "succeeded":

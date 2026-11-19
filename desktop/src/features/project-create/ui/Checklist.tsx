@@ -43,6 +43,9 @@ const LOOK: Record<
   },
 };
 
+export const CHECKS_HELP =
+  "Runs on your last commit; ignored files like .env aren't included.";
+
 function rollbackLine(job: Job): string | null {
   if (!job.rollback) {
     return null;
@@ -76,6 +79,9 @@ export function Checklist({ job, form }: { job: Job; form?: Form }) {
                 <span className="flex-1">{stepTitle(step, form, job)}</span>
                 <span className={cn("text-xs", look.tone)}>{look.label}</span>
               </div>
+              {step.name === "commands" && job.source === "existing" ? (
+                <p className="ml-6 text-xs text-ink-muted">{CHECKS_HELP}</p>
+              ) : null}
               {step.state === "failed" ? (
                 <div className="mt-2 ml-6 flex flex-col gap-2 text-sm">
                   <p role="alert" className="text-danger">

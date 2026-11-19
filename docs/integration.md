@@ -50,7 +50,7 @@ SpoolHQ-Run: 12
 
 ### PROGRESS.md
 
-The squash commit appends `format_progress_entry(…)` ([context](context.md#the-progress-note)) to the repository's `PROGRESS.md`, using the run's progress note and the merge date in UTC. If the file doesn't exist, it is created with a `# Progress` heading first.
+The squash commit appends `format_progress_entry(…)` ([context](context.md#the-progress-note)) to the repository's `PROGRESS.md`, using the run's progress note and the merge date in UTC. If the file doesn't exist, it is created with a `# Progress` heading first; an existing one keeps its bytes and only gets the entry after them. A missing `DECISIONS.md` is created in the same commit with a `# Decisions` heading (the agent adds decisions to it); an existing one isn't touched. `CLAUDE.md` is never written.
 
 ## Conflicts
 

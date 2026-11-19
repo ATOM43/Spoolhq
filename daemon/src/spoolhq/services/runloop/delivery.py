@@ -11,6 +11,7 @@ of it. Polling the pull requests is ``polling.py``. See ``docs/github.md``.
 """
 
 import logging
+import re
 from collections.abc import Callable
 from datetime import datetime
 
@@ -55,6 +56,9 @@ from spoolhq.services.runs import (
 logger = logging.getLogger(__name__)
 
 PR_BRANCH_PREFIX = "spoolhq/"
+# GitHub's refusals for a protected branch (GH006) or a ruleset (GH013).
+_PROTECTED_RE = re.compile(r"GH006|GH013|protected branch hook declined|repository rule violations")
+PROTECTED_MESSAGE = "{branch} is protected on GitHub; use the Always pull request preset"
 GitHubFactory = Callable[[str], GitHubClient]
 """Makes the API client for a token; tests pass one with a fake transport."""
 
@@ -145,6 +149,8 @@ class Delivery(LocalIntegrator):
             pushed = push(repo, remote, sha, f"refs/heads/{branch}")
         except GitError as exc:
             self._abandon(ctx, journal, restore=True)
+            if _PROTECTED_RE.search(str(exc)):
+                return _failed(PROTECTED_MESSAGE.format(branch=branch))
             return _failed(f"cannot push to {remote}: {exc}")
         if pushed is PushResult.MOVED:
             self._abandon(ctx, journal, restore=True)

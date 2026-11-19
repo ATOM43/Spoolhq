@@ -491,6 +491,50 @@
         }
       }
     },
+    "/api/repos/inspect": {
+      "post": {
+        "summary": "Inspect",
+        "description": "422 with field ``path`` for a path a creation would refuse; a dirty repo is\nreported, not refused.",
+        "operationId": "inspect_api_repos_inspect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectRepo"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoInspectionView"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/jobs/{job_id}": {
       "get": {
         "summary": "Get Job",
@@ -3082,6 +3126,62 @@
         ],
         "title": "DaemonSettings"
       },
+      "DetectedCommandsView": {
+        "properties": {
+          "install": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Install"
+          },
+          "lint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lint"
+          },
+          "test": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "install",
+          "lint",
+          "test",
+          "source"
+        ],
+        "title": "DetectedCommandsView"
+      },
       "DiffFile": {
         "properties": {
           "path": {
@@ -3546,6 +3646,22 @@
         ],
         "title": "IdleView",
         "description": "Why no ticket can run now (``spool run next`` says the same)."
+      },
+      "InspectRepo": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Path"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "InspectRepo"
       },
       "InvalidTicketView": {
         "properties": {
@@ -4225,6 +4341,64 @@
           "note"
         ],
         "title": "Reject"
+      },
+      "RepoInspectionView": {
+        "properties": {
+          "branch": {
+            "type": "string",
+            "title": "Branch"
+          },
+          "clean": {
+            "type": "boolean",
+            "title": "Clean"
+          },
+          "dirty": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dirty"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "commands": {
+            "$ref": "#/components/schemas/DetectedCommandsView"
+          },
+          "agent_settings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Agent Settings"
+          },
+          "notes_missing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes Missing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "branch",
+          "clean",
+          "dirty",
+          "origin",
+          "commands",
+          "agent_settings",
+          "notes_missing"
+        ],
+        "title": "RepoInspectionView"
       },
       "ReviewItem": {
         "properties": {

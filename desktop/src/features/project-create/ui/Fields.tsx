@@ -38,7 +38,7 @@ const REPO_HELP = {
   template: "A new or empty folder; its parent must exist",
   empty: "A new or empty folder; its parent must exist",
   existing:
-    "The stack commands run in your checkout; files they create (like .venv) stay even if creation fails",
+    "A clean git repository; the stack commands run on a temporary copy, never in your checkout",
 };
 
 export function SourceSwitch({
@@ -179,11 +179,13 @@ export function NameAndRepo({
   setForm,
   projectsDir,
   errorFor,
+  onPicked,
 }: {
   form: Form;
   setForm: (form: Form) => void;
   projectsDir: string | undefined;
   errorFor: ErrorFor;
+  onPicked: (path: string) => void;
 }) {
   const badName = form.name !== "" && !NAME_RE.test(form.name);
   const nameError = badName ? NAME_RULE : errorFor("name");
@@ -195,6 +197,7 @@ export function NameAndRepo({
     );
     if (picked !== null) {
       setForm({ ...form, repo: picked });
+      onPicked(picked);
     }
   };
   return (
@@ -269,8 +272,11 @@ const GATE_LOOK: Record<
   failed: [<CircleX key="i" aria-hidden />, "Failed", "text-danger"],
 };
 
-function commandsHelp(source: Form["source"]): string {
+function commandsHelp(source: Form["source"], detectedFrom?: string): string {
   const gates = "Gates run these on every ticket.";
+  if (detectedFrom) {
+    return `Detected from ${detectedFrom}. ${gates}`;
+  }
   if (source === "template") {
     return `Filled in from the template. ${gates}`;
   }
@@ -284,11 +290,14 @@ export function Commands({
   setForm,
   job,
   errorFor,
+  detectedFrom,
 }: {
   form: Form;
   setForm: (form: Form) => void;
   job: Job | undefined;
   errorFor: ErrorFor;
+  /** The file inspect read the commands from. */
+  detectedFrom?: string | undefined;
 }) {
   const setCommand = (gate: Gate, value: string) => {
     setForm({ ...form, commands: { ...form.commands, [gate]: value } });
@@ -346,7 +355,9 @@ export function Commands({
           </div>
         );
       })}
-      <p className="text-sm text-ink-muted">{commandsHelp(form.source)}</p>
+      <p className="text-sm text-ink-muted">
+        {commandsHelp(form.source, detectedFrom)}
+      </p>
     </fieldset>
   );
 }

@@ -1,4 +1,4 @@
-import type { CreateRequest, Job, JobStep, Template } from "./api";
+import type { CreateRequest, Inspection, Job, JobStep, Template } from "./api";
 
 export type Source = CreateRequest["source"];
 export type Gate = "install" | "lint" | "test";
@@ -76,8 +76,25 @@ export function withTemplate(form: Form, template: Template): Form {
   };
 }
 
-/** Why Create is disabled, or null. */
-export function missing(form: Form): string | null {
+/** The form with what inspect found: each detected command, and a GitHub origin as
+ * the remote when none is set. Undetected commands keep what they had. */
+export function withInspection(form: Form, found: Inspection): Form {
+  const commands = { ...form.commands };
+  for (const gate of GATES) {
+    const command = found.commands[gate];
+    if (command) {
+      commands[gate] = command;
+    }
+  }
+  const remote =
+    form.remote.trim() === "" && found.origin ? found.origin : form.remote;
+  return { ...form, commands, remote };
+}
+
+export const DIRTY_REASON = "Commit or stash the repo's changes first";
+
+/** Why Create is disabled, or null; `dirty` when inspect found uncommitted changes. */
+export function missing(form: Form, dirty = false): string | null {
   if (form.name === "") {
     return "Enter a project name";
   }
@@ -89,6 +106,9 @@ export function missing(form: Form): string | null {
   }
   if (form.repo.trim() === "") {
     return "Choose the repo folder";
+  }
+  if (form.source === "existing" && dirty) {
+    return DIRTY_REASON;
   }
   if (
     form.source !== "empty" &&

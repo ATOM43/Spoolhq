@@ -134,7 +134,7 @@ def _refuse(message: str) -> CreationError:
     return CreationError("repo_path", message)
 
 
-def _safe_path(raw: str, own_folders: list[Path]) -> Path:
+def safe_path(raw: str, own_folders: list[Path]) -> Path:
     path = Path(raw)
     if not path.is_absolute():
         raise _refuse("Use an absolute path")
@@ -150,7 +150,7 @@ def _safe_path(raw: str, own_folders: list[Path]) -> Path:
     return repo
 
 
-def _current_branch(repo: Path) -> str:
+def current_branch(repo: Path) -> str:
     result = run_git(["symbolic-ref", "--quiet", "--short", "HEAD"], repo)
     branch = result.stdout.strip()
     if result.returncode != 0 or not branch:
@@ -167,7 +167,7 @@ def _check_existing(repo: Path) -> str:
         if not is_work_tree(repo):
             raise _refuse("Not a git repository")
         ensure_clean(repo)
-        return _current_branch(repo)
+        return current_branch(repo)
     except DirtyRepoError as exc:
         raise _refuse(str(exc)) from exc
     except GitError as exc:
@@ -220,7 +220,7 @@ def check_request(
     branch = local.branch if local is not None else None
     if branch is not None and request.source == "existing":
         raise CreationError("branch", "An existing repo uses its checked-out branch")
-    repo = _safe_path(request.repo_path, [projects_dir, worktrees_dir, home])
+    repo = safe_path(request.repo_path, [projects_dir, worktrees_dir, home])
     if request.source == "existing":
         existed, branch = True, _check_existing(repo)
     else:

@@ -233,7 +233,7 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "services.creation imports only projects, templates, gates and git"
+name = "services.creation imports only projects, templates, gates, git and agents"
 type = "forbidden"
 source_modules = ["spoolhq.services.creation"]
 forbidden_modules = [

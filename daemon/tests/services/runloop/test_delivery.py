@@ -125,6 +125,31 @@ def test_a_refused_push_blocks_with_the_git_error(
 
 
 @pytest.mark.integration
+def test_a_push_refused_by_branch_protection_gives_the_fixed_message(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    delivery: Delivery,
+    registry: RunRegistry,
+    repo: Path,
+    bare: Path,
+    projects_dir: Path,
+) -> None:
+    # What GitHub prints for a protected branch, from the remote's side.
+    message = "error: GH006: Protected branch update failed for refs/heads/main."
+    write_hook(bare, "pre-receive", f'echo "{message}" >&2\nexit 1')
+    before = git(repo, "rev-parse", "main")
+    loop, _ = make_loop(
+        [transcripts.implement()], [transcripts.review("approve")], integrator=delivery
+    )
+    run(loop)
+
+    reason = log_of(registry).list_runs()[0].reason
+    assert reason == "main is protected on GitHub; use the Always pull request preset"
+    assert status(projects_dir) == "blocked"
+    assert git(repo, "rev-parse", "main") == before == git(bare, "rev-parse", "main")
+
+
+@pytest.mark.integration
 def test_main_moving_on_the_remote_redoes_the_integration(
     make_loop: LoopFactory,
     transcripts: Transcripts,
@@ -149,7 +174,11 @@ def test_main_moving_on_the_remote_redoes_the_integration(
     sha = git(bare, "rev-parse", "main")
     assert git(bare, "rev-parse", f"{sha}^") == moved[0]  # on top of the teammate's commit
     assert git(repo, "rev-parse", "main") == sha
-    assert git(bare, "show", "--format=", "--name-only", sha).split() == ["PROGRESS.md", "hello.py"]
+    assert git(bare, "show", "--format=", "--name-only", sha).split() == [
+        "DECISIONS.md",
+        "PROGRESS.md",
+        "hello.py",
+    ]
     assert status(projects_dir) == "done"
 
 

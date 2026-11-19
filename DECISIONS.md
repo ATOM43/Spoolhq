@@ -390,3 +390,8 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 384 · The replay names the run and the attempt · docs/decisions/desktop.md
 385 · A repo's own agent settings are never loaded, and an agent can't add any · docs/decisions/agents.md
 386 · Every hook-firing git call goes through `run_git`, and a test enforces it · docs/decisions/git-github.md
+387 · An existing repo's commands are checked in a temporary worktree of `HEAD` · docs/decisions/projects-tickets.md
+388 · `POST /api/repos/inspect` detects commands from one file, first match wins · docs/decisions/projects-tickets.md
+389 · Missing notes files are created at a merge; existing ones keep their bytes · docs/decisions/projects-tickets.md
+390 · A push refused by branch protection gets a fixed message · docs/decisions/git-github.md
+391 · The New project dialog inspects a picked repo and pre-fills from it · docs/decisions/desktop.md

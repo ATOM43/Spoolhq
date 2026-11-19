@@ -73,6 +73,8 @@ logger = logging.getLogger(__name__)
 MAX_TRIES = 3
 PROGRESS_FILE = "PROGRESS.md"
 PROGRESS_HEADING = b"# Progress\n"
+DECISIONS_FILE = "DECISIONS.md"
+DECISIONS_HEADING = b"# Decisions\n"
 LISTED_FILES = 100
 MOVED = "main kept moving during integration"
 
@@ -349,15 +351,23 @@ class LocalIntegrator:
         return _result(IntegrationStatus.MERGED, f"{sha[:7]} · {tag_name(tid)}")
 
     def _append_progress(self, ctx: RunContext) -> None:
-        """Append the ticket's entry to ``PROGRESS.md`` in the worktree and stage it."""
-        file = ctx.worktree.path / PROGRESS_FILE
+        """Append the ticket's entry to ``PROGRESS.md`` in the worktree and stage it; a
+        missing ``PROGRESS.md`` or ``DECISIONS.md`` is created with a heading first. The
+        existing bytes are kept as they are; ``CLAUDE.md`` is never written."""
+        path = ctx.worktree.path
+        decisions = path / DECISIONS_FILE
+        if not decisions.exists() and not decisions.is_symlink():
+            decisions.write_bytes(DECISIONS_HEADING)
+            stage(path, DECISIONS_FILE)
+        file = path / PROGRESS_FILE
         old = file.read_bytes() if file.is_file() else PROGRESS_HEADING
         merged_on = self.clock().astimezone(UTC).date()
         entry = format_progress_entry(
             ctx.ticket_id, ctx.ticket.meta.title, ctx.run.progress_note, merged_on
         )
-        file.write_bytes(old.rstrip(b"\r\n") + b"\n\n" + entry.encode("utf-8"))
-        stage(ctx.worktree.path, PROGRESS_FILE)
+        old += b"" if old.endswith(b"\n") else b"\n"
+        file.write_bytes(old + b"\n" + entry.encode("utf-8"))
+        stage(path, PROGRESS_FILE)
 
 
 # --- recovery -------------------------------------------------------------------------

@@ -6,6 +6,7 @@ export type CreateRequest = Schemas["CreateProject"];
 export type Job = Schemas["JobView"];
 export type JobStep = Schemas["StepView"];
 export type Template = Schemas["TemplateView"];
+export type Inspection = Schemas["RepoInspectionView"];
 
 /** While a job runs (DECISIONS 340). */
 export const POLL_MS = 500;
@@ -42,6 +43,11 @@ export function useJob(id: string | null) {
     refetchInterval: (query) =>
       query.state.data?.state === "running" ? POLL_MS : false,
   });
+}
+
+/** What an existing repo already has; reads files only, runs nothing. */
+export function inspectRepo(path: string): Promise<Inspection> {
+  return body(api.POST("/api/repos/inspect", { body: { path } }));
 }
 
 export async function startJob(request: CreateRequest): Promise<string> {
