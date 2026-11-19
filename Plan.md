@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **42 tickets in 6 phases, about 97.5 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **44 tickets in 6 phases, about 101 hours** for one developer.
 
 **What v1 includes**
 
@@ -84,7 +84,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
 | T21 | Tickets tab and plan review | 4 Desktop UI | T15, T36 | 2.5 |
 | T22 | Live run | 4 Desktop UI | T37 | 2 |
-| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43 | 3 |
+| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45 | 3 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T40 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
@@ -101,10 +101,12 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T38 | Add ticket | 4 Desktop UI | T37 | 1.5 |
 | T39 | Run details | 4 Desktop UI | T22 | 2 |
 | T40 | Past runs and replay | 4 Desktop UI | T39 | 2 |
-| T41 | Draft tickets with the planner | 4 Desktop UI | T38, T15 | 2.5 |
+| T41 | Draft tickets with the planner (daemon and CLI) | 4 Desktop UI | T38, T15 | 2 |
 | T42 | Repo safety | 4 Desktop UI | T36 | 1.5 |
 | T43 | Existing repo onboarding | 4 Desktop UI | T42 | 2.5 |
-|  | **Total** |  |  | **97.5** |
+| T44 | Drafting in the form | 4 Desktop UI | T41 | 2 |
+| T45 | Agent notes layout for projects | 3 Planner and Git | T14, T16 | 2 |
+|  | **Total** |  |  | **101** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T26 (44 h).
 
@@ -326,7 +328,7 @@ Done when:
 
 ## Phase 3 — Planner, templates and GitHub delivery
 
-Five tickets add the parts around the loop: turning a spec into tickets, starting projects from templates, delivering through GitHub, and more agent backends. From here the orchestrator implements its own tickets while you review.
+Nine tickets add the parts around the loop: turning a spec into tickets, starting projects from templates, delivering through GitHub, more agent backends, the code graph and the agent notes layout. From here the orchestrator implements its own tickets while you review.
 
 ### T15 · Planner agent
 
@@ -425,9 +427,28 @@ Done when:
 - [ ] The adapter passes the contract suite
 - [ ] The API key never appears in argv, logs or files
 
+### T45 · Agent notes layout for projects
+
+Keep a project's PROGRESS and DECISIONS small, split and correct, written by code. *Depends on: T14, T16 · 2 h*
+
+- The agent never edits the notes files. Its end-of-run note carries the progress entry and its decisions as data: area, title and text for each.
+- At merge, SpoolHQ writes them: the progress entry, PROGRESS trimmed to a short summary plus the last five entries with older ones moved to `docs/progress-archive.md`, each decision into `docs/decisions/<area>.md` with the next number, and its line in the `DECISIONS.md` index.
+- Areas come from `notes.decision_areas` in `project.yaml`, with a default list; a decision with an unknown area goes back to the agent with the allowed list.
+- A diff that touches `PROGRESS.md`, `DECISIONS.md`, `docs/progress-archive.md` or `docs/decisions/` fails the policy step, like planted agent settings.
+- A check at merge confirms every index line matches exactly one entry.
+- Templates start with this layout and a rules-only `CLAUDE.md`.
+- Existing projects with flat files are converted on their first merge, keeping every entry word for word.
+
+Done when:
+
+- [ ] After many merges, PROGRESS holds a summary and the last five entries, and nothing is lost
+- [ ] Each decision lands in its area file with an index line, written by code
+- [ ] An agent diff touching the notes files fails the policy step
+- [ ] A flat project is converted on its first merge with every entry kept
+
 ## Phase 4 — Desktop UI (v0 screens)
 
-Seventeen tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Eighteen tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -577,21 +598,27 @@ Done when:
 - [ ] A ticket added in the app appears as a file with the next free number
 - [ ] A new ticket with an unknown dependency or a cycle can't be saved, and the error names the field
 
-### T41 · Draft tickets with the planner
+### T41 · Draft tickets with the planner (daemon and CLI)
 
-Turn a few lines into one or more well-formed draft tickets. *Depends on: T38, T15 · 2.5 h*
+Turn a few lines into one or more well-formed draft tickets, in the daemon and the CLI; the form is T44. *Depends on: T38, T15 · 2 h*
 
-- A short request in the Add ticket form.
-- The planner in single-ticket mode, given the request, the spec if any, the existing ticket titles and the code map.
-- One ticket, or two or three when the work is over 4 h, in the ticket schema; the same validation as a plan.
-- Drafts open in the T38 form and are never saved without the user; ids assigned by code.
-- A `ticket-draft` fake-runner scenario.
+- `POST /api/projects/{project}/tickets/draft` with `{request}` (1 to 2,000 characters) starts a job (202, `job_id`): the planner role's backend in single-ticket mode, read-only, with the planner's policy and limits, given the request, the spec if it's real (starter text counts as none), the existing tickets' ids, titles and statuses, and the code map if Graphify is available, inside the context budget.
+- Its own prompt file next to the planner's, editable the same way: tickets of 1.5 to 4 hours, work over 4 hours split into two or three tickets, each with scope, a "Done when" list ending with the project's test command, dependencies, estimate, review flag and phase.
+- JSON with 1 to 3 drafts (`ref` `D1` to `D3`, `title`, `scope`, `done_when`, `depends_on` with existing ids or refs, `estimate_h`, `review_required`, `phase`); invalid JSON is retried once, then the job fails with "The planner's answer couldn't be read".
+- Each draft is validated like a plan (schema, unknown dependencies, cycles across drafts and existing tickets, empty "Done when", estimate over 4 h); problems come back per draft as `{code, message, field}` and don't fail the job. No files are written; the result is kept 1 hour like other jobs, and Cancel stops the agent.
+- Usage is recorded as a run of kind `draft`. The job refuses to start, with a reason the form can show, when no agent is ready, a run is going or planning is running.
+- `POST /api/projects/{project}/tickets/batch` saves edited drafts under the shared ticket lock: real ids in draft order, refs rewritten, the whole set validated, all files written or none; same status rules as T38.
+- `spool tickets draft` (request as an argument or from stdin) prints the drafts and their problems as markdown; `--save` saves them only when there are no problems.
+- A `ticket-draft` fake-runner scenario: one draft, or two linked drafts when the request contains "split".
 
 Done when:
 
-- [ ] A few lines produce a valid draft ticket that opens in the form, unsaved
+- [ ] Plan.md lists T41, T44 and T45, with consistent table, totals and critical path
+- [ ] A few lines produce one valid draft ticket, with no files written
 - [ ] Work over 4 h is split into two or three drafts with dependencies between them
-- [ ] An invalid draft is shown with its problems and can't be saved until fixed
+- [ ] An invalid draft comes back with its problems, and the CLI won't save it
+- [ ] Saving several drafts writes all of them or none
+- [ ] Lint and tests pass, and CI is green on Linux, macOS and Windows
 
 ### T22 · Live run
 
@@ -672,9 +699,26 @@ Done when:
 - [ ] A failing baseline is reported as the repo's own failure
 - [ ] Ticket numbers are never reused, even across the CLI and the app
 
+### T44 · Drafting in the form
+
+Draft tickets from a few lines in the Add ticket form. *Depends on: T41 · 2 h*
+
+- A Describe it box and **Draft with planner** in the empty form, disabled with the daemon's reason.
+- "Drafting…" with Cancel, polling the job.
+- One draft fills the form; two or three drafts show as tabs D1 to D3, each the normal edit form.
+- Problems next to their field and on their tab, with Save disabled until fixed.
+- **Save all** through the batch route.
+- Discard, a confirm when closing with drafts, and Try again on a failed job.
+
+Done when:
+
+- [ ] A few lines produce a draft that opens in the form, unsaved
+- [ ] Two or three drafts show as tabs and save together with Save all
+- [ ] A draft with problems can't be saved until fixed
+
 ### T23 · Packaging
 
-One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43 · 3 h*
+One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43, T44, T45 · 3 h*
 
 - The daemon is bundled with PyInstaller and shipped as a Tauri sidecar; the app starts it when it is not running.
 - Closing the window leaves the daemon and any run going, with a tray icon to quit.
