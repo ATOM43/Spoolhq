@@ -230,5 +230,3 @@ Four GitHub Actions workflows in `.github/workflows/` run side by side on every 
 | `rust.yml` | Linux, macOS, Windows | `just lint-rust test-rust`, then a debug `cargo build` | `desktop/src-tauri/**`, `rust-toolchain.toml` |
 
 `justfile`, `.github/workflows/**`, `scripts/**` and the three lockfiles run every workflow, so a docs-only push runs lint alone. Each workflow has a `concurrency` group per branch: a newer push cancels the older run. Caches: uv through `astral-sh/setup-uv`, the pnpm store through `actions/setup-node` (`cache: pnpm`), Rust's `target/` through `Swatinem/rust-cache`. `just` itself is the pinned `rust-just` wheel installed with `uv tool install`. Every action is pinned to a commit SHA with its version in a comment.
-
-<!-- CI docs-only filter test; reverted in the next commit -->
