@@ -403,3 +403,10 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 397 · Daemon tests run in parallel with pytest-xdist · docs/decisions/core.md
 398 · The code graph is no longer committed · docs/decisions/codegraph.md
 399 · One git call per repository at a time, and a Windows-only config retry · docs/decisions/git-github.md
+400 · Drafting tickets is the planner in single-ticket mode, with its own prompt file · docs/decisions/projects-tickets.md
+401 · Only an unreadable answer is retried; everything else is a problem on the draft · docs/decisions/projects-tickets.md
+402 · Drafts are saved through one path with Add ticket, all files or none · docs/decisions/projects-tickets.md
+403 · `spool tickets draft` goes through the daemon · docs/decisions/projects-tickets.md
+404 · Draft jobs are read at project routes, not `/api/jobs/{id}` · docs/decisions/api.md
+405 · A draft job's usage is a run of kind `draft` · docs/decisions/runloop.md
+406 · Every dev fake-runner scenario drafts; `ticket-draft` names it · docs/decisions/agents.md

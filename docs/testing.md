@@ -101,6 +101,7 @@ Four tests use the real `claude` CLI and a real model, all marked `real_agent`: 
 | `review-changes` | The reviewer requests changes once, then approves. |
 | `blocked` | The test gate fails on every attempt and the ticket blocks. |
 | `plan` | The planner returns a valid 3-ticket draft plan (every scenario plans this way). |
+| `ticket-draft` | Like `happy`; asked to draft tickets, the planner returns one draft built from the request, or two (D2 depending on D1) when the request contains the word "split" (every scenario drafts this way). |
 
 The transcripts are in `daemon/src/spoolhq/devtools/scenarios/`. Implementers write `backend/tests/test_spoolhq_fake.py` (the built-in `fastapi-react` layout) through the fake runner's worktree check, so the project's real gates run on a real change; on another stack the test gate won't fail as `gate-retry` and `blocked` expect. The reviewer's verdict gets one item per "Done when" item from its prompt. Each role's transcripts cycle across tickets for as long as the daemon runs.
 

@@ -4,7 +4,8 @@ Implementer transcripts write ``backend/tests/test_spoolhq_fake.py`` (the built-
 template's layout) through ``FakeRunner``'s worktree check, so the project's real gates
 run on a real change: the failing version fails the test gate. Reviewer transcripts get
 their verdict's items from the prompt's "Done when" list, so they fit any ticket. The
-planner always returns the same three-ticket plan.
+planner always returns the same three-ticket plan; asked to draft tickets, it returns one
+draft built from the request, or two linked drafts when the request says "split".
 """
 
 import json
@@ -28,11 +29,14 @@ SCENARIOS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     ),
     "blocked": (("implement-failing.jsonl",), ("review-approve.jsonl",)),
     "plan": (("implement.jsonl",), ("review-approve.jsonl",)),
+    "ticket-draft": (("implement.jsonl",), ("review-approve.jsonl",)),
 }
 
 _DONE_WHEN = re.compile(r"<done_when>(.*?)</done_when>", re.DOTALL)
 _ITEM = re.compile(r"^(\d+)\. .*$", re.MULTILINE)
 _GATE_CHECKED = "(checked by the gates:"
+_REQUEST = re.compile(r"<request>\n(`{3,})\n(.*?)\n\1\n</request>", re.DOTALL)
+_SPLIT = re.compile(r"\bsplit\b", re.IGNORECASE)
 
 
 def fill_verdict(prompt: str, transcript: str) -> str:
@@ -56,6 +60,34 @@ def fill_verdict(prompt: str, transcript: str) -> str:
     return transcript.replace("@@ITEMS@@", json.dumps(json.dumps(verdict))[1:-1])
 
 
+def fill_drafts(prompt: str, transcript: str) -> str:
+    """The plan transcript for a planning prompt; for a drafting prompt, the draft
+    transcript with one draft from the request, or two (D2 after D1) if it says "split"."""
+    found = _REQUEST.search(prompt)
+    if found is None:
+        return transcript
+    request = " ".join(found[2].split())
+    title = request[:60].rstrip() or "Drafted ticket"
+    first = {
+        "ref": "D1",
+        "title": title,
+        "scope": [request],
+        "done_when": ["The change works as the request asks"],
+        "depends_on": [],
+        "estimate_h": 2,
+        "review_required": False,
+        "phase": 0,
+    }
+    drafts = [first]
+    if _SPLIT.search(request):
+        first.update(title=f"{title[:52]} (part 1)", estimate_h=3)
+        second = {**first, "ref": "D2", "title": f"{title[:52]} (part 2)", "depends_on": ["D1"]}
+        drafts.append({**second, "estimate_h": 2.5})
+    text = (SCENARIOS_DIR / "ticket-draft.jsonl").read_text(encoding="utf-8")
+    # The drafts sit inside a JSON string in the transcript, so they are escaped once more.
+    return text.replace("@@DRAFTS@@", json.dumps(json.dumps({"drafts": drafts}))[1:-1])
+
+
 def dev_agents(scenario: str, *, delay_s: float = DELAY_S) -> Agents:
     """Fake runners for every role with ``scenario``'s transcripts; KeyError if unknown."""
     implementer, reviewer = SCENARIOS[scenario]
@@ -71,5 +103,7 @@ def dev_agents(scenario: str, *, delay_s: float = DELAY_S) -> Agents:
     return Agents(
         implementer=runner(implementer),
         reviewer=runner(reviewer, review=True),
-        planner=runner(("plan.jsonl",)),
+        planner=FakeRunner(
+            SCENARIOS_DIR / "plan.jsonl", delay_s=delay_s, cycle=True, render=fill_drafts
+        ),
     )

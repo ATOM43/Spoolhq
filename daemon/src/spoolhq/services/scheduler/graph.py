@@ -45,7 +45,7 @@ def validate_plan(tickets: Sequence[Ticket]) -> list[PlanProblem]:
                     f"{ticket_id} depends on {dep}, which does not exist",
                 )
             )
-    for cycle in _find_cycles(deps):
+    for cycle in find_cycles(deps):
         problems.append(
             PlanProblem("cycle", tuple(cycle), "cycle: " + ARROW.join([*cycle, cycle[0]]))
         )
@@ -69,7 +69,7 @@ def require_valid(tickets: Sequence[Ticket]) -> None:
         raise PlanError(problems)
 
 
-def _find_cycles(deps: dict[str, set[str]]) -> list[list[str]]:
+def find_cycles(deps: dict[str, set[str]]) -> list[list[str]]:
     """The cycles a depth-first walk in id order finds, each reported once.
 
     Walks from each ticket to the tickets that depend on it, so a cycle reads in work

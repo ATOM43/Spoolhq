@@ -1,8 +1,10 @@
-"""Adding a ticket by hand: the next id, the file, and the checks an edit gets."""
+"""Adding tickets: the next ids, the files, and the checks an edit gets. One by hand, or
+the planner's drafts together (refs ``D1`` to ``D3`` rewritten to their ids)."""
 
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,7 +16,7 @@ from spoolhq.services.projects import ProjectError, edit_lock, load_project, pro
 from spoolhq.services.projects.yaml_io import dump, to_node, write_atomic
 from spoolhq.services.runs import RunLog, ticket_ids
 from spoolhq.services.scheduler.errors import TicketEditError, TicketLockedError
-from spoolhq.services.scheduler.graph import validate_plan
+from spoolhq.services.scheduler.graph import find_cycles
 from spoolhq.services.tickets import (
     MAX_ESTIMATE_H,
     Ticket,
@@ -47,6 +49,51 @@ class NewTicket(BaseModel):
     review_required: bool = False
     phase: int | None = Field(default=None, ge=0)
     """Defaults to the highest phase the project has (0 without tickets)."""
+
+
+class DraftTicket(NewTicket):
+    """One planner draft as the user saves it: a ticket plus its ``ref``, which other
+    drafts' ``depends_on`` may name."""
+
+    ref: str = Field(pattern=r"^D[1-3]$")
+
+
+@dataclass(frozen=True)
+class TicketProblem:
+    """Why a new ticket can't be saved, and the field to fix."""
+
+    code: str
+    """``unknown_dependency``, ``cycle`` or ``missing_done_when`` (drafts add more)."""
+    message: str
+    field: str
+
+
+def ticket_problems(
+    new: Mapping[str, tuple[Sequence[str], str]], plan: Sequence[Ticket]
+) -> dict[str, list[TicketProblem]]:
+    """The problems of new tickets added to ``plan``. ``new`` maps each new ticket's id
+    (or ref) to its ``depends_on`` and body. A dependency must be a ticket of ``plan`` or
+    another new one; a cycle is reported for every new ticket in it or depending on it.
+    """
+    known = {t.id for t in plan} | new.keys()
+    deps = {t.id: set(t.meta.depends_on) for t in plan}
+    deps.update((key, set(item[0]) & known) for key, item in new.items())
+    cycles = find_cycles(deps)
+    found: dict[str, list[TicketProblem]] = {}
+    for key, (depends_on, body) in new.items():
+        problems = found.setdefault(key, [])
+        unknown = sorted(set(depends_on) - known)
+        if unknown:
+            message = f"depends on {', '.join(unknown)}, which does not exist"
+            problems.append(TicketProblem("unknown_dependency", message, "depends_on"))
+        for cycle in cycles:
+            if {key, *depends_on} & set(cycle):
+                message = "cycle: " + " → ".join([*cycle, cycle[0]])
+                problems.append(TicketProblem("cycle", message, "depends_on"))
+        if not parse_done_when(body)[0]:
+            message = "“Done when” needs at least one checklist item"
+            problems.append(TicketProblem("missing_done_when", message, "done_when"))
+    return found
 
 
 def _body(new: NewTicket) -> str:
@@ -100,6 +147,25 @@ def create_ticket(project: str, new: NewTicket, *, projects_dir: Path) -> Ticket
     the OS lock ``.spoolhq/tickets.lock`` (TicketLockedError if another process holds
     it for ``LOCK_WAIT_S``).
     """
+    return _create(project, [new], projects_dir=projects_dir, batch=False)[0]
+
+
+def create_tickets(
+    project: str, drafts: Sequence[DraftTicket], *, projects_dir: Path
+) -> list[Ticket]:
+    """Write several drafts at once, like ``create_ticket``: ids in draft order, each
+    ref in ``depends_on`` rewritten to its draft's id, the whole set checked, and every
+    file written or none. A refusal's field is ``tickets.<index>.<field>``."""
+    refs = [draft.ref for draft in drafts]
+    for index, ref in enumerate(refs):
+        if ref in refs[:index]:
+            raise TicketEditError(f"{ref} appears more than once", f"tickets.{index}.ref")
+    return _create(project, drafts, projects_dir=projects_dir, batch=True)
+
+
+def _create(
+    project: str, items: Sequence[NewTicket], *, projects_dir: Path, batch: bool
+) -> list[Ticket]:
     folder = tickets_dir(project, projects_dir=projects_dir)
     workspace = project_dir(project, projects_dir)
     with edit_lock(workspace), _tickets_lock(workspace):
@@ -109,35 +175,46 @@ def create_ticket(project: str, new: NewTicket, *, projects_dir: Path) -> Ticket
         prefixes = [m["prefix"] for name in names if (m := FILE_NAME_RE.fullmatch(name))]
         prefixes += _used_ids(project, workspace, projects_dir=projects_dir)
         highest = max((int(p[1:]) for p in prefixes if TICKET_ID_RE.fullmatch(p)), default=0)
-        ticket_id = f"T{highest + 1:02d}"
+        ids = [f"T{highest + n:02d}" for n in range(1, len(items) + 1)]
+        real = {item.ref: ids[n] for n, item in enumerate(items) if isinstance(item, DraftTicket)}
+        depends = [[real.get(dep, dep) for dep in item.depends_on] for item in items]
 
-        unknown = sorted(set(new.depends_on) - {t.id for t in plan})
-        if unknown:
-            raise TicketEditError(
-                f"depends on {', '.join(unknown)}, which does not exist", "depends_on"
-            )
-        body = _body(new)
-        if not parse_done_when(body)[0]:
-            raise TicketEditError("“Done when” needs at least one checklist item", "done_when")
-        for problem in validate_plan(plan):
-            if problem.code == "cycle" and set(problem.ticket_ids) & set(new.depends_on):
-                raise TicketEditError(problem.message, "depends_on")
+        found = ticket_problems(
+            {ids[n]: (depends[n], _body(item)) for n, item in enumerate(items)}, plan
+        )
+        for n, ticket_id in enumerate(ids):
+            if found[ticket_id]:
+                first = found[ticket_id][0]
+                field = f"tickets.{n}.{first.field}" if batch else first.field
+                raise TicketEditError(first.message, field)
 
-        estimate = new.estimate_h
-        frontmatter = {
-            "id": ticket_id,
-            "title": new.title.strip(),
-            "phase": (
-                new.phase if new.phase is not None else max((t.meta.phase for t in plan), default=0)
-            ),
-            "depends_on": list(new.depends_on),
-            "status": "draft" if any(t.meta.status == "draft" for t in plan) else "ready",
-            "estimate_h": int(estimate) if float(estimate).is_integer() else estimate,
-            "review_required": new.review_required,
-        }
-        text = f"---\n{dump(to_node(frontmatter))}---\n\n{body}"
-        file_name = f"{ticket_id}-{slugify(new.title)}.md"
-        ticket = parse_ticket(text, file_name)  # every TicketMeta rule, before writing
+        status = "draft" if any(t.meta.status == "draft" for t in plan) else "ready"
+        default_phase = max((t.meta.phase for t in plan), default=0)
+        files: list[tuple[str, str]] = []
+        tickets: list[Ticket] = []
+        for n, item in enumerate(items):
+            estimate = item.estimate_h
+            frontmatter = {
+                "id": ids[n],
+                "title": item.title.strip(),
+                "phase": item.phase if item.phase is not None else default_phase,
+                "depends_on": depends[n],
+                "status": status,
+                "estimate_h": int(estimate) if float(estimate).is_integer() else estimate,
+                "review_required": item.review_required,
+            }
+            text = f"---\n{dump(to_node(frontmatter))}---\n\n{_body(item)}"
+            file_name = f"{ids[n]}-{slugify(item.title)}.md"
+            tickets.append(parse_ticket(text, file_name))  # every TicketMeta rule, first
+            files.append((file_name, text))
         folder.mkdir(exist_ok=True)
-        write_atomic(folder / file_name, text)
-    return ticket
+        written: list[Path] = []
+        try:
+            for file_name, text in files:
+                write_atomic(folder / file_name, text)
+                written.append(folder / file_name)
+        except OSError:
+            for path in written:
+                path.unlink(missing_ok=True)
+            raise
+    return tickets

@@ -215,6 +215,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/tickets/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Draft
+         * @description Start drafting 1 to 3 tickets; 409 with the reason when the planner's agent isn't
+         *     ready (`agent_unavailable`), a run is going or a plan is being generated.
+         */
+        post: operations["start_draft_api_projects__name__tickets_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/tickets/draft/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Draft
+         * @description The draft job; its drafts and their problems once it succeeded (kept 1 hour).
+         */
+        get: operations["get_draft_api_projects__name__tickets_draft__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/tickets/draft/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Draft
+         * @description Stop the agent; answers once the job ended (at most 15 s).
+         */
+        post: operations["cancel_draft_api_projects__name__tickets_draft__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/tickets/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Batch
+         * @description Save edited drafts: ids in draft order, refs rewritten, all files or none.
+         */
+        post: operations["save_batch_api_projects__name__tickets_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/tickets": {
         parameters: {
             query?: never;
@@ -986,6 +1067,90 @@ export interface components {
              */
             status: "ready";
         };
+        /** DraftJobView */
+        DraftJobView: {
+            /** Id */
+            id: string;
+            /** Project */
+            project: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "running" | "succeeded" | "failed" | "cancelled";
+            /** Error */
+            error: string | null;
+            /** Run Id */
+            run_id: number;
+            /** Drafts */
+            drafts: components["schemas"]["DraftView"][];
+        };
+        /** DraftRequest */
+        DraftRequest: {
+            /** Request */
+            request: string;
+        };
+        /** DraftStarted */
+        DraftStarted: {
+            /** Job Id */
+            job_id: string;
+        };
+        /**
+         * DraftTicket
+         * @description One planner draft as the user saves it: a ticket plus its ``ref``, which other
+         *     drafts' ``depends_on`` may name.
+         */
+        DraftTicket: {
+            /** Title */
+            title: string;
+            /**
+             * Scope
+             * @default
+             */
+            scope: string;
+            /** Done When */
+            done_when: string;
+            /** Depends On */
+            depends_on?: string[];
+            /**
+             * Estimate H
+             * @default 1
+             */
+            estimate_h: number;
+            /**
+             * Review Required
+             * @default false
+             */
+            review_required: boolean;
+            /** Phase */
+            phase?: number | null;
+            /** Ref */
+            ref: string;
+        };
+        /** DraftView */
+        DraftView: {
+            /**
+             * Ref
+             * @enum {string}
+             */
+            ref: "D1" | "D2" | "D3";
+            /** Title */
+            title: string;
+            /** Scope */
+            scope: string;
+            /** Done When */
+            done_when: string[];
+            /** Depends On */
+            depends_on: string[];
+            /** Estimate H */
+            estimate_h: number;
+            /** Review Required */
+            review_required: boolean;
+            /** Phase */
+            phase: number;
+            /** Problems */
+            problems: components["schemas"]["ProblemView"][];
+        };
         /** ErrorBody */
         ErrorBody: {
             /** Code */
@@ -1251,6 +1416,18 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** ProblemView */
+        ProblemView: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "schema" | "unknown_dependency" | "cycle" | "missing_done_when" | "estimate_too_high";
+            /** Message */
+            message: string;
+            /** Field */
+            field: string;
+        };
         /** ProjectDetail */
         ProjectDetail: {
             /** Name */
@@ -1441,7 +1618,7 @@ export interface components {
          * RunKind
          * @enum {string}
          */
-        RunKind: "ticket" | "plan";
+        RunKind: "ticket" | "plan" | "draft";
         /** RunList */
         RunList: {
             /** Items */
@@ -1654,6 +1831,11 @@ export interface components {
             /** Run Id */
             run_id: number;
         };
+        /** TicketBatch */
+        TicketBatch: {
+            /** Tickets */
+            tickets: components["schemas"]["DraftTicket"][];
+        };
         /**
          * TicketDetail
          * @description ``GET …/tickets/{id}``: the ticket with its latest run, attempts and git state.
@@ -1748,6 +1930,11 @@ export interface components {
             /** Body */
             body: string;
             activity?: components["schemas"]["TicketActivityView"] | null;
+        };
+        /** TicketsSaved */
+        TicketsSaved: {
+            /** Tickets */
+            tickets: components["schemas"]["TicketView"][];
         };
         /**
          * UsageTotal
@@ -2481,6 +2668,146 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    start_draft_api_projects__name__tickets_draft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftStarted"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_draft_api_projects__name__tickets_draft__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+                /** @description Job id. */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftJobView"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_draft_api_projects__name__tickets_draft__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+                /** @description Job id. */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftJobView"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    save_batch_api_projects__name__tickets_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TicketBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketsSaved"];
+                };
             };
             /** @description An error. */
             default: {

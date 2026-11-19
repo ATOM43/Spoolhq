@@ -21,7 +21,7 @@ from spoolhq.services.runs import db
 from spoolhq.services.runs.bus import EventBus
 from spoolhq.services.runs.db import Clock
 from spoolhq.services.runs.model import (
-    PLAN_RUN_ID,
+    AGENT_RUN_IDS,
     Attempt,
     AttemptKind,
     AttemptStatus,
@@ -57,7 +57,7 @@ def _check_count(name: str, value: int) -> None:
 
 def attempt_dir_name(ticket_id: str, number: int) -> str:
     """``runs/<ticket>/<NNN>`` (``runs/plan/<NNN>`` for a plan run), with forward slashes."""
-    folder = ticket_id if ticket_id == PLAN_RUN_ID else check_ticket_id(ticket_id)
+    folder = ticket_id if ticket_id in AGENT_RUN_IDS else check_ticket_id(ticket_id)
     return f"{RUNS_DIR}/{folder}/{number:03d}"
 
 
@@ -205,9 +205,9 @@ class RunLog:
         """Start a run for ``ticket_id`` in status ``running``; event ``run.started``."""
         return self._start(check_ticket_id(ticket_id), RunKind.TICKET)
 
-    def start_plan_run(self) -> Run:
-        """Start a run of kind ``plan`` (ticket id ``plan``); event ``run.started``."""
-        return self._start(PLAN_RUN_ID, RunKind.PLAN)
+    def start_plan_run(self, kind: RunKind = RunKind.PLAN) -> Run:
+        """Start a ``plan`` (or ``draft``) run, ticket id the kind; event ``run.started``."""
+        return self._start(kind.value, kind)
 
     def _start(self, ticket_id: str, kind: RunKind) -> Run:
         with self.transaction() as tx:
@@ -219,7 +219,7 @@ class RunLog:
             assert cursor.lastrowid is not None  # noqa: S101 - an INSERT always sets it
             run = self._run(tx.conn, cursor.lastrowid)
             payload = {"ticket_id": ticket_id}
-            if kind is RunKind.PLAN:
+            if kind is not RunKind.TICKET:
                 payload["kind"] = kind.value
             tx.append_event(run.id, EventKind.RUN_STARTED, payload)
             return run

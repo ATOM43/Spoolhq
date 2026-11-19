@@ -5,11 +5,22 @@ repository with ``CONTEXT.md``, an optional template description and the tickets
 must be kept; its ``<plan>`` block is validated in code and written as ``draft`` ticket
 files. ``approve_plan()`` moves every draft to ``ready``; nothing runs before that.
 ``plan_overview()`` is the plan's state, size and problems for the Tickets tab.
+``draft_tickets()`` drafts 1 to 3 tickets from a short request and writes nothing.
 This package may import ``services.agents``, ``services.context``,
 ``services.projects``, ``services.scheduler`` and ``services.tickets``. See
 ``docs/planner.md``.
 """
 
+from spoolhq.services.planner.draft import (
+    REQUEST_MAX,
+    UNREADABLE,
+    Draft,
+    DraftResult,
+    UnreadableDrafts,
+    check_drafts,
+    draft_tickets,
+    parse_drafts,
+)
 from spoolhq.services.planner.model import (
     MAX_ESTIMATE_H,
     MIN_ESTIMATE_H,
@@ -25,7 +36,12 @@ from spoolhq.services.planner.model import (
 )
 from spoolhq.services.planner.overview import PlanOverview, PlanState, plan_overview
 from spoolhq.services.planner.planner import PLANNER_MAX_TURNS, generate_plan, read_spec
-from spoolhq.services.planner.prompt import PLANNER_TEMPLATE, render_planner_prompt
+from spoolhq.services.planner.prompt import (
+    DRAFT_TEMPLATE,
+    PLANNER_TEMPLATE,
+    render_draft_prompt,
+    render_planner_prompt,
+)
 from spoolhq.services.planner.store import (
     PLAN_FILE,
     Existing,
@@ -38,6 +54,16 @@ from spoolhq.services.planner.store import (
 from spoolhq.services.planner.validate import CheckedPlan, check_plan, next_id, parse_plan
 
 __all__ = [
+    "DRAFT_TEMPLATE",
+    "REQUEST_MAX",
+    "UNREADABLE",
+    "Draft",
+    "DraftResult",
+    "UnreadableDrafts",
+    "check_drafts",
+    "draft_tickets",
+    "parse_drafts",
+    "render_draft_prompt",
     "MAX_ESTIMATE_H",
     "MIN_ESTIMATE_H",
     "PLANNER_MAX_TURNS",

@@ -671,6 +671,242 @@
         }
       }
     },
+    "/api/projects/{name}/tickets/draft": {
+      "post": {
+        "summary": "Start Draft",
+        "description": "Start drafting 1 to 3 tickets; 409 with the reason when the planner's agent isn't\nready (`agent_unavailable`), a run is going or a plan is being generated.",
+        "operationId": "start_draft_api_projects__name__tickets_draft_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftStarted"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{name}/tickets/draft/{job_id}": {
+      "get": {
+        "summary": "Get Draft",
+        "description": "The draft job; its drafts and their problems once it succeeded (kept 1 hour).",
+        "operationId": "get_draft_api_projects__name__tickets_draft__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$",
+              "description": "Job id.",
+              "title": "Job Id"
+            },
+            "description": "Job id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftJobView"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{name}/tickets/draft/{job_id}/cancel": {
+      "post": {
+        "summary": "Cancel Draft",
+        "description": "Stop the agent; answers once the job ended (at most 15 s).",
+        "operationId": "cancel_draft_api_projects__name__tickets_draft__job_id__cancel_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$",
+              "description": "Job id.",
+              "title": "Job Id"
+            },
+            "description": "Job id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftJobView"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{name}/tickets/batch": {
+      "post": {
+        "summary": "Save Batch",
+        "description": "Save edited drafts: ids in draft order, refs rewritten, all files or none.",
+        "operationId": "save_batch_api_projects__name__tickets_batch_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketsSaved"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{name}/tickets": {
       "get": {
         "summary": "Get Tickets",
@@ -3283,6 +3519,222 @@
         ],
         "title": "Discarded"
       },
+      "DraftJobView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "title": "State"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "drafts": {
+            "items": {
+              "$ref": "#/components/schemas/DraftView"
+            },
+            "type": "array",
+            "title": "Drafts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project",
+          "state",
+          "error",
+          "run_id",
+          "drafts"
+        ],
+        "title": "DraftJobView"
+      },
+      "DraftRequest": {
+        "properties": {
+          "request": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Request"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request"
+        ],
+        "title": "DraftRequest"
+      },
+      "DraftStarted": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "title": "DraftStarted"
+      },
+      "DraftTicket": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "\\S",
+            "title": "Title"
+          },
+          "scope": {
+            "type": "string",
+            "maxLength": 400000,
+            "title": "Scope",
+            "default": ""
+          },
+          "done_when": {
+            "type": "string",
+            "maxLength": 100000,
+            "title": "Done When"
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Depends On"
+          },
+          "estimate_h": {
+            "type": "number",
+            "maximum": 40.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Estimate H",
+            "default": 1
+          },
+          "review_required": {
+            "type": "boolean",
+            "title": "Review Required",
+            "default": false
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          },
+          "ref": {
+            "type": "string",
+            "pattern": "^D[1-3]$",
+            "title": "Ref"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "done_when",
+          "ref"
+        ],
+        "title": "DraftTicket",
+        "description": "One planner draft as the user saves it: a ticket plus its ``ref``, which other\ndrafts' ``depends_on`` may name."
+      },
+      "DraftView": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "enum": [
+              "D1",
+              "D2",
+              "D3"
+            ],
+            "title": "Ref"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "done_when": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Done When"
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Depends On"
+          },
+          "estimate_h": {
+            "type": "number",
+            "title": "Estimate H"
+          },
+          "review_required": {
+            "type": "boolean",
+            "title": "Review Required"
+          },
+          "phase": {
+            "type": "integer",
+            "title": "Phase"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/ProblemView"
+            },
+            "type": "array",
+            "title": "Problems"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref",
+          "title",
+          "scope",
+          "done_when",
+          "depends_on",
+          "estimate_h",
+          "review_required",
+          "phase",
+          "problems"
+        ],
+        "title": "DraftView"
+      },
       "ErrorBody": {
         "properties": {
           "code": {
@@ -4011,6 +4463,36 @@
         "title": "PolicyView",
         "description": "The run's latest merge-policy decision."
       },
+      "ProblemView": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "schema",
+              "unknown_dependency",
+              "cycle",
+              "missing_done_when",
+              "estimate_too_high"
+            ],
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "field"
+        ],
+        "title": "ProblemView"
+      },
       "ProjectDetail": {
         "properties": {
           "name": {
@@ -4640,7 +5122,8 @@
         "type": "string",
         "enum": [
           "ticket",
-          "plan"
+          "plan",
+          "draft"
         ],
         "title": "RunKind"
       },
@@ -5409,6 +5892,24 @@
         ],
         "title": "TicketAttemptView"
       },
+      "TicketBatch": {
+        "properties": {
+          "tickets": {
+            "items": {
+              "$ref": "#/components/schemas/DraftTicket"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Tickets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tickets"
+        ],
+        "title": "TicketBatch"
+      },
       "TicketDetail": {
         "properties": {
           "id": {
@@ -5761,6 +6262,22 @@
           "body"
         ],
         "title": "TicketView"
+      },
+      "TicketsSaved": {
+        "properties": {
+          "tickets": {
+            "items": {
+              "$ref": "#/components/schemas/TicketView"
+            },
+            "type": "array",
+            "title": "Tickets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tickets"
+        ],
+        "title": "TicketsSaved"
       },
       "UsageTotal": {
         "properties": {

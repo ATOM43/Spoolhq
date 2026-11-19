@@ -19,6 +19,7 @@ from spoolhq.services.runloop.artifacts import (
 )
 from spoolhq.services.runloop.delivery import Delivery
 from spoolhq.services.runloop.details import TicketGit, TicketRuns, ticket_runs
+from spoolhq.services.runloop.drafting import AgentNotReadyError, DraftJob, DraftJobs
 from spoolhq.services.runloop.integration import LocalIntegrator, recover_integrations
 from spoolhq.services.runloop.integrator import (
     HoldForIntegration,
@@ -56,6 +57,9 @@ from spoolhq.services.runloop.polling import GitHubPoller
 from spoolhq.services.runloop.resume import RESUME_DELAY, ResumeTimer
 
 __all__ = [
+    "AgentNotReadyError",
+    "DraftJob",
+    "DraftJobs",
     "DiffReport",
     "GatesReport",
     "ReviewReport",

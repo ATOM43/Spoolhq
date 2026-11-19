@@ -336,7 +336,7 @@ class RunLoop:
         """The newest paused or interrupted run whose ticket is still running."""
         seen: set[str] = set()
         for run in run_log.list_runs(limit=200):
-            if run.kind is RunKind.PLAN or run.ticket_id in seen:
+            if run.kind is not RunKind.TICKET or run.ticket_id in seen:
                 continue
             seen.add(run.ticket_id)
             if run.status not in (RunStatus.PAUSED, RunStatus.INTERRUPTED):

@@ -1,11 +1,22 @@
+import json
 import shutil
 from pathlib import Path
 
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
+from spoolhq.api import create_app
 from spoolhq.cli import app
-from tests.conftest import FIXTURES_DIR
+from spoolhq.cli import tickets as tickets_cli
+from spoolhq.cli.client import ApiClient
+from spoolhq.core.config import load_settings
+from spoolhq.devtools.fake_runner import SCENARIOS_DIR, fill_drafts
+from spoolhq.services.agents import FakeRunner
+from spoolhq.services.runloop import Agents
+from spoolhq.services.tickets import load_ticket
+from tests.conftest import AGENT_FIXTURES, FIXTURES_DIR, REVIEW_FIXTURES, plan_transcript
 
 runner = CliRunner()
 
@@ -263,3 +274,110 @@ def test_new_reads_the_scope_file_and_names_the_bad_field(workspace: Path, tmp_p
     blank = runner.invoke(app, ["tickets", "new", "demo", "--title", " ", "--done-when", "ok"])
     assert (blank.exit_code, "title" in blank.stderr) == (1, True)
     assert len(list((workspace / "tickets").iterdir())) == 1
+
+
+# spool tickets draft -------------------------------------------------------------------
+
+
+def draft_daemon(
+    token: str, monkeypatch: pytest.MonkeyPatch, planner: FakeRunner | None = None
+) -> TestClient:
+    """The app with ``planner`` (default: the dev fake's drafts); `spool tickets draft`
+    talks to it, polling fast."""
+    settings = load_settings()
+    agents = Agents(
+        implementer=FakeRunner(AGENT_FIXTURES / "success_writes_file.jsonl"),
+        reviewer=FakeRunner(REVIEW_FIXTURES / "approve.jsonl"),
+        planner=planner or FakeRunner(SCENARIOS_DIR / "plan.jsonl", render=fill_drafts),
+    )
+    client = TestClient(
+        create_app(settings, token=token, agents=agents),
+        base_url=f"http://127.0.0.1:{settings.port}",
+    )
+
+    def forward(request: httpx.Request) -> httpx.Response:
+        response = client.request(
+            request.method, request.url.path, content=request.content, headers=request.headers
+        )
+        return httpx.Response(
+            response.status_code, headers=response.headers, content=response.content
+        )
+
+    monkeypatch.setattr(
+        tickets_cli,
+        "_client",
+        lambda: ApiClient("http://127.0.0.1:8765", token, transport=httpx.MockTransport(forward)),
+    )
+    monkeypatch.setattr(tickets_cli, "POLL_S", 0.02)
+    return client
+
+
+def ticket_files(workspace: Path) -> list[str]:
+    return sorted(path.name for path in (workspace / "tickets").iterdir())
+
+
+def test_draft_prints_the_drafts(
+    run_project: Path, token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with draft_daemon(token, monkeypatch):
+        result = runner.invoke(app, ["tickets", "draft", "demo", "split: add CSV export"])
+    assert result.exit_code == 0, result.output
+    assert "## D1 · split: add CSV export (part 1)" in result.output
+    assert "## D2 · split: add CSV export (part 2)" in result.output
+    assert "Phase 0 · 2.5h · review: no · depends on: D1" in result.output
+    assert "- [ ] The change works as the request asks" in result.output
+    assert ticket_files(run_project) == ["T07-parse-slug.md"]
+
+
+def test_draft_save_writes_them(
+    run_project: Path, token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with draft_daemon(token, monkeypatch):
+        result = runner.invoke(
+            app, ["tickets", "draft", "demo", "--save"], input="split: add CSV export\n"
+        )
+    assert result.exit_code == 0, result.output
+    assert "Added T08 (ready): tickets/T08-split-add-csv-export-part-1.md" in result.output
+    assert "Added T09 (ready): tickets/T09-split-add-csv-export-part-2.md" in result.output
+    saved = load_ticket("demo", "T09", projects_dir=run_project.parent)
+    assert saved.meta.depends_on == ["T08"]
+
+
+def test_draft_save_refuses_drafts_with_problems(
+    run_project: Path, token: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    answer = {
+        "drafts": [
+            {
+                "ref": "D1",
+                "title": "x",
+                "scope": ["y"],
+                "done_when": ["z"],
+                "depends_on": ["T99"],
+                "estimate_h": 6,
+                "phase": 0,
+            }
+        ]
+    }
+    text = f"<drafts>{json.dumps(answer)}</drafts>"
+    planner = FakeRunner(plan_transcript(tmp_path / "answer.jsonl", text))
+    with draft_daemon(token, monkeypatch, planner):
+        result = runner.invoke(app, ["tickets", "draft", "demo", "r", "--save"])
+    assert result.exit_code == 1
+    assert "- depends_on: depends on T99, which does not exist" in result.output
+    assert "- estimate_h: 6 h is over 4 h: split the work" in result.output
+    assert "not saved: fix the problems above" in result.output
+    assert ticket_files(run_project) == ["T07-parse-slug.md"]
+
+
+def test_draft_reports_a_failed_job_and_a_refusal(
+    run_project: Path, token: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    bad = plan_transcript(tmp_path / "bad.jsonl", "no drafts here")
+    with draft_daemon(token, monkeypatch, FakeRunner([bad, bad])):
+        failed = runner.invoke(app, ["tickets", "draft", "demo", "r"])
+        refused = runner.invoke(app, ["tickets", "draft", "nope", "r"])
+    assert failed.exit_code == 1
+    assert "error: The planner's answer couldn't be read" in failed.output
+    assert refused.exit_code == 1
+    assert "no project 'nope'" in refused.output

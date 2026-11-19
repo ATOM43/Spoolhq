@@ -154,6 +154,22 @@ Both need the token; errors use the [API's error format](api.md#errors).
 
 The planner's work is recorded in the [run log](runs.md) as a run of kind `plan` (ticket id `plan`) with one attempt of kind `plan` in `runs/plan/<NNN>/` (its transcript) and the attempt's usage (input, output and cache-read tokens, so `spool runs show` gives the weighted total the budget counts). The run ends `done` (`18 draft tickets written`), `blocked` with the error, or `cancelled` when the daemon stops.
 
+## Drafting tickets
+
+`draft_tickets()` (`services/planner/draft.py`) turns a short request into 1 to 3 draft tickets and writes no files. It runs the planner role's backend once with the planner's read-only policy, 30 turns and per-ticket budget, and the prompt `ticket-draft.md.j2` (next to `planner.md.j2`, overridable as `<workspace>/prompts/ticket-draft.md.j2`). Its variables, all already escaped:
+
+| Variable | Contents |
+| --- | --- |
+| `request` | The request (untrusted) |
+| `spec` | `None` when `CONTEXT.md` is blank or init's starter; else `text` (at most half of `context.max_chars`, cut at a line) and `note` |
+| `tickets` | `id`, `title`, `status`, `phase` of every existing ticket |
+| `phase` | The highest phase in use (0 without tickets), for the example |
+| `test_item` | `` `just test` passes `` |
+| `previous_error` | `None`, or why the last answer couldn't be read |
+| `code_map` | As for planning, capped at a quarter of `context.max_chars` |
+
+The answer is a `<drafts>` block with `{"drafts": [...]}`. If its shape can't be read (no block, not JSON, not 1 to 3 objects with refs `D1`, `D2`, `D3` in order), it is retried once with the reason, then fails with "The planner's answer couldn't be read". Everything else is checked per draft and reported as problems (`schema`, `unknown_dependency`, `cycle`, `missing_done_when`, `estimate_too_high`) with the field to fix; a missing test item is appended, as for a plan. The daemon runs it as a draft job (`services/runloop/drafting.py`, `DraftJobs`), recorded as a run of kind `draft` (ticket id `draft`, attempts in `runs/draft/<NNN>/`); see the [API](api.md#drafting-tickets).
+
 ## Real run
 
 `tests/services/planner/test_real_run.py` (marker `real_agent`, skipped unless `SPOOLHQ_REAL_AGENT=1` and `claude` is logged in) plans a three-paragraph spec for a small CLI tool and checks the plan validates. On 2026-10-25 it took one call: 19,138 input tokens (15,506 of them cache reads) and 3,414 output, 8,596 weighted, for six tickets.

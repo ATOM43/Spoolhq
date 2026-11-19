@@ -6,7 +6,7 @@ The code is `services/runs/`: the database in `db.py`, `RunLog` in `log.py`, the
 
 ## Runs and attempts
 
-A **run** is one execution of the loop for one ticket, from being picked until it ends. Its `kind` is `ticket`; a run of kind `plan` is the [planner](planner.md) generating a project's plan (`start_plan_run()`): its ticket id is `plan`, its one attempt has kind `plan` and its folder is `runs/plan/<NNN>/`. The run loop's resume skips plan runs.
+A **run** is one execution of the loop for one ticket, from being picked until it ends. Its `kind` is `ticket`; a run of kind `plan` is the [planner](planner.md) generating a project's plan (`start_plan_run()`): its ticket id is `plan`, its one attempt has kind `plan` and its folder is `runs/plan/<NNN>/`. A run of kind `draft` is the planner [drafting tickets](planner.md#drafting-tickets) from a request (`start_plan_run(RunKind.DRAFT)`), the same way with ticket id `draft` and `runs/draft/<NNN>/`. The run loop's resume skips both.
 
 | Status | Meaning |
 | --- | --- |

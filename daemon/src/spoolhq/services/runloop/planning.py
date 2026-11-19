@@ -179,12 +179,16 @@ class PlanJobs:
         except PlannerError as exc:
             raise RunLoopError(str(exc)) from exc
 
+    def planning(self, project: str) -> bool:
+        """Whether ``project``'s planner runs here now."""
+        with self._mutex:
+            job = self._jobs.get(project)
+            return job is not None and job.thread.is_alive()
+
     def overview(self, project: str) -> PlanOverview:
         """The project's plan, ``planning`` while its planner runs here."""
         self._workspace(project)
-        with self._mutex:
-            job = self._jobs.get(project)
-            planning = job is not None and job.thread.is_alive()
+        planning = self.planning(project)
         return plan_overview(project, projects_dir=self.projects_dir, planning=planning)
 
     def wait(self, project: str, timeout: float | None = None) -> None:

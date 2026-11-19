@@ -166,10 +166,30 @@ def test_plan_gives_a_valid_three_ticket_draft(plan_project: Path, token: str) -
     assert (plan["state"], plan["ticket_count"], plan["problems"]) == ("draft", 3, [])
 
 
+def test_ticket_draft_drafts_one_or_two_linked_tickets(run_project: Path, token: str) -> None:
+    settings = load_settings()
+    app = create_app(settings, token=token, agents=dev_agents("ticket-draft", delay_s=0))
+    base = "/api/projects/demo/tickets/draft"
+    with TestClient(app, base_url=f"http://127.0.0.1:{settings.port}") as client:
+        found = []
+        for request in ("add CSV export", "Split: add CSV export"):
+            started = client.post(base, json={"request": request}, headers=auth(token))
+            job = client.app.state.drafts.wait("demo", started.json()["job_id"], 30)  # type: ignore[attr-defined]
+            found.append([(d.ref, d.depends_on, d.problems) for d in job.drafts])
+    assert found == [[("D1", (), ())], [("D1", (), ()), ("D2", ("D1",), ())]]
+
+
 def test_every_scenario_has_its_transcripts() -> None:
-    assert list(SCENARIOS) == ["happy", "gate-retry", "review-changes", "blocked", "plan"]
+    assert list(SCENARIOS) == [
+        "happy",
+        "gate-retry",
+        "review-changes",
+        "blocked",
+        "plan",
+        "ticket-draft",
+    ]
     for implementer, reviewer in SCENARIOS.values():
-        for name in (*implementer, *reviewer, "plan.jsonl"):
+        for name in (*implementer, *reviewer, "plan.jsonl", "ticket-draft.jsonl"):
             assert (fake_runner.SCENARIOS_DIR / name).is_file()
 
 

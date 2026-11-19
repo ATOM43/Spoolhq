@@ -13,6 +13,7 @@ import spoolhq
 from spoolhq.api import errors
 from spoolhq.api.routers import agents as agents_router
 from spoolhq.api.routers import (
+    drafts,
     events,
     github,
     health,
@@ -32,7 +33,14 @@ from spoolhq.api.worktrees import check_git, recover_all_integrations, recover_a
 from spoolhq.core.auth import load_or_create_token
 from spoolhq.core.config import Settings, ensure_home, home_dir
 from spoolhq.services.creation import CreationJobs
-from spoolhq.services.runloop import Agents, GitHubPoller, Integrator, PlanJobs, RunLoop
+from spoolhq.services.runloop import (
+    Agents,
+    DraftJobs,
+    GitHubPoller,
+    Integrator,
+    PlanJobs,
+    RunLoop,
+)
 from spoolhq.services.runs import RunRegistry
 
 logger = logging.getLogger("spoolhq.daemon")
@@ -100,6 +108,14 @@ def create_app(
                 home=home_dir(),
                 runner=(agents.planner or agents.implementer) if agents else None,
             )
+            app.state.drafts = DraftJobs(
+                registry,
+                projects_dir=settings.projects_dir,
+                home=home_dir(),
+                loop=app.state.runloop,
+                plans=app.state.plans,
+                runner=(agents.planner or agents.implementer) if agents else None,
+            )
             app.state.creation = CreationJobs(
                 projects_dir=settings.projects_dir,
                 worktrees_dir=settings.worktrees_dir,
@@ -110,6 +126,7 @@ def create_app(
             finally:
                 app.state.creation.close()
                 app.state.streams.close_all()
+                app.state.drafts.close()
                 app.state.plans.close()
                 app.state.github.close()
                 app.state.runloop.close()
@@ -133,6 +150,7 @@ def create_app(
         projects,
         repos,
         jobs,
+        drafts,
         tickets,
         runs,
         plan,

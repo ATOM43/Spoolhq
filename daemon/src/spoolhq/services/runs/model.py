@@ -33,10 +33,16 @@ class RunKind(StrEnum):
     TICKET = "ticket"
     PLAN = "plan"
     """The planner turning the spec into draft tickets; its ``ticket_id`` is ``plan``."""
+    DRAFT = "draft"
+    """The planner drafting tickets from a request, writing none; ``ticket_id`` ``draft``."""
 
 
 PLAN_RUN_ID = "plan"
 """The ``ticket_id`` of every plan run, and the folder of its attempts (``runs/plan/``)."""
+DRAFT_RUN_ID = "draft"
+"""The same for draft runs (``runs/draft/``)."""
+AGENT_RUN_IDS = frozenset({PLAN_RUN_ID, DRAFT_RUN_ID})
+"""The ``ticket_id`` of the runs that aren't a ticket's."""
 
 
 class AttemptKind(StrEnum):
@@ -46,6 +52,7 @@ class AttemptKind(StrEnum):
     CONFLICT_RETRY = "conflict_retry"
     PR_CHANGES = "pr_changes"
     PLAN = "plan"
+    DRAFT = "draft"
 
 
 class AttemptStatus(StrEnum):

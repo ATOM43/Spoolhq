@@ -42,6 +42,10 @@ A ticket added by hand (Add ticket, `spool tickets new`) gets the number after t
 
 So a number is never used twice, even after its ticket is deleted or merged, and a gap is never filled. The id is chosen and the file written under an OS lock on `<workspace>/.spoolhq/tickets.lock`, shared by the CLI and the daemon. If another process holds it for 10 seconds, adding fails with "Another SpoolHQ process is adding a ticket; try again".
 
+### Drafts and refs
+
+The planner can draft tickets from a few lines (`spool tickets draft`, the API's [draft job](api.md#drafting-tickets)). Drafts are never files: each has a `ref`, `D1` to `D3`, instead of an id, and a draft's `depends_on` may name existing ticket ids or another draft's ref (`D2` depends on `D1`). Saving them together ([batch](api.md#saving-drafts-together)) gives them the next ids in draft order and rewrites each ref to its ticket's id, so the files only ever hold ticket ids.
+
 ## Fields
 
 Unknown keys are errors, so a typo never silently falls back to a default. Values are not converted: `phase: "1"` is a string and fails, and `review_required: yes` is the string `yes` (YAML 1.2), not `true`.
@@ -115,10 +119,11 @@ If a frontmatter cannot be updated line by line (it is written as one `{...}` fl
 | `spool tickets list <project> [--status S] [--phase N]` | Table of id, status, phase, title, dependencies and estimate, sorted by id. Invalid files are listed at the end with their errors, and the command then exits 1. |
 | `spool tickets show <project> <id>` | The frontmatter fields, the Done-when checklist and the body. Warnings go to stderr. |
 | `spool tickets new <project> --title … --done-when … [--done-when …] [--depends-on T02,T03] [--estimate 2] [--phase 4] [--review-required] [--scope-file FILE]` | Adds a ticket with the next id and prints its file (see [Ticket ids](#ticket-ids)). Each `--done-when` is one checklist item. The scope is read from `--scope-file` or, when piped, from stdin, never through a shell. `ready`, or `draft` while a draft plan waits. Same service and checks as the app's Add ticket ([API](api.md#adding-a-ticket)). |
+| `spool tickets draft <project> [REQUEST] [--save]` | Drafts one to three tickets from the request (or stdin) with the planner and prints them with their problems as markdown. `--save` saves them together with the next ids, only when no draft has a problem (else it exits 1 and says why). Needs the daemon. |
 | `spool tickets edit <project> <id>` | Opens the file in your editor, then checks it. |
 | `spool tickets set-status <project> <id> <status>` | Changes the status if the [transition table](scheduler.md#status-transitions) allows it; only the `status` line changes. |
 
-These read the files directly; the daemon does not need to be running.
+These read the files directly; the daemon does not need to be running, except for `draft`.
 
 ## Editing
 

@@ -1,16 +1,18 @@
 """`spool tickets`: list, show, add and edit a project's ticket files, and change a status.
 
 These are local file operations, so they call the tickets service directly; the daemon
-is not needed.
+is not needed. `draft` is the exception: the daemon runs the planner and saves the drafts.
 """
 
 import sys
+import time
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from pydantic import ValidationError
 
+from spoolhq.cli.client import ApiClient, ApiError
 from spoolhq.cli.common import fail, hours, settings, table
 from spoolhq.cli.runs import _run_log, _workspace
 from spoolhq.services.scheduler import (
@@ -41,6 +43,8 @@ TicketIdArg = Annotated[str, typer.Argument(help="Ticket id, like T04.")]
 
 COLUMNS = ("ID", "STATUS", "PHASE", "TITLE", "DEPENDS ON", "ESTIMATE")
 NONE = "-"
+POLL_S = 1.0
+DRAFT_TIMEOUT_S = 30.0
 
 
 def _deps(ticket: Ticket) -> str:
@@ -254,3 +258,79 @@ def set_status_command(
         typer.echo(f"{ticket.id}: {result.previous} → {ticket.meta.status}")
     else:
         typer.echo(f"{ticket.id} is already {ticket.meta.status}")
+
+
+def _client() -> ApiClient:
+    return ApiClient.from_settings(settings(), timeout=DRAFT_TIMEOUT_S)
+
+
+def draft_markdown(draft: dict[str, Any]) -> str:
+    """One draft as ``spool tickets draft`` prints it."""
+    review = "yes" if draft["review_required"] else "no"
+    deps = ", ".join(draft["depends_on"]) or "nothing"
+    lines = [
+        f"## {draft['ref']} · {draft['title']}",
+        "",
+        f"Phase {draft['phase']} · {hours(draft['estimate_h'])} · review: {review}"
+        f" · depends on: {deps}",
+        "",
+        draft["scope"] or "(no scope)",
+        "",
+        "Done when:",
+        *(f"- [ ] {item}" for item in draft["done_when"]),
+    ]
+    if draft["problems"]:
+        lines += ["", "Problems:"]
+        lines += [f"- {p['field']}: {p['message']}" for p in draft["problems"]]
+    return "\n".join(lines) + "\n"
+
+
+def _batch_item(draft: dict[str, Any]) -> dict[str, Any]:
+    keep = ("ref", "title", "scope", "depends_on", "estimate_h", "review_required", "phase")
+    item = {key: draft[key] for key in keep}
+    item["done_when"] = "\n".join(f"- [ ] {line}" for line in draft["done_when"])
+    return item
+
+
+@tickets_app.command("draft")
+def draft_command(
+    project: ProjectArg,
+    request: Annotated[
+        str | None, typer.Argument(help="What the tickets should do; default: stdin.")
+    ] = None,
+    save: Annotated[
+        bool, typer.Option("--save", help="Save the drafts, if none has a problem.")
+    ] = False,
+) -> None:
+    """Draft one to three tickets from a few lines with the planner (the daemon must be
+    running), and print them with their problems as markdown."""
+    text = request if request is not None else sys.stdin.read()
+    base = f"/api/projects/{project}/tickets"
+    job_id: str | None = None
+    try:
+        with _client() as client:
+            job_id = client.post(f"{base}/draft", {"request": text})["job_id"]
+            job = client.get(f"{base}/draft/{job_id}")
+            while job["state"] == "running":
+                time.sleep(POLL_S)
+                job = client.get(f"{base}/draft/{job_id}")
+            if job["state"] != "succeeded":
+                fail(f"error: {job['error'] or 'drafting was ' + job['state']}")
+            typer.echo("\n".join(draft_markdown(draft) for draft in job["drafts"]), nl=False)
+            if not save:
+                return
+            if any(draft["problems"] for draft in job["drafts"]):
+                fail("error: not saved: fix the problems above in the app, or draft again")
+            items = [_batch_item(draft) for draft in job["drafts"]]
+            saved = client.post(f"{base}/batch", {"tickets": items})["tickets"]
+    except ApiError as exc:
+        fail(f"error: {exc}")
+    except KeyboardInterrupt:
+        if job_id is not None:
+            with _client() as client:
+                client.post(f"{base}/draft/{job_id}/cancel")
+        fail("cancelled")
+    for ticket in saved:
+        typer.echo(
+            f"Added {ticket['id']} ({ticket['meta']['status']}): tickets/{ticket['file_name']}"
+        )

@@ -8,7 +8,14 @@ rules are described in ``docs/scheduler.md``.
 """
 
 from spoolhq.core.ids import id_key
-from spoolhq.services.scheduler.create import NewTicket, create_ticket
+from spoolhq.services.scheduler.create import (
+    DraftTicket,
+    NewTicket,
+    TicketProblem,
+    create_ticket,
+    create_tickets,
+    ticket_problems,
+)
 from spoolhq.services.scheduler.errors import (
     PlanError,
     PlanProblem,
@@ -47,6 +54,7 @@ __all__ = [
     "CriticalPath",
     "IdleCode",
     "IdleReason",
+    "DraftTicket",
     "NewTicket",
     "PlanError",
     "PlanProblem",
@@ -54,6 +62,7 @@ __all__ = [
     "ProblemCode",
     "SchedulerError",
     "TicketEditError",
+    "TicketProblem",
     "TicketLockedError",
     "TransitionError",
     "TransitionResult",
@@ -61,6 +70,7 @@ __all__ = [
     "check_transition",
     "critical_path",
     "create_ticket",
+    "create_tickets",
     "edit_ticket",
     "explain_idle",
     "id_key",
@@ -68,6 +78,7 @@ __all__ = [
     "parse_status",
     "remaining_hours",
     "summary",
+    "ticket_problems",
     "validate_plan",
     "waiting_on",
 ]

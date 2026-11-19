@@ -25,6 +25,10 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/projects/{name}/tickets?status=&phase=` | `{"tickets": [...], "invalid": [...]}`; each ticket is `id`, `file_name`, `meta` (the frontmatter), `body` and `activity` (null before its first run: `attempts`, `tokens` of attempts without a cost, `cost_micro_usd` summed over those with one, the latest run's `run_id` and `reason`) |
 | `GET /api/projects/{name}/tickets/{id}` | one ticket (`activity` null) with its ETag and [what the drawer shows](#ticket-detail): `run`, `attempts`, `git` |
 | `POST /api/projects/{name}/tickets` | [add a ticket](#adding-a-ticket) by hand: 201 with the ticket and its `ETag`; the daemon assigns the id |
+| `POST /api/projects/{name}/tickets/draft` | `{"request"}`: start [drafting tickets](#drafting-tickets) with the planner: 202 `{"job_id"}`, or 409 with the reason it can't start |
+| `GET /api/projects/{name}/tickets/draft/{job_id}` | the draft job: `state`, `error`, `run_id`, and its `drafts` with their `problems` |
+| `POST /api/projects/{name}/tickets/draft/{job_id}/cancel` | stop the agent; answers when the job ended (at most 15 s) |
+| `POST /api/projects/{name}/tickets/batch` | `{"tickets": [...]}`: [save edited drafts](#saving-drafts-together) together: 201 `{"tickets": [...]}`, all files or none |
 | `PUT /api/projects/{name}/tickets/{id}` | `{"meta", "body"}` with `If-Match`; see [Editing a ticket](#editing-a-ticket) |
 | `POST /api/projects/{name}/tickets/{id}/unblock` | `{"note", "reset_retries"}`: continue a blocked ticket's run with a new attempt whose prompt has the note (`note` 1 character or more, else 422; `reset_retries` default true gives the run its full gate and review retries again; 409 `not_blocked`) |
 | `POST /api/projects/{name}/tickets/{id}/approve` (`/integrate`), `/reject`, `/discard` | see [run-loop.md](run-loop.md#api-and-cli) |
@@ -206,6 +210,34 @@ Refusals are 422 `validation_error` with the field, and nothing is written:
 
 A project needs no spec to run such a ticket: `next_ticket` names it, and `run/next` starts it (the `test` command is still required).
 
+### Drafting tickets
+
+`POST …/tickets/draft` takes `{"request"}`, 1 to 2,000 characters with at least one that isn't a space (else 422 `request`), and starts a job that runs the planner role's backend once, read-only, with the planner's policy, turns and budget (see [planner.md](planner.md#drafting-tickets)). It refuses to start, with 409 and a message the form can show as is:
+
+| Refused | `code` | Message |
+| --- | --- | --- |
+| the planner's backend can't run | `agent_unavailable` | `No agent is ready to draft tickets: <the backend's reason>` |
+| a run is going | `run_locked` | `a run is already active in 'demo' (T07, run 3)` |
+| the plan is being generated | `run_locked` | `a plan is being generated for 'demo'` |
+| no `test` command | `conflict` | `Set the stack commands in project.yaml first` |
+
+`GET …/tickets/draft/{job_id}` reads the job while it runs and for an hour after it ends (then 404, like a job of another project). `state` is `running`, `succeeded`, `failed` (with `error`, for example `The planner's answer couldn't be read`) or `cancelled`. Once it succeeded, `drafts` holds 1 to 3 drafts in ref order:
+
+| Field | |
+| --- | --- |
+| `ref` | `D1`, `D2` or `D3` |
+| `title`, `scope` | one line; markdown with one `- …` line per scope bullet |
+| `done_when` | a list of items; the last is `` `<test command>` passes `` |
+| `depends_on` | existing ticket ids and other drafts' refs |
+| `estimate_h`, `review_required`, `phase` | as the model gave them |
+| `problems` | `{code, message, field}` each; empty when the draft can be saved as is |
+
+Problem codes: `schema` (a field missing or of the wrong type, or an unknown key: the field is left empty), `unknown_dependency`, `cycle` (through other drafts or existing tickets), `missing_done_when` and `estimate_too_high` (over 4 h). A problem never fails the job. Nothing is written to `tickets/`; the job's usage is recorded as a run of kind `draft`, which `GET …/runs?kind=ticket` (the past-runs table) leaves out.
+
+### Saving drafts together
+
+`POST …/tickets/batch` takes `{"tickets": [...]}`: 1 to 3 items, each the [Add ticket](#adding-a-ticket) fields plus its `ref` (`D1` to `D3`, each once), whose `depends_on` may name the other items' refs. Under the same locks as Add ticket it gives the items the next ids in order (`D1` and `D2` become `T46` and `T47` after `T45`), rewrites the refs in `depends_on` to those ids, checks the whole set (unknown dependencies, cycles among the new tickets or through existing ones, empty "Done when") and writes every file or none. A refusal is 422 `validation_error` naming the item, like `tickets.1.depends_on`. Statuses follow Add ticket: `ready`, or `draft` while a draft plan waits. The answer is 201 with the new tickets in order (no ETags: read a ticket for its own).
+
 ### Ticket detail
 
 `GET …/tickets/{id}` adds what the ticket drawer shows to the ticket:
@@ -234,7 +266,7 @@ The files the run loop writes (`gates.json`, `review.json`, `diff.patch`) stay a
 
 `GET …/runs` returns runs newest first, `{"items": [...], "next_cursor": "..." | null}`. `limit` is 50 by default, at most 200 (400 `limit_too_large` above). Pass `next_cursor` back as `cursor` for the next page; it is `null` on the last page. The cursor is opaque (base64 of the last run's `started_at` and id); the next page holds the runs strictly older than it, so a run started while you page sorts before the cursor and never shows up twice.
 
-`kind=ticket` or `kind=plan` keeps only those runs (anything else is 422); the desktop's past-runs table asks for `ticket`. Each item is the run as `GET …/runs/{run_id}` has it, without the attempt list but with these sums:
+`kind=ticket`, `kind=plan` or `kind=draft` keeps only those runs (anything else is 422); the desktop's past-runs table asks for `ticket`. Each item is the run as `GET …/runs/{run_id}` has it, without the attempt list but with these sums:
 
 | Field | Meaning |
 | --- | --- |
