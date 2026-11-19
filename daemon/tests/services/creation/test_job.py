@@ -43,11 +43,12 @@ def create(projects_dir: Path, home: Path, **fields: Any) -> Job:
 
 def snapshot(root: Path) -> dict[str, str]:
     """Every path under ``root`` with its content hash. Left out: git's index (a
-    read-only ``git status`` may refresh it) and the SpoolHQ home, where the git runner
-    keeps its own empty hooks folder."""
+    read-only ``git status`` may refresh it), the lock of git's detached auto-maintenance
+    (it comes and goes after any commit, on its own schedule) and the SpoolHQ home, where
+    the git runner keeps its own empty hooks folder."""
     found: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
-        if path.name == "index" and ".git" in path.parts:
+        if path.name in {"index", "maintenance.lock"} and ".git" in path.parts:
             continue
         if "spoolhq-home" in path.relative_to(root).parts:
             continue
@@ -153,6 +154,12 @@ def test_from_an_empty_repo_without_commands(
     assert project.tracker is not None and project.tracker.list_id == "9"
     yaml = parse((projects_dir / "demo" / "project.yaml").read_text(encoding="utf-8"))
     assert "commands" not in yaml
+
+
+def test_snapshot_ignores_git_maintenance_lock(git_repo: Path) -> None:
+    before = snapshot(git_repo)
+    (git_repo / ".git" / "objects" / "maintenance.lock").write_text("", encoding="utf-8")
+    assert snapshot(git_repo) == before
 
 
 @pytest.mark.usefixtures("builtin_fixture")
