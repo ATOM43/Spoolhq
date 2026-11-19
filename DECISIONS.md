@@ -402,3 +402,4 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 396 · CI installs `just` from the `rust-just` wheel on PyPI · docs/decisions/core.md
 397 · Daemon tests run in parallel with pytest-xdist · docs/decisions/core.md
 398 · The code graph is no longer committed · docs/decisions/codegraph.md
+399 · One git call per repository at a time, and a Windows-only config retry · docs/decisions/git-github.md

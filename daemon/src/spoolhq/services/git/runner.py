@@ -5,6 +5,11 @@ on (``cwd``), with an environment that never prompts, takes no optional locks an
 prints messages in the C locale so they can be matched. Values that come from users
 or agents (ticket titles, commit messages, paths) are always separate arguments.
 Repository hooks never run and nothing is signed (see ``hook_and_signing_options``).
+
+Inside the daemon only one git call runs per repository at a time (see ``repo_lock``):
+on Windows a git call that reads ``.git/config`` while another rewrites it fails with
+"Permission denied". Calls that fail that way because another process held the config
+are retried on Windows (see ``CONFIG_RETRY_DELAYS_S``).
 """
 
 import logging
@@ -12,7 +17,10 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
+import threading
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +58,9 @@ ENV_REMOVED = (
 SSH_BATCH_COMMAND = "ssh -o BatchMode=yes"
 # Subcommands named with their first argument in error messages: "git worktree add".
 _TWO_WORD_SUBCOMMANDS = frozenset({"worktree", "stash", "remote", "submodule", "notes"})
+# Windows only: pauses before the 2nd and 3rd try of a call that couldn't read or lock
+# the config another process was writing. A failed lock means git changed nothing.
+CONFIG_RETRY_DELAYS_S = (0.1, 0.3)
 _VERSION_RE = re.compile(r"git version (\d+)\.(\d+)(?:\.(\d+))?\S*")
 
 
@@ -212,8 +223,28 @@ def run_git(
     env = git_env()
     if remote:
         env = remote_env(env, cwd)
+    with repo_lock(cwd):
+        completed = _spawn(command, cwd, env, timeout, arguments)
+    for delay in CONFIG_RETRY_DELAYS_S:
+        if sys.platform != "win32" or not config_busy(completed.returncode, completed.stderr):
+            break
+        logger.warning(f"git config busy; retrying git {subcommand(arguments)}")
+        time.sleep(delay)
+        with repo_lock(cwd):
+            completed = _spawn(command, cwd, env, timeout, arguments)
+    return GitResult(
+        args=arguments,
+        returncode=completed.returncode,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+    )
+
+
+def _spawn(
+    command: list[str], cwd: Path, env: dict[str, str], timeout: float, arguments: tuple[str, ...]
+) -> "subprocess.CompletedProcess[str]":
     try:
-        completed = subprocess.run(  # noqa: S603 - fixed argument list, no shell
+        return subprocess.run(  # noqa: S603 - fixed argument list, no shell
             command,
             cwd=cwd,
             env=env,
@@ -235,12 +266,64 @@ def run_git(
             f"cannot run git {subcommand(arguments)} in {cwd}: {exc.strerror or exc}",
             command=arguments,
         ) from exc
-    return GitResult(
-        args=arguments,
-        returncode=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
-    )
+
+
+def config_busy(returncode: int, stderr: str) -> bool:
+    """True if git failed because it couldn't read or lock ``.git/config``."""
+    if returncode == 0:
+        return False
+    for line in stderr.splitlines():
+        if "could not lock config file" in line:
+            return True
+        if ("unable to access" in line or "Permission denied" in line) and "config" in line:
+            return True
+    return False
+
+
+_registry_lock = threading.Lock()
+_common_dirs: dict[Path, Path] = {}
+_repo_locks: dict[Path, threading.Lock] = {}
+
+
+def common_dir(cwd: Path) -> Path:
+    """git's common dir for ``cwd`` (shared by a repository and its worktrees), cached.
+
+    Outside a repository, or if git can't tell, ``cwd`` itself (not cached, since a
+    repository may be created there later).
+    """
+    with _registry_lock:
+        cached = _common_dirs.get(cwd)
+    if cached is not None:
+        return cached
+    try:
+        found = subprocess.run(  # noqa: S603 - fixed argument list, no shell
+            [git_executable(), *GLOBAL_OPTIONS, "rev-parse", "--git-common-dir"],
+            cwd=cwd,
+            env=git_env(),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=DEFAULT_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return cwd.absolute()
+    if found.returncode != 0 or not found.stdout.strip():
+        return cwd.absolute()
+    # shortcut: cached per path for the process's life; a folder that later belongs to
+    # another repository keeps the old lock. Clear the entry if SpoolHQ ever reuses paths.
+    resolved = (cwd / found.stdout.strip()).resolve()
+    with _registry_lock:
+        _common_dirs[cwd] = resolved
+    return resolved
+
+
+def repo_lock(cwd: Path) -> threading.Lock:
+    """The in-process lock held while git runs in ``cwd``'s repository."""
+    key = common_dir(cwd)
+    with _registry_lock:
+        return _repo_locks.setdefault(key, threading.Lock())
 
 
 def neutral_cwd() -> Path:

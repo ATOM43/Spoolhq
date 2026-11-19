@@ -115,6 +115,7 @@ def test_hook_and_signing_overrides_come_before_the_subcommand(
         seen.append(command)
         return subprocess.CompletedProcess(command, 0, "", "")
 
+    runner.common_dir(wt_repo)  # cache the lock key first: its rev-parse isn't counted
     monkeypatch.setattr(runner.subprocess, "run", fake_run)
     runner.run_git(["commit", "-m", "x"], wt_repo)
 
