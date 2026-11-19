@@ -135,3 +135,12 @@ def _starts(run_log: RunLog, run_id: int) -> dict[int, int]:
             (run_id, EventKind.ATTEMPT_STARTED.value),
         ).fetchall()
     return {int(attempt_id): int(seq) for attempt_id, seq in rows}
+
+
+def ticket_ids(run_log: RunLog) -> set[str]:
+    """Every ticket id a run was ever started for."""
+    with run_log._reading() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT ticket_id FROM runs WHERE kind = ?", (RunKind.TICKET.value,)
+        ).fetchall()
+    return {row[0] for row in rows}

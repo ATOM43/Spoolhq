@@ -31,6 +31,7 @@ from spoolhq.services.runs.history import (
     encode_cursor,
     page_events,
     page_runs,
+    ticket_ids,
 )
 from spoolhq.services.runs.journal import (
     Integration,
@@ -83,6 +84,7 @@ __all__ = [
     "decode_cursor",
     "encode_cursor",
     "page_runs",
+    "ticket_ids",
     "ARTIFACT_NAMES",
     "INTERRUPTED_REASON",
     "MAX_PAYLOAD_BYTES",

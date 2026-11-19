@@ -48,6 +48,10 @@ export function useSpecAutosave(project: string, loaded: SpecFile) {
         setSaved(next);
         // So a remount starts from what is on disk now, not from the first load.
         queryClient.setQueryData(queryKeys.spec(project), next);
+        // has_spec (the Run next reason) may have changed.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.project(project),
+        });
       } catch (failure) {
         const disk = conflictOf(failure);
         if (disk) {

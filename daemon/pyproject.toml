@@ -210,10 +210,10 @@ forbidden_modules = [
 name = "services.planner imports only agents, context, projects, scheduler and tickets"
 type = "forbidden"
 source_modules = ["spoolhq.services.planner"]
-# gates and git are not listed: projects uses them to validate project.yaml.
+# gates and git are not listed: projects uses them to validate project.yaml. runs is not
+# listed: scheduler reads the run log's ticket ids when it assigns one.
 forbidden_modules = [
     "spoolhq.services.review",
-    "spoolhq.services.runs",
     "spoolhq.services.tracker",
 ]
 

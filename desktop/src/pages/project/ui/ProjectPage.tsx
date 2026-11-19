@@ -214,8 +214,7 @@ function Loaded({
   const [chosen, setChosen] = useState<Tab | null>(asked ?? initialTab);
 
   const ready = !current.isPending && !spec.isPending;
-  const specEmpty = (spec.data?.content.trim() ?? "") === "";
-  const state = panelState(project, current.data, specEmpty);
+  const state = panelState(project, current.data);
   if (ready && chosen === null) {
     setChosen(state.tab); // opening lands on the state's tab (section 8), once
   }

@@ -23,12 +23,12 @@ const time = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 /** Why nothing runs, as the disabled Run next tooltip says it. */
-function idleReason(project: ProjectDetail, specEmpty: boolean): string {
+function idleReason(project: ProjectDetail): string {
   const idle = project.idle;
   const first = idle?.ticket_ids[0] ?? "";
   switch (idle?.code) {
     case undefined:
-      return specEmpty ? "Write a spec first" : "Generate a plan first";
+      return !project.has_spec ? "Write a spec first" : "Generate a plan first";
     case "all_done":
       return "All tickets done";
     case "plan_not_approved":
@@ -51,7 +51,6 @@ function idleReason(project: ProjectDetail, specEmpty: boolean): string {
 export function panelState(
   project: ProjectDetail,
   current: CurrentRun | undefined,
-  specEmpty: boolean,
 ): PanelState {
   if (project.settings_error) {
     return { kind: "idle", reason: "Fix project.yaml first", tab: "spec" };
@@ -82,7 +81,7 @@ export function panelState(
   if (project.next_ticket) {
     return { kind: "ready", next: project.next_ticket, tab: "tickets" };
   }
-  const reason = idleReason(project, specEmpty);
+  const reason = idleReason(project);
   return {
     kind: "idle",
     reason,

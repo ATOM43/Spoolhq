@@ -395,3 +395,6 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 389 · Missing notes files are created at a merge; existing ones keep their bytes · docs/decisions/projects-tickets.md
 390 · A push refused by branch protection gets a fixed message · docs/decisions/git-github.md
 391 · The New project dialog inspects a picked repo and pre-fills from it · docs/decisions/desktop.md
+392 · Ticket ids count the repo's tags and the run log, under an OS lock the CLI and the daemon share · docs/decisions/projects-tickets.md
+393 · Run next's spec reason comes from `has_spec` · docs/decisions/desktop.md
+394 · The planted-settings check on a conflict retry compares against the main merged in · docs/decisions/runloop.md

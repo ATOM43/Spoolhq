@@ -63,6 +63,8 @@ The run is blocked with `merge conflict with main in: <files>` if:
 - markers are left behind or files are still unmerged, or
 - a second conflict happens in the same run (main moved again and conflicts again).
 
+T42's agent-settings check runs again after the conflict retry's commit, before the gates. It compares against the main that was merged in (the conflict sets the worktree's base to it), so settings main changed don't count as the agent's, while settings the agent writes while resolving block the ticket with "The agent changed agent settings: <files>". A settings change that reaches main during the retry is merged in at integration, as main's own.
+
 ## The diff guard
 
 Before the squash commit, every file in `git diff --cached --name-only <main_sha>` is checked. Names are matched case-insensitively.

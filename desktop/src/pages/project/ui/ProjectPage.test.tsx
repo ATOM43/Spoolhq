@@ -223,6 +223,19 @@ describe("project panel", () => {
     expect(screen.getByRole("tab", { name: "Tickets 0" })).toBeInTheDocument();
   });
 
+  it("takes the spec reason from has_spec, so the starter text is no spec", async () => {
+    detail = project({ has_spec: false }); // the spec GET answers non-blank text
+    showPanel();
+    const run = await screen.findByRole("button", { name: /^Run next/ });
+    expect(run).toHaveAccessibleDescription("Write a spec first");
+  });
+
+  it("with a real spec and no tickets: Generate a plan first", async () => {
+    showPanel();
+    const run = await screen.findByRole("button", { name: /^Run next/ });
+    expect(run).toHaveAccessibleDescription("Generate a plan first");
+  });
+
   it("shows Creating… and the live checklist while the project is created, then Spec", async () => {
     detail = project(CREATING);
     job = creationJob("running");

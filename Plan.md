@@ -666,8 +666,6 @@ Make an existing repo quick to set up. *Depends on: T42 · 2.5 h*
 - Ticket ids are never reused (also counting git tags and the run log) and are assigned under a lock shared by the CLI and the daemon.
 - The starter spec counts as no spec for Run next.
 
-Follow-up chore: ticket ids never reused across tags and the run log, a cross-process id lock, the starter-spec message, and a planted-settings test on a merge-conflict retry.
-
 Done when:
 
 - [ ] Commands are pre-filled for a justfile, an npm and a Python fixture repo

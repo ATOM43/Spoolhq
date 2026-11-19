@@ -73,16 +73,12 @@ function current(run: Partial<Run> | null, active = true): CurrentRun {
   };
 }
 
-function show(
-  detail: ProjectDetail,
-  run: CurrentRun | undefined,
-  specEmpty = false,
-) {
+function show(detail: ProjectDetail, run: CurrentRun | undefined) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <RunControls
         project="demo"
-        state={panelState(detail, run, specEmpty)}
+        state={panelState(detail, run)}
         usage={formatUsage(run)}
         offline={null}
       />
@@ -105,8 +101,8 @@ describe("run controls", () => {
     POST.mockResolvedValue({ data: {}, response: new Response() });
   });
 
-  it("no spec: Write a spec first", () => {
-    show(project({ total: 0 }), current(null, false), true);
+  it("no spec (blank or the starter, per has_spec): Write a spec first", () => {
+    show(project({ total: 0, has_spec: false }), current(null, false));
     expectDisabled("Write a spec first");
   });
 
@@ -114,7 +110,6 @@ describe("run controls", () => {
     show(
       project({ total: 1, has_spec: false, next_ticket: "T01" }),
       current(null, false),
-      true,
     );
     expect(button("Run next (T01)")).toBeEnabled();
     expect(button("Run next (T01)")).not.toHaveAccessibleDescription(
@@ -250,17 +245,17 @@ describe("run controls", () => {
 describe("the tab a project opens on", () => {
   it("follows the state table", () => {
     const idle = current(null, false);
-    expect(panelState(project({ total: 0 }), idle, true).tab).toBe("spec");
-    expect(panelState(project({ next_ticket: "T01" }), idle, false).tab).toBe(
+    expect(panelState(project({ total: 0 }), idle).tab).toBe("spec");
+    expect(panelState(project({ next_ticket: "T01" }), idle).tab).toBe(
       "tickets",
     );
-    expect(panelState(project(), current({}), false).tab).toBe("run");
+    expect(panelState(project(), current({})).tab).toBe("run");
   });
 });
 
 describe("the guidance line", () => {
   const line = (detail: ProjectDetail, run = current(null, false)) =>
-    guidance(detail, panelState(detail, run, false));
+    guidance(detail, panelState(detail, run));
 
   it("follows each state of the state table (screens spec, section 8)", () => {
     expect(line(project({ total: 0, has_spec: false }))).toBe(
@@ -317,7 +312,7 @@ describe("the guidance line", () => {
     expect(line(broken)).toBe(
       "Settings invalid · fix project.yaml, then Reload",
     );
-    expect(panelState(broken, undefined, false)).toMatchObject({
+    expect(panelState(broken, undefined)).toMatchObject({
       kind: "idle",
       reason: "Fix project.yaml first",
     });

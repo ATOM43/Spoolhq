@@ -3,17 +3,23 @@ transitions, and unblocking."""
 
 import hashlib
 import shutil
+import subprocess
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from spoolhq.core.daemon_lock import acquire_lock
 from spoolhq.services.agents import FakeRunner
 from spoolhq.services.runloop import Agents, RunLoopError
 from spoolhq.services.runs import AttemptKind, RunLog, RunStatus
+from spoolhq.services.scheduler import create
 from spoolhq.services.tickets import load_ticket, render_ticket
 from tests.api.test_runs import follow
-from tests.conftest import AGENT_FIXTURES, FIXTURES_DIR, REVIEW_FIXTURES
+from tests.conftest import AGENT_FIXTURES, FIXTURES_DIR, REVIEW_FIXTURES, run_git
 
 TICKET_FIXTURES = sorted((FIXTURES_DIR / "tickets").glob("T*.md"))
 
@@ -411,8 +417,6 @@ def test_a_refused_new_ticket_is_422_with_the_field_and_writes_nothing(
 def test_two_creates_at_once_get_different_ids(
     client: TestClient, token: str, workspace: Path
 ) -> None:
-    from concurrent.futures import ThreadPoolExecutor
-
     with ThreadPoolExecutor(8) as pool:
         ids = list(pool.map(lambda n: add(client, token, title=f"Ticket {n}")[1]["id"], range(8)))
     assert sorted(ids) == [f"T{n:02d}" for n in range(1, 9)]
@@ -428,3 +432,67 @@ def test_run_next_needs_a_ticket_not_a_spec(
     add(client, token)
     after = client.get("/api/projects/demo", headers=auth(token)).json()
     assert (after["has_spec"], after["next_ticket"], after["idle"]) == (False, "T01", None)
+
+
+# --- ids never come back, one lock for the CLI and the daemon (T43 follow-ups) --------
+
+
+def test_tags_and_the_run_log_count_too(
+    client: TestClient, token: str, workspace: Path, git_repo: Path
+) -> None:
+    for number in range(1, 6):
+        write_ticket(workspace, f"T{number:02d}", "")
+    run_git(git_repo, "tag", "ticket/T07")  # merged, then its file deleted
+    with RunLog(workspace, daemon_instance="test") as log:
+        log.start_run("T09")  # ran, never merged, file deleted
+    assert add(client, token)[1]["id"] == "T10"
+
+
+def test_a_held_tickets_lock_fails_with_a_fixed_message(
+    client: TestClient, token: str, workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(create, "LOCK_WAIT_S", 0.2)
+    with acquire_lock(workspace / ".spoolhq" / "tickets.lock"):
+        status, answer, _ = add(client, token)
+    error = answer["error"]
+    assert isinstance(error, dict)
+    assert (status, error["message"]) == (
+        409,
+        "Another SpoolHQ process is adding a ticket; try again",
+    )
+    assert list((workspace / "tickets").glob("T*.md")) == []
+    assert add(client, token)[0] == 201  # free again
+
+
+@pytest.mark.integration
+def test_a_cli_and_an_api_create_at_once_get_different_ids(
+    client: TestClient, token: str, workspace: Path
+) -> None:
+    with acquire_lock(workspace / ".spoolhq" / "tickets.lock") as held:
+        cli = subprocess.Popen(  # noqa: S603 - fixed argument list, no shell
+            [
+                sys.executable,
+                "-m",
+                "spoolhq",
+                "tickets",
+                "new",
+                "demo",
+                "--title",
+                "From CLI",
+                "--done-when",
+                "ok",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        with ThreadPoolExecutor(1) as pool:
+            api = pool.submit(add, client, token, title="From API")
+            time.sleep(2)  # both started; both wait for the lock
+            assert list((workspace / "tickets").glob("T*.md")) == []
+            held.release()
+            status, ticket, _ = api.result(timeout=30)
+        out, _ = cli.communicate(timeout=60)
+    assert (status, cli.returncode) == (201, 0), out
+    files = sorted(p.name[:3] for p in (workspace / "tickets").glob("T*.md"))
+    assert files == ["T01", "T02"]
+    assert ticket["id"] in files

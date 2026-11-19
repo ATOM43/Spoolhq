@@ -12,6 +12,7 @@ from tests.conftest import commit_file, run_git
 from tests.services.agents.test_repo_settings import plant_repo_settings
 from tests.services.git.test_hooks import fired, require_hooks_fire, write_hook
 from tests.services.runloop.conftest import LoopFactory, ManualClock, Transcripts
+from tests.services.runloop.test_integration import hooked
 
 GIT_HOOKS = ("pre-commit", "post-checkout", "post-merge", "post-commit", "post-rewrite")
 
@@ -170,3 +171,83 @@ def test_a_full_run_in_a_hostile_repo_merges_and_runs_no_hook(
     assert load_ticket("demo", "T01", projects_dir=projects_dir).meta.status == "done"
     assert main_sha(repo) != before
     assert fired(markers) == []
+
+
+# --- a merge-conflict retry (T14) ----------------------------------------------------
+
+
+def main_settings(repo: Path, message: str) -> None:
+    (repo / ".claude").mkdir(exist_ok=True)
+    commit_file(repo, ".claude/settings.json", f'{{"note": "{message}"}}', message)
+
+
+def test_settings_written_while_resolving_a_conflict_block_the_ticket(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    registry: RunRegistry,
+    projects_dir: Path,
+    repo: Path,
+    clock: ManualClock,
+) -> None:
+    def main_moves(n: int) -> None:
+        if n == 1:
+            commit_file(repo, "hello.py", "x = 0\n", "main's hello")
+
+    implementer, _ = hooked(
+        [
+            transcripts.implement({"hello.py": "x = 1\n"}),
+            transcripts.implement({"hello.py": "x = 2\n", ".claude/settings.json": "{}"}),
+        ],
+        main_moves,
+    )
+    loop, _ = make_loop(
+        implementer,
+        [transcripts.review("approve")],
+        integrator=LocalIntegrator(clock=clock),
+    )
+
+    run = run_once(loop)
+
+    assert blocked(registry, run, projects_dir) == (
+        "The agent changed agent settings: .claude/settings.json"
+    )
+    kinds = [a.kind.value for a in registry.get("demo").run_log.list_attempts(run.id)]
+    assert kinds == ["initial", "conflict_retry"]
+    assert run_git(repo, "log", "-1", "--format=%s", "main").strip() == "main's hello"
+
+
+def test_settings_changed_on_main_around_a_conflict_retry_are_not_the_agents(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    registry: RunRegistry,
+    projects_dir: Path,
+    repo: Path,
+    clock: ManualClock,
+) -> None:
+    def main_moves(n: int) -> None:
+        if n == 1:  # merged in with the conflict: the retry's new merge base
+            commit_file(repo, "hello.py", "x = 0\n", "main's hello")
+            main_settings(repo, "before the conflict")
+        if n == 2:  # main moves again while the retry runs
+            main_settings(repo, "during the retry")
+
+    implementer, _ = hooked(
+        [
+            transcripts.implement({"hello.py": "x = 1\n"}),
+            transcripts.implement({"hello.py": "x = 2\n"}),
+        ],
+        main_moves,
+    )
+    loop, _ = make_loop(
+        implementer,
+        [transcripts.review("approve"), transcripts.review("approve")],
+        integrator=LocalIntegrator(clock=clock),
+    )
+
+    run = run_once(loop)
+
+    final = registry.get("demo").run_log.get_run(run.id)
+    assert (final.status, final.reason) == (RunStatus.DONE, None)
+    assert load_ticket("demo", "T01", projects_dir=projects_dir).meta.status == "done"
+    assert run_git(repo, "show", "main:hello.py").strip() == "x = 2"
+    assert "during the retry" in run_git(repo, "show", "main:.claude/settings.json")

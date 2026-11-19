@@ -32,6 +32,16 @@ tracker_ref: null
 
 `<id>-<slug>.md`, for example `T04-project-workspace.md`. The part before the first `-` must equal the `id` in the frontmatter. Only `*.md` files are read; hidden files (starting with `.`) and folders are ignored.
 
+## Ticket ids
+
+A ticket added by hand (Add ticket, `spool tickets new`) gets the number after the highest of:
+
+- the ticket files in `tickets/`, invalid ones included,
+- the repo's `ticket/TNN` tags (one per merged ticket),
+- the ticket ids in the run log.
+
+So a number is never used twice, even after its ticket is deleted or merged, and a gap is never filled. The id is chosen and the file written under an OS lock on `<workspace>/.spoolhq/tickets.lock`, shared by the CLI and the daemon. If another process holds it for 10 seconds, adding fails with "Another SpoolHQ process is adding a ticket; try again".
+
 ## Fields
 
 Unknown keys are errors, so a typo never silently falls back to a default. Values are not converted: `phase: "1"` is a string and fails, and `review_required: yes` is the string `yes` (YAML 1.2), not `true`.
@@ -104,7 +114,7 @@ If a frontmatter cannot be updated line by line (it is written as one `{...}` fl
 | --- | --- |
 | `spool tickets list <project> [--status S] [--phase N]` | Table of id, status, phase, title, dependencies and estimate, sorted by id. Invalid files are listed at the end with their errors, and the command then exits 1. |
 | `spool tickets show <project> <id>` | The frontmatter fields, the Done-when checklist and the body. Warnings go to stderr. |
-| `spool tickets new <project> --title … --done-when … [--done-when …] [--depends-on T02,T03] [--estimate 2] [--phase 4] [--review-required] [--scope-file FILE]` | Adds a ticket with the next id (the number after the highest one; gaps are never filled) and prints its file. Each `--done-when` is one checklist item. The scope is read from `--scope-file` or, when piped, from stdin, never through a shell. `ready`, or `draft` while a draft plan waits. Same service and checks as the app's Add ticket ([API](api.md#adding-a-ticket)). |
+| `spool tickets new <project> --title … --done-when … [--done-when …] [--depends-on T02,T03] [--estimate 2] [--phase 4] [--review-required] [--scope-file FILE]` | Adds a ticket with the next id and prints its file (see [Ticket ids](#ticket-ids)). Each `--done-when` is one checklist item. The scope is read from `--scope-file` or, when piped, from stdin, never through a shell. `ready`, or `draft` while a draft plan waits. Same service and checks as the app's Add ticket ([API](api.md#adding-a-ticket)). |
 | `spool tickets edit <project> <id>` | Opens the file in your editor, then checks it. |
 | `spool tickets set-status <project> <id> <status>` | Changes the status if the [transition table](scheduler.md#status-transitions) allows it; only the `status` line changes. |
 

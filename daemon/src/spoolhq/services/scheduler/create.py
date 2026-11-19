@@ -1,13 +1,19 @@
 """Adding a ticket by hand: the next id, the file, and the checks an edit gets."""
 
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from spoolhq.core.daemon_lock import LockHeld, acquire_lock
 from spoolhq.core.ids import TICKET_ID_RE, slugify
-from spoolhq.services.projects import edit_lock, project_dir
+from spoolhq.services.git import GitError, run_git
+from spoolhq.services.projects import ProjectError, edit_lock, load_project, project_dir
 from spoolhq.services.projects.yaml_io import dump, to_node, write_atomic
-from spoolhq.services.scheduler.errors import TicketEditError
+from spoolhq.services.runs import RunLog, ticket_ids
+from spoolhq.services.scheduler.errors import TicketEditError, TicketLockedError
 from spoolhq.services.scheduler.graph import validate_plan
 from spoolhq.services.tickets import (
     MAX_ESTIMATE_H,
@@ -18,6 +24,11 @@ from spoolhq.services.tickets import (
     tickets_dir,
 )
 from spoolhq.services.tickets.store import FILE_NAME_RE
+
+LOCK_FILE = ".spoolhq/tickets.lock"
+LOCK_WAIT_S = 10.0
+LOCK_BUSY = "Another SpoolHQ process is adding a ticket; try again"
+TAG_PREFIX = "ticket/"
 
 
 class NewTicket(BaseModel):
@@ -43,23 +54,60 @@ def _body(new: NewTicket) -> str:
     return (f"{scope}\n\n" if scope else "") + f"## Done when\n{new.done_when.strip()}\n"
 
 
+@contextmanager
+def _tickets_lock(workspace: Path) -> Iterator[None]:
+    """The OS lock ``spool tickets new`` and the daemon share; TicketLockedError after
+    ``LOCK_WAIT_S``."""
+    deadline = time.monotonic() + LOCK_WAIT_S
+    while True:
+        try:
+            lock = acquire_lock(workspace / LOCK_FILE)
+            break
+        except LockHeld:
+            if time.monotonic() >= deadline:
+                raise TicketLockedError(LOCK_BUSY) from None
+            time.sleep(0.05)
+    with lock:
+        yield
+
+
+def _used_ids(project: str, workspace: Path, *, projects_dir: Path) -> list[str]:
+    """Ticket ids from the repo's ``ticket/TNN`` tags and the run log."""
+    used: list[str] = []
+    try:
+        repo = load_project(project, projects_dir=projects_dir).repo_path
+        tags = run_git(["tag", "--list", f"{TAG_PREFIX}*"], repo).check().stdout
+        used += [line.strip().removeprefix(TAG_PREFIX) for line in tags.splitlines()]
+    except (ProjectError, GitError):
+        pass  # no readable settings or repo: nothing merged to count
+    try:
+        with RunLog.open_read_only(workspace) as log:
+            used += ticket_ids(log)
+    except FileNotFoundError:
+        pass  # no run yet
+    return used
+
+
 def create_ticket(project: str, new: NewTicket, *, projects_dir: Path) -> Ticket:
     """Write a new ticket file with the number after the highest one in ``tickets/``
-    (invalid files count too, so no id is ever shared; a gap is never filled).
+    (invalid files count too), the repo's ``ticket/TNN`` tags and the run log, so an id
+    is never shared or reused, even after a ticket is deleted; a gap is never filled.
 
     ``ready``, or ``draft`` while a draft plan waits for approval, so it is approved
     with that plan. Refused before anything is written (TicketEditError naming the
     field) for an unknown dependency, a dependency that sits in a cycle, or no "Done
-    when" items. The id is taken and the file written under the project's edit lock.
+    when" items. The id is taken and the file written under the project's edit lock and
+    the OS lock ``.spoolhq/tickets.lock`` (TicketLockedError if another process holds
+    it for ``LOCK_WAIT_S``).
     """
     folder = tickets_dir(project, projects_dir=projects_dir)
-    # shortcut: the lock is in-process (decision 297), so `spool tickets new` racing
-    # the daemon could pick the same id; use an OS file lock if that ever happens.
-    with edit_lock(project_dir(project, projects_dir)):
+    workspace = project_dir(project, projects_dir)
+    with edit_lock(workspace), _tickets_lock(workspace):
         listing = list_tickets(project, projects_dir=projects_dir)
         plan = listing.tickets
         names = [t.file_name for t in plan] + [t.file_name for t in listing.invalid]
         prefixes = [m["prefix"] for name in names if (m := FILE_NAME_RE.fullmatch(name))]
+        prefixes += _used_ids(project, workspace, projects_dir=projects_dir)
         highest = max((int(p[1:]) for p in prefixes if TICKET_ID_RE.fullmatch(p)), default=0)
         ticket_id = f"T{highest + 1:02d}"
 
