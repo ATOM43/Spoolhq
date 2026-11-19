@@ -666,10 +666,22 @@ def test_failed_rename_leaves_nothing(
     assert list(projects_dir.iterdir()) == []
 
 
+def _repo_paths(repo: Path) -> list[Path]:
+    """Every path under ``repo`` except the lock of git's detached auto-maintenance, which
+    comes and goes after any commit on its own schedule."""
+    return sorted(p.relative_to(repo) for p in repo.rglob("*") if p.name != "maintenance.lock")
+
+
 def test_init_never_modifies_the_repo(projects_dir: Path, git_repo: Path) -> None:
-    before = sorted(p.relative_to(git_repo) for p in git_repo.rglob("*"))
+    before = _repo_paths(git_repo)
     init_project("demo", git_repo, projects_dir=projects_dir)
-    assert sorted(p.relative_to(git_repo) for p in git_repo.rglob("*")) == before
+    assert _repo_paths(git_repo) == before
+
+
+def test_repo_paths_ignore_git_maintenance_lock(git_repo: Path) -> None:
+    before = _repo_paths(git_repo)
+    (git_repo / ".git" / "objects" / "maintenance.lock").write_text("", encoding="utf-8")
+    assert _repo_paths(git_repo) == before
 
 
 def test_missing_git_is_reported(

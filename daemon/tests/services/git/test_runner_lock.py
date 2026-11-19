@@ -184,11 +184,11 @@ def test_config_reads_and_branch_deletes_in_parallel_never_fail(wt_repo: Path) -
     subprocess.run(  # noqa: S603 - fixed argument list, no shell
         [runner.git_executable(), "update-ref", "--stdin"],
         cwd=wt_repo,
-        input="".join(f"create refs/heads/{name} {head}\n" for name in branches),
-        encoding="utf-8",
+        # bytes: text mode would send CRLF on Windows, which update-ref refuses
+        input="".join(f"create refs/heads/{name} {head}\n" for name in branches).encode(),
         check=True,
     )
-    with (wt_repo / ".git" / "config").open("a", encoding="utf-8") as config:
+    with (wt_repo / ".git" / "config").open("a", encoding="utf-8", newline="\n") as config:
         config.writelines(f'[branch "{name}"]\n\tspoolhq = 1\n' for name in branches)
     work: list[list[str]] = []
     for n, name in enumerate(branches):
