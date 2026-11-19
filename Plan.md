@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **41 tickets in 6 phases, about 96 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **42 tickets in 6 phases, about 97.5 hours** for one developer.
 
 **What v1 includes**
 
@@ -84,7 +84,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
 | T21 | Tickets tab and plan review | 4 Desktop UI | T15, T36 | 2.5 |
 | T22 | Live run | 4 Desktop UI | T37 | 2 |
-| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42 | 3 |
+| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43 | 3 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T40 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
@@ -102,8 +102,9 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T39 | Run details | 4 Desktop UI | T22 | 2 |
 | T40 | Past runs and replay | 4 Desktop UI | T39 | 2 |
 | T41 | Draft tickets with the planner | 4 Desktop UI | T38, T15 | 2.5 |
-| T42 | Existing repo onboarding | 4 Desktop UI | T36 | 2.5 |
-|  | **Total** |  |  | **96** |
+| T42 | Repo safety | 4 Desktop UI | T36 | 1.5 |
+| T43 | Existing repo onboarding | 4 Desktop UI | T42 | 2.5 |
+|  | **Total** |  |  | **97.5** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T26 (44 h).
 
@@ -426,7 +427,7 @@ Done when:
 
 ## Phase 4 — Desktop UI (v0 screens)
 
-Sixteen tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Seventeen tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -637,26 +638,43 @@ Done when:
 - [ ] A past run opens in replay with the same layout and no controls
 - [ ] A drawer attempt link opens that attempt's replay
 
-### T42 · Existing repo onboarding
+### T42 · Repo safety
 
-Make an existing repo safe and ready to run tickets. *Depends on: T36 · 2.5 h*
+Nothing in a repo can loosen SpoolHQ's limits or run code through SpoolHQ's git calls. *Depends on: T36 · 1.5 h*
 
-- First, check that every agent adapter ignores agent settings stored in the repo (for example `.claude/settings.json`, hooks, project-level Codex config) so they can never loosen SpoolHQ's per-run limits; fix any that don't.
-- Detect stack commands from a justfile, `package.json` scripts, `pyproject.toml` or a Makefile and pre-fill them.
-- When the commands fail during creation, say "Your tests fail before any change" with the output.
-- `PROGRESS.md` and `DECISIONS.md` are created on the first merge only when missing; existing ones are only appended to; `CLAUDE.md` is never written.
-- Detect a GitHub `origin` and offer it as the remote; a push rejected by branch protection blocks the ticket with "main is protected on GitHub; use the Always pull request preset".
-- Recommend Graphify in the dialog for existing repos.
+- Inventory, from each adapter's current docs, of the files in the working folder it reads that can change permissions, run code or add tools (`.claude/settings.json`, `.claude/settings.local.json`, their hooks, `.mcp.json`, project Codex config), with the version checked; instruction files (`CLAUDE.md`, `AGENTS.md`) grant nothing and stay.
+- Every adapter loads only SpoolHQ's per-run settings: the flag or option that limits setting sources, with project MCP servers and hooks off. An adapter that can't exclude such a file is refused before the agent starts: "This repo has agent settings SpoolHQ can't override for <backend>: <file>", with no weaker fallback; checked on the worktree at the start of every attempt.
+- Files under `.claude/`, `.codex/` and `.mcp.json` written or changed by the implementer fail the attempt's policy step with "The agent changed agent settings: <file>" and block the ticket; they never reach main.
+- Every hook-firing git call SpoolHQ makes (commit, merge, rebase, checkout, worktree add) runs with `-c core.hooksPath=<empty folder SpoolHQ owns>`, through an argument list, in one shared helper; the gates do the checking.
+- A "Repo safety" section in `docs/agents.md`; DECISIONS entries.
 
 Done when:
 
 - [ ] A repo containing its own agent settings or hooks can't loosen the per-run limits (tested per adapter)
+- [ ] An agent can't plant agent settings that reach main or affect the next attempt
+- [ ] SpoolHQ's own git calls never run repo git hooks
+
+### T43 · Existing repo onboarding
+
+Make an existing repo quick to set up. *Depends on: T42 · 2.5 h*
+
+- A read-only `POST /api/repos/inspect`: branch, clean state, GitHub origin, commands detected from a justfile, Makefile, `package.json` or `pyproject.toml`, agent settings found, missing notes files.
+- The dialog pre-fills the commands and the remote, and shows notices for agent settings and Graphify.
+- A failing baseline reads "Your tests fail before any change", with the output.
+- `PROGRESS.md` and `DECISIONS.md` are created on the first merge only when missing; `CLAUDE.md` is never written.
+- A push rejected by branch protection gives a fixed message.
+- Ticket ids are never reused (also counting git tags and the run log) and are assigned under a lock shared by the CLI and the daemon.
+- The starter spec counts as no spec for Run next.
+
+Done when:
+
 - [ ] Commands are pre-filled for a justfile, an npm and a Python fixture repo
 - [ ] A failing baseline is reported as the repo's own failure
+- [ ] Ticket numbers are never reused, even across the CLI and the app
 
 ### T23 · Packaging
 
-One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42 · 3 h*
+One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43 · 3 h*
 
 - The daemon is bundled with PyInstaller and shipped as a Tauri sidecar; the app starts it when it is not running.
 - Closing the window leaves the daemon and any run going, with a tray icon to quit.
