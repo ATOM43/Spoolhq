@@ -398,3 +398,7 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 392 · Ticket ids count the repo's tags and the run log, under an OS lock the CLI and the daemon share · docs/decisions/projects-tickets.md
 393 · Run next's spec reason comes from `has_spec` · docs/decisions/desktop.md
 394 · The planted-settings check on a conflict retry compares against the main merged in · docs/decisions/runloop.md
+395 · CI is four workflows; lint and the Vitest tests run on Linux only · docs/decisions/core.md
+396 · CI installs `just` from the `rust-just` wheel on PyPI · docs/decisions/core.md
+397 · Daemon tests run in parallel with pytest-xdist · docs/decisions/core.md
+398 · The code graph is no longer committed · docs/decisions/codegraph.md

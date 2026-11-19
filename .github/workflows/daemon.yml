@@ -1,0 +1,60 @@
+name: Daemon tests
+
+on:
+  push:
+    paths:
+      - daemon/**
+      - templates/**
+      - justfile
+      - .github/workflows/**
+      - scripts/**
+      - daemon/uv.lock
+      - desktop/pnpm-lock.yaml
+      - desktop/src-tauri/Cargo.lock
+  pull_request:
+    paths:
+      - daemon/**
+      - templates/**
+      - justfile
+      - .github/workflows/**
+      - scripts/**
+      - daemon/uv.lock
+      - desktop/pnpm-lock.yaml
+      - desktop/src-tauri/Cargo.lock
+
+permissions:
+  contents: read
+
+# One group per workflow and branch: a newer push cancels the older run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  daemon:
+    name: daemon tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Also installs just: the rust-just wheel on PyPI, pinned and kept in the uv cache
+      # (the GitHub release download failed with HTTP 504).
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.1"
+          enable-cache: true
+          cache-dependency-glob: |
+            daemon/uv.lock
+            .github/workflows/daemon.yml
+          cache-suffix: daemon
+      - run: uv tool install rust-just==1.59.0
+      # SpoolHQ needs git 2.36 or newer (docs/git.md).
+      - run: git --version
+      - run: just install-daemon
+      - run: just test-daemon

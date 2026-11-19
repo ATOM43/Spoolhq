@@ -74,13 +74,11 @@ The communities are named `Community 0`, `Community 1`, … because the report i
 
 ## SpoolHQ's own graph
 
-This repository commits a graph in `graphify-out/` for agent context. Read `graphify-out/GRAPH_REPORT.md` before starting work; the graph can be stale, so trust the code when they disagree. If Graphify is installed, `graphify query` and `graphify path` may be used read-only.
-
-After a ticket's code is final and `just lint && just test` pass, rebuild it offline (install with `uv tool install graphifyy==0.9.92` if it's missing):
+This repository doesn't commit a graph: `graphify-out/` is in `.gitignore` (DECISIONS 397), and SpoolHQ's runs keep their own cache in the workspace. To have one for your own reading, build it offline (install with `uv tool install graphifyy==0.9.92` if it's missing):
 
 ```sh
 GRAPHIFY_BACKEND=none graphify extract . --code-only
 graphify cluster-only . --no-label
 ```
 
-Commit the updated `graphify-out/` files in the same commit as the ticket, never `graphify-out/graph.html`. If Graphify fails, don't block the ticket: say so in the report.
+Then read `graphify-out/GRAPH_REPORT.md`; `graphify query` and `graphify path` may be used read-only. The graph can be stale, so trust the code when they disagree.

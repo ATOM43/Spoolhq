@@ -10,23 +10,34 @@ default:
     @just --list
 
 # Install all dependencies exactly as locked.
-install:
+install: install-daemon install-desktop
+
+install-daemon:
     uv sync --directory daemon --locked
+
+install-desktop:
     pnpm --dir desktop install --frozen-lockfile
 
-# Lint, format-check and type-check all packages.
-lint:
+# Lint, format-check and type-check all packages. CI runs the three parts as separate jobs.
+lint: lint-daemon lint-desktop lint-rust
+
+# Also runs the daemon tests that read docs/, task.md or desktop sources (a docs-only push runs only lint).
+lint-daemon:
     uv run --directory daemon ruff check . ../scripts
     uv run --directory daemon ruff format --check . ../scripts
     uv run --directory daemon mypy
     uv run --directory daemon lint-imports
     uv run --directory daemon python ../scripts/check_line_limit.py
     uv run --directory daemon python ../scripts/check_decisions.py
-    uv run --directory daemon pytest tests/api/test_openapi.py -q -p no:cacheprovider
+    uv run --directory daemon pytest -q -p no:cacheprovider --no-cov tests/api/test_openapi.py tests/test_layout.py tests/services/scheduler/test_scheduler.py tests/services/projects/test_task_example.py
+
+lint-desktop:
     pnpm --dir desktop exec eslint .
     pnpm --dir desktop exec prettier --check .
     pnpm --dir desktop exec tsc --noEmit
     pnpm --dir desktop run check:api
+
+lint-rust:
     cargo fmt --manifest-path {{ tauri_manifest }} --check
     cargo clippy --manifest-path {{ tauri_manifest }} --locked --all-targets -- -D warnings
 
@@ -36,10 +47,20 @@ gen-api:
     pnpm --dir desktop run gen:api
 
 # Run all tests, with coverage (the daemon fails below 85% line coverage).
-test:
-    uv run --directory daemon pytest --cov=spoolhq --cov-report=term-missing --cov-fail-under=85
+test: test-daemon test-desktop test-rust
+
+test-daemon:
+    uv run --directory daemon pytest -n auto --cov=spoolhq --cov-report=term-missing:skip-covered --cov-fail-under=85
+
+test-desktop:
     pnpm --dir desktop exec vitest run --coverage
+
+test-rust:
     cargo test --manifest-path {{ tauri_manifest }} --locked
+
+# Quick tests for one path while working: `just t daemon/tests/api` or `just t desktop/src/x.test.tsx`.
+t path:
+    {{ if path =~ '^desktop/' { "pnpm --dir desktop exec vitest run " + trim_start_match(path, "desktop/") } else { "uv run --directory daemon pytest -q --no-cov -x " + trim_start_match(path, "daemon/") } }}
 
 # Start the daemon and the desktop app together; Ctrl-C stops both.
 [parallel]

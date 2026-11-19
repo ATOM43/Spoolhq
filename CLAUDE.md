@@ -6,11 +6,11 @@ Rules for coding agents (and humans) changing SpoolHQ. Details live in the linke
 
 1. The "What exists" summary at the top of `PROGRESS.md`.
 2. The `DECISIONS.md` index.
-3. Only the `docs/decisions/<area>.md` files and `docs/` pages your ticket touches, plus `graphify-out/GRAPH_REPORT.md` ([code graph](docs/codegraph.md#spoolhqs-own-graph)).
+3. Only the `docs/decisions/<area>.md` files and `docs/` pages your ticket touches, plus `graphify-out/GRAPH_REPORT.md` if you have a local build ([code graph](docs/codegraph.md#spoolhqs-own-graph); it is not committed).
 
 ## Rules
 
-- **Before finishing, run `just lint && just test`** and fix every failure. Do not skip or disable checks to make them pass.
+- **Before finishing, run `just lint && just test` once** and fix every failure. Do not skip or disable checks to make them pass.
 - **Never use `shell=True` or build shell commands from strings.** Call subprocesses with an argument list (`subprocess.run(["git", "status"])`). ruff's `S` rules enforce this in Python.
 - **Never commit secrets**: no API keys, tokens, `.env` files or personal paths.
 - **Keep changes inside the ticket's scope.** If you find something else that needs doing, note it in your report instead of doing it.
@@ -18,7 +18,13 @@ Rules for coding agents (and humans) changing SpoolHQ. Details live in the linke
 - **No source file over 500 lines** (tests exempt); `just lint` runs `scripts/check_line_limit.py`.
 - **Decisions**: record notable choices as a new entry at the bottom of the matching `docs/decisions/<area>.md`, plus one line in the `DECISIONS.md` index (how is at its top; `just lint` checks both agree).
 - **Progress**: add a `PROGRESS.md` entry for each finished ticket. Agents started by SpoolHQ leave `PROGRESS.md` alone: SpoolHQ adds the entry from their `<progress>` block when it merges.
-- **Code graph**: after the code is final and lint and tests pass, rebuild `graphify-out/` and commit it with the ticket, never `graphify-out/graph.html`. Commands: [docs/codegraph.md](docs/codegraph.md#spoolhqs-own-graph).
+
+## Saving tokens
+
+- **While working, run only the tests for what you changed**: `just t <path>` (a daemon test file or folder, or a desktop test file). Run `just lint && just test` once, at the end.
+- **Keep output quiet**: pass `-q`, and read only the tail of long logs (`| tail -n 40`).
+- **After pushing, check CI once** (`gh run list --branch main --limit 4`), report its state and stop. Never poll or wait in a loop.
+- **Reports**: changed files grouped by folder, results, decisions. No repeated sections; summarize a folder instead of listing more than 10 files.
 
 ## Layers
 
