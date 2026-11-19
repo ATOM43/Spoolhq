@@ -1,11 +1,13 @@
 """services/git: SpoolHQ's git calls never run repository hooks and never sign."""
 
+import re
 import subprocess
 import time
 from pathlib import Path
 
 import pytest
 
+import spoolhq
 from spoolhq.services.git import WorktreeManager
 from spoolhq.services.git import run_git as spool_git
 from spoolhq.services.git.runner import git_executable
@@ -129,3 +131,52 @@ def test_signing_config_is_ignored(manager: WorktreeManager, wt_repo: Path, tmp_
 
     spool_git(["tag", "-a", "t1", "-m", "x"], cwd=wt_repo).check()
     assert run_git(wt_repo, "tag", "--list", "t1").strip() == "t1"
+
+
+def test_a_hooks_path_outside_the_repo_never_runs(
+    manager: WorktreeManager, wt_repo: Path, markers: Path, tmp_path: Path
+) -> None:
+    hooks = tmp_path / "repo-hooks"
+    for name in ("pre-commit", "post-checkout", "post-merge", "post-commit"):
+        write_hook(hooks, name, markers)
+    run_git(wt_repo, "config", "core.hooksPath", str(hooks))
+    require_hooks_fire(wt_repo, markers)
+
+    wt = manager.create("T04", TITLE, 1)  # worktree add: post-checkout
+    (wt.path / "change.txt").write_text("change\n", encoding="utf-8")
+    assert manager.commit_all(wt, "T04: change") is not None  # pre-commit, post-commit
+    (wt_repo / "main.txt").write_text("main\n", encoding="utf-8")
+    spool_git(["add", "main.txt"], cwd=wt_repo).check()
+    spool_git(["commit", "--quiet", "-m", "main moves"], cwd=wt_repo).check()
+    spool_git(["merge", "--no-edit", "main"], cwd=wt.path).check()  # post-merge
+    spool_git(["checkout", "--quiet", "--detach", "HEAD~1"], cwd=wt.path).check()
+
+    assert fired(markers) == []
+
+
+# Spawning git anywhere but services/git/runner.py would skip the hooks and signing options.
+_BYPASS = re.compile(r"""git_executable\(|which\(\s*["']git["']|[\[(]\s*["']git["']\s*,""")
+
+
+def test_every_git_call_goes_through_run_git() -> None:
+    src = Path(spoolhq.__file__).parent
+    runner = src / "services" / "git" / "runner.py"
+    offenders = [
+        f"{path.relative_to(src)}:{number}: {line.strip()}"
+        for path in sorted(src.rglob("*.py"))
+        if path != runner
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
+        if _BYPASS.search(line)
+    ]
+    assert offenders == []
+
+
+def test_the_bypass_check_catches_a_direct_call() -> None:
+    for line in (
+        'subprocess.run(["git", "commit"])',
+        "subprocess.run([git_executable(), 'merge'])",
+        'shutil.which("git")',
+        "cmd = ('git', 'checkout')",
+    ):
+        assert _BYPASS.search(line), line
+    assert not _BYPASS.search('run_git(["commit", "-m", "x"], cwd)')

@@ -77,8 +77,7 @@ SDK_ENV = {
     "CLAUDE_CODE_SDK_READS_SESSION_STATE": "1",
 }
 SDK_FLAGS = (
-    # The SDK's setting_sources=[]: no user, project or local settings files.
-    "--setting-sources=",
+    # build_argv already passes the SDK's setting_sources=[] (``--setting-sources=``).
     "--input-format",
     "stream-json",
 )

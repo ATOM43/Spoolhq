@@ -388,3 +388,5 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 382 · A ready ticket runs without a spec; the spec is needed only for Generate plan · docs/decisions/runloop.md
 383 · Add ticket in the Tickets tab · docs/decisions/desktop.md
 384 · The replay names the run and the attempt · docs/decisions/desktop.md
+385 · A repo's own agent settings are never loaded, and an agent can't add any · docs/decisions/agents.md
+386 · Every hook-firing git call goes through `run_git`, and a test enforces it · docs/decisions/git-github.md

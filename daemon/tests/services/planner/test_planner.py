@@ -412,3 +412,16 @@ def test_an_unknown_project_is_refused(projects_dir: Path, home: Path) -> None:
     projects_dir.mkdir()
     with pytest.raises(PlannerError):
         plan(FakeRunner(DASHBOARD_PLAN), projects_dir, home)
+
+
+def test_a_backend_that_cant_exclude_the_repos_settings_is_refused(
+    plan_project: Path, projects_dir: Path, home: Path
+) -> None:
+    repo = load_project("demo", projects_dir=projects_dir).repo_path
+    (repo / ".mcp.json").write_text("{}", encoding="utf-8")
+    leaky = FakeRunner(DASHBOARD_PLAN, name="leaky", unexcluded_settings=(".mcp.json",))
+    with pytest.raises(
+        PlannerError, match="^This repo has agent settings SpoolHQ can't override for leaky: "
+    ):
+        plan(leaky, projects_dir, home)
+    assert leaky.calls == []

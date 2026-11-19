@@ -40,6 +40,7 @@ class FakeRunner:
     hung agent, so the budget's ``timeout_s`` and ``cancel`` apply as in a real run.
     ``delay_s`` waits between messages, so a run looks live; ``cycle`` starts the
     sequence again instead of raising; ``render`` rewrites a transcript from the prompt.
+    ``unexcluded_settings`` simulates a backend that would load those repo settings files.
     """
 
     def __init__(
@@ -51,8 +52,10 @@ class FakeRunner:
         delay_s: float = 0,
         cycle: bool = False,
         render: Render | None = None,
+        unexcluded_settings: Sequence[str] = (),
     ) -> None:
         self.name = name
+        self.unexcluded_settings = tuple(unexcluded_settings)
         self.stall_s = stall_s
         self.delay_s = delay_s
         self.cycle = cycle

@@ -43,6 +43,8 @@ from spoolhq.services.agents.model import (
     ToolResult,
     Usage,
 )
+from spoolhq.services.agents.repo_settings import changed_settings
+from spoolhq.services.agents.repo_settings import refusal as repo_settings_refusal
 from spoolhq.services.agents.runner import AgentRunner, BackendUnavailableError
 
 __all__ = [
@@ -76,6 +78,8 @@ __all__ = [
     "Usage",
     "temp_worktree_refusal",
     "available_runners",
+    "changed_settings",
+    "repo_settings_refusal",
     "backend_names",
     "make_runner",
 ]

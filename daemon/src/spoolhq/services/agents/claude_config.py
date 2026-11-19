@@ -141,6 +141,8 @@ def build_argv(
         "stream-json",
         "--verbose",
         "--restricted",
+        # No user, project or local settings files, hooks or plugins from them (T42).
+        "--setting-sources=",
         "--permission-mode",
         "dontAsk",
         "--permission-prompts",

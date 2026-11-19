@@ -127,7 +127,7 @@ SpoolHQ never passes `--dangerously-skip-permissions` or `bypassPermissions`; a 
 Built as a list (`build_argv`), in this order; the prompt goes on stdin, never in argv, so it isn't visible in the process list and has no length limit below Claude Code's 10 MB stdin cap:
 
 ```text
-claude -p --output-format stream-json --verbose --restricted
+claude -p --output-format stream-json --verbose --restricted --setting-sources=
   --permission-mode dontAsk --permission-prompts none
   --tools Read,Edit,Write,Glob,Grep,Bash
   --allowedTools Read Edit Write Glob Grep <Bash rules…>
@@ -232,6 +232,7 @@ codex exec --json --ephemeral --ignore-user-config --ignore-rules --cd <worktree
   -c allow_login_shell=false
   -c shell_environment_policy.ignore_default_excludes=false
   -c history.persistence="none"  -c check_for_update_on_startup=false
+  -c projects={"<worktree>"={trust_level="untrusted"}}
   [-c model_provider="spoolhq"
    -c model_providers.spoolhq={name="SpoolHQ endpoint",base_url="<url>",env_key="SPOOLHQ_ENDPOINT_TOKEN_CODEX_CLI"}]
   -
@@ -240,7 +241,7 @@ codex exec --json --ephemeral --ignore-user-config --ignore-rules --cd <worktree
 - **Never a bypass.** No `--dangerously-bypass-approvals-and-sandbox` (`--yolo`), `danger-full-access`, `--full-auto`, `--approve-for-me` or `--skip-git-repo-check`; a test fails if any appears in `services/agents/` outside comments and docstrings. `--sandbox` isn't passed either: it would switch Codex back to its older sandbox settings, which can't deny reads.
 - **Unknown settings stop the run.** `--strict-config` makes Codex refuse any `-c` override it doesn't recognise ("unknown configuration field … in -c/--config override") before it starts, so a renamed key can't silently drop part of the policy. Real Codex 0.166.0 ignored `tools.view_image` without it.
 - **Features off.** Besides web search, apps, plugins, hooks, multi-agent and memories, these 0.166.0 features are on by default and are turned off (`features.<name>=false`): `view_image`, `browser_use`, `browser_use_external`, `browser_use_full_cdp_access`, `computer_use`, `in_app_browser`, `remote_plugin`, `skill_mcp_dependency_install`, `tool_suggest`. `code_mode_host` stays on: without it the model's tool calls fail closed ("code-mode host is disabled").
-- **Per-run settings, never the user's.** `--ignore-user-config` skips `$CODEX_HOME/config.toml` while "authentication still uses `CODEX_HOME`", so the login keeps working without a per-run `CODEX_HOME`. Project `.codex/` layers (config, hooks, rules) load only for trusted projects and trust is recorded in the user config, so a repository's `.codex/` is skipped; `--ignore-rules` skips execpolicy `.rules` and `features.hooks=false` turns hooks off. SpoolHQ writes nothing under `~/.codex`.
+- **Per-run settings, never the user's.** `--ignore-user-config` skips `$CODEX_HOME/config.toml` while "authentication still uses `CODEX_HOME`", so the login keeps working without a per-run `CODEX_HOME`. Project `.codex/` layers (config, hooks, rules) load only for trusted projects and trust is recorded in the user config, so a repository's `.codex/` is skipped; the worktree is also marked untrusted explicitly, since a system config trusting the main repo would otherwise trust its worktrees ([Repo safety](#repo-safety)); `--ignore-rules` skips execpolicy `.rules` and `features.hooks=false` turns hooks off. SpoolHQ writes nothing under `~/.codex`.
 
 ### The permission profile
 
@@ -438,6 +439,33 @@ claude-agent-sdk
 Without a key the login line reads `no (run: spool secrets set anthropic)`.
 
 It exits 0 even when nothing is installed; the output then says how to install each CLI and log in (`claude auth login`, `codex login`).
+
+## Repo safety
+
+A repo is untrusted: it may carry its own agent settings, hooks, MCP servers and git config, and the implementer writes files into the worktree. Nothing in it may loosen SpoolHQ's per-run limits (T42).
+
+**What each adapter reads from the working folder**, from its docs and `--help`, and how it is excluded:
+
+| Backend (version checked) | File | Effect | Excluded by |
+| --- | --- | --- | --- |
+| `claude-code-cli` (Claude Code 2.1.328) | `.claude/settings.json`, `.claude/settings.local.json` | permissions, `defaultMode`, env, plugins, `apiKeyHelper`, MCP approval | `--restricted` (ignores user, project and local settings files) and `--setting-sources=` (no source at all) |
+| | hooks in those files (and in plugins they enable) | run commands | the same, plus `disableAllHooks: true` in SpoolHQ's `--settings` |
+| | `.mcp.json` | adds MCP servers (tools that run code) | `--strict-mcp-config` with no `--mcp-config`; `mcp__*` in `--disallowedTools` |
+| | `.claude/skills/`, `.claude/agents/`, `.claude/commands/` | skills can carry `allowed-tools`, subagents their own tools, hooks and MCP servers | the `Skill` and `Agent` tools aren't in `--tools`, so none can be invoked |
+| `claude-agent-sdk` (claude-agent-sdk 0.2.176, bundled Claude Code 2.1.316) | all of the above | as above | the same command line (`build_argv`), plus the SDK's `setting_sources=[]` (also `--setting-sources=`) and its own empty `CLAUDE_CONFIG_DIR` |
+| `codex-cli` (Codex CLI 0.166.0) | `.codex/config.toml` | sandbox, approvals, `mcp_servers`, `notify`, profiles, providers | loaded only for a trusted project: `--ignore-user-config` drops the user config where trust is stored, and `-c projects={"<worktree>"={trust_level="untrusted"}}` beats a system config that trusts the main repo (checked by hand: with the main repo trusted, a worktree's `.codex/config.toml` loaded; with the override, it didn't); every policy key is also a `-c` override, which wins over any config file |
+| | `.codex/hooks.json` | run commands | untrusted project, and `features.hooks=false` |
+| | `.codex/rules/*.rules` | execpolicy allow rules | untrusted project, and `--ignore-rules` |
+
+Checked by hand with Claude Code 2.1.328 and no model (the base URL pointed at a closed port): in a folder whose `.claude/settings.json` had a `SessionStart` hook and whose `.mcp.json` started a server, both wrote their marker with plain `claude -p`, and neither did with SpoolHQ's flags.
+
+**Read only as instructions, allowed to stay:** `CLAUDE.md`, `CLAUDE.local.md`, `.claude/rules/*.md` (Claude Code); `AGENTS.md`, `AGENTS.override.md` and skills under `.agents/skills/` (Codex, whose scripts the agent can only run through its sandboxed shell). They grant no permission.
+
+**A backend that can't exclude a file is refused.** A runner lists any repo settings it would still load in `unexcluded_settings` (fnmatch patterns; the real backends have none, `FakeRunner(unexcluded_settings=…)` simulates one). Before each attempt starts, the run loop checks the worktree for the implementer and the reviewer, and the planner checks the repo, with `repo_settings.refusal`: a match blocks the ticket (or fails the plan) with "This repo has agent settings SpoolHQ can't override for <backend>: <file>", before any agent starts. There is no weaker fallback.
+
+**The agent can't plant settings.** After each commit of an attempt, any file under a `.claude/` or `.codex/` folder (at any depth) or named `.mcp.json` that the branch adds or changes since its base (`git diff base...HEAD`), or that sits git-ignored in the worktree, fails the attempt's `policy` step with "The agent changed agent settings: <file>" and blocks the ticket before gates and review. Settings already on main are the repo's, not the agent's, and don't count.
+
+**SpoolHQ's git calls never run repo hooks.** Every git command goes through `services/git/runner.py`'s `run_git` (argument list, no shell), which adds `-c core.hooksPath=<home>/hooks-disabled` (an empty folder SpoolHQ owns) to each call, so commit, merge, rebase, checkout and `worktree add` in a worktree or the main repo fire none of the repo's hooks, wherever its `core.hooksPath` points. A test greps `src/` for any other way to start git. The gates do the checking instead.
 
 ## Known limits
 

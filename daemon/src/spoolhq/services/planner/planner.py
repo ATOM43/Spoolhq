@@ -10,7 +10,15 @@ from pathlib import Path
 from typing import Any
 
 from spoolhq.core.tokens import weighted_tokens
-from spoolhq.services.agents import AgentEvent, AgentPolicy, AgentRunner, Budget, Outcome, RunResult
+from spoolhq.services.agents import (
+    AgentEvent,
+    AgentPolicy,
+    AgentRunner,
+    Budget,
+    Outcome,
+    RunResult,
+    repo_settings_refusal,
+)
 from spoolhq.services.agents.runner import RawCallback
 from spoolhq.services.planner.model import InvalidPlan, PlannerError, PlanResult
 from spoolhq.services.planner.prompt import render_planner_prompt
@@ -76,6 +84,8 @@ def generate_plan(
     if test_command is None:
         raise PlannerError(NO_TEST_COMMAND)
     policy = AgentPolicy.read_only_for(settings.repo_path, home, role="planner")
+    if refused := repo_settings_refusal(runner, settings.repo_path):
+        raise PlannerError(refused)
     limit = settings.agents.budget_per_ticket
     results: list[RunResult] = []
     errors: list[str] = []

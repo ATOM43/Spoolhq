@@ -198,6 +198,9 @@ def build_argv(
         "shell_environment_policy.ignore_default_excludes=false",
         'history.persistence="none"',
         "check_for_update_on_startup=false",
+        # The repo's .codex/ (config, hooks, rules) loads only in a trusted project; trust in
+        # a system config (even for the main repo) loses to this for the worktree (T42).
+        f'projects={{{_toml(str(policy.worktree))}={{trust_level="untrusted"}}}}',
     ]
     if base_url is not None:
         provider = (

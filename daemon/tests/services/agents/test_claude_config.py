@@ -36,6 +36,7 @@ def test_argv_is_exactly_the_documented_command_line(policy: AgentPolicy, home: 
         "stream-json",
         "--verbose",
         "--restricted",
+        "--setting-sources=",
         "--permission-mode",
         "dontAsk",
         "--permission-prompts",

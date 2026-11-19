@@ -1,5 +1,6 @@
 """Codex CLI's command line, permission profile, environment and policy parts."""
 
+import json
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -54,6 +55,7 @@ OVERRIDES = [
     "shell_environment_policy.ignore_default_excludes=false",
     'history.persistence="none"',
     "check_for_update_on_startup=false",
+    "<trust>",
 ]
 
 
@@ -74,6 +76,9 @@ def expected(policy: AgentPolicy, *extra: str) -> list[str]:
     for override in OVERRIDES:
         if override == "<profile>":
             override = f"permissions.spoolhq={permission_profile(policy)}"
+        if override == "<trust>":
+            worktree = json.dumps(str(policy.worktree))
+            override = f'projects={{{worktree}={{trust_level="untrusted"}}}}'
         argv += ["-c", override]
     return [*argv, "-"]
 
