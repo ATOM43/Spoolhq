@@ -251,6 +251,25 @@ def test_a_real_failing_test_command_shows_its_own_output(
     assert "git" not in step.output.lower()
 
 
+@pytest.mark.usefixtures("builtin_fixture")
+def test_a_copier_failure_rolls_back(tmp_path: Path, projects_dir: Path, home: Path) -> None:
+    template = tmp_path / "builtins" / "fixture"
+    (template / "sub").mkdir()  # Copier creates this folder before the bad file fails
+    (template / "sub" / "bad.txt.jinja").write_text("{{ unclosed\n", encoding="utf-8")
+    repo = tmp_path / "new"
+    job = create(projects_dir, home, **source_fields("template", tmp_path, repo))
+    step = job.steps[1]
+    assert (job.state, step.state, step.message) == (
+        "failed",
+        "failed",
+        "Couldn't generate the project",
+    )
+    assert not repo.exists()
+    assert not projects_dir.exists()
+    assert job.rollback is not None
+    assert (str(repo), []) == (job.rollback.removed[0], job.rollback.left)
+
+
 @pytest.mark.usefixtures("isolated_git")
 def test_a_commit_without_an_identity_fails_and_rolls_back(
     tmp_path: Path, projects_dir: Path, home: Path, monkeypatch: pytest.MonkeyPatch

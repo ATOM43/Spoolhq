@@ -134,8 +134,13 @@ def test_the_users_copier_trust_list_is_ignored(
 
 
 def test_a_copier_failure_is_reported(tmp_path: Path) -> None:
-    template = make_template(tmp_path / "x", files={"bad.txt.jinja": "{{ unclosed\n"})
+    # Copier walks folders before their contents, so ``sub/`` is always created before
+    # the bad file fails. With a top-level bad file, whether anything was written first
+    # hung on the filesystem's directory order (the CI flake).
+    template = make_template(tmp_path / "x", files={"sub/bad.txt.jinja": "{{ unclosed\n"})
     repo = tmp_path / "new"
     with pytest.raises(TemplateError, match="template 'x': Copier failed"):
         generate(template, repo)
-    assert not repo.exists()
+    # render leaves partial output to its caller (cleanup_on_error=False): the creation
+    # job's rollback removes it, see test_job.py::test_a_copier_failure_rolls_back.
+    assert (repo / "sub").is_dir()
