@@ -23,7 +23,7 @@ const ok = (data: unknown) =>
 const onSaved = vi.fn<(id: string) => void>();
 const onClose = vi.fn<() => void>();
 
-/** A planner draft, as T41 will hand it to the form. */
+/** A pre-filled draft. */
 const DRAFT = {
   title: "Export as CSV",
   scope: "- An Export button on the table.",
@@ -36,12 +36,20 @@ const DRAFT = {
 describe("New ticket drawer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    GET.mockImplementation(() =>
-      ok({
+    GET.mockImplementation((path) => {
+      switch (path) {
+        case "/api/agents":
+          return ok({ backends: [], fake_runner: true });
+        case "/api/settings":
+          return ok({ secrets: {} });
+        case "/api/projects/{name}":
+          return ok({ name: "demo", idle: null });
+      }
+      return ok({
         tickets: [{ id: "T02", meta: { id: "T02", title: "Table" } }],
         invalid: [],
-      }),
-    );
+      });
+    });
     POST.mockImplementation(() => ok({ id: "T03" }));
   });
 

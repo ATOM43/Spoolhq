@@ -16,11 +16,14 @@ import {
   checkDraft,
   draftOf,
   EMPTY_DRAFT,
+  fixFirst,
+  problemCount,
   sameDraft,
   saveError,
   useSaveDraft,
   type Draft,
   type FieldName,
+  type Problems,
   type SaveError,
 } from "../model/form";
 
@@ -29,7 +32,9 @@ import {
  * estimate and review required, with Save and Cancel at the bottom. Saves with the
  * file's ETag; a 412 shows "Changed on disk · Reload · Keep mine", a 422 its field.
  * With `ticket` null it is the Add ticket form: Save creates the ticket, and `draft`
- * (a planner draft, T41) fills it in first, still unsaved.
+ * (a planner draft) fills it in first, still unsaved. With `value` the caller holds
+ * the values (planner drafts, T44): `drafted` shows the draft's problems by field, and
+ * `batch` leaves Save to the caller's Save all.
  */
 export function TicketEditForm({
   project,
@@ -37,6 +42,11 @@ export function TicketEditForm({
   etag = "",
   draft: filled,
   others,
+  refs = [],
+  value,
+  onChange,
+  drafted = {},
+  batch = false,
   onDone,
   onReload,
   onDirtyChange,
@@ -50,6 +60,15 @@ export function TicketEditForm({
   draft?: Draft | undefined;
   /** The project's other tickets, for the dependency picker. */
   others: readonly Ticket[];
+  /** Other unsaved drafts the picker offers by ref (`D1`). */
+  refs?: readonly { id: string; title: string }[];
+  /** Controlled values; `onChange` gets each edit with the field it changed. */
+  value?: Draft;
+  onChange?: (draft: Draft, field: keyof Draft) => void;
+  /** The planner's problems by field, shown before the form's own checks. */
+  drafted?: Problems;
+  /** Part of a Save all: no Save or Cancel of its own. */
+  batch?: boolean;
   /** Leave edit mode: saved (with the ticket's id), or cancelled. */
   onDone: (saved?: string) => void;
   /** Read the ticket from disk again (this form is then remounted). */
@@ -60,7 +79,8 @@ export function TicketEditForm({
   const [initial] = useState(() =>
     ticket ? draftOf(ticket) : (filled ?? EMPTY_DRAFT),
   );
-  const [draft, setDraft] = useState(initial);
+  const [own, setOwn] = useState(initial);
+  const draft = value ?? own;
   const name = ticket ? `Edit ${ticket.id}` : "New ticket";
   const [error, setError] = useState<SaveError | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -74,10 +94,16 @@ export function TicketEditForm({
   // An untouched new form isn't shown its errors yet.
   const problems = ticket || dirty ? checkDraft(draft) : {};
   const fieldError = (name: FieldName) =>
+    drafted[name] ??
     problems[name] ??
     (error?.kind === "field" && error.field === name ? error.message : null);
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
-    setDraft((previous) => ({ ...previous, [key]: value }));
+    const next = { ...draft, [key]: value };
+    if (onChange) {
+      onChange(next, key);
+    } else {
+      setOwn(next);
+    }
     if (error?.kind === "field" && error.field === key) {
       setError(null);
     }
@@ -97,17 +123,34 @@ export function TicketEditForm({
       },
     );
   };
+  const left =
+    Object.keys(drafted).length > 0 ? problemCount(draft, drafted) : 0;
   const reason = save.isPending
     ? "Waiting for the daemon to answer"
-    : Object.keys(problems).length > 0
-      ? "Fix the fields marked in red first"
-      : !dirty
-        ? ticket
-          ? "Nothing changed yet"
-          : "Give the ticket a title first"
-        : error?.kind === "conflict"
-          ? "Reload or keep yours first"
-          : null;
+    : left > 0
+      ? fixFirst(left)
+      : Object.keys(problems).length > 0
+        ? "Fix the fields marked in red first"
+        : !dirty
+          ? ticket
+            ? "Nothing changed yet"
+            : "Give the ticket a title first"
+          : error?.kind === "conflict"
+            ? "Reload or keep yours first"
+            : null;
+
+  // Existing tickets, other drafts by ref, and any dependency neither knows (a
+  // planner's guess) so it can still be unticked.
+  const known = [
+    ...others.map((other) => ({ id: other.id, title: other.meta.title })),
+    ...refs,
+  ];
+  const choices = [
+    ...known,
+    ...draft.dependsOn
+      .filter((dep) => !known.some((choice) => choice.id === dep))
+      .map((dep) => ({ id: dep, title: "Not found" })),
+  ];
 
   return (
     <>
@@ -116,7 +159,7 @@ export function TicketEditForm({
         className="flex flex-col gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (reason === null) {
+          if (reason === null && !batch) {
             submit(etag);
           }
         }}
@@ -186,11 +229,11 @@ export function TicketEditForm({
           aria-describedby={describedBy(`${id}-deps`)}
         >
           <legend className="mb-1.5 text-sm font-medium">Depends on</legend>
-          {others.length === 0 ? (
+          {choices.length === 0 ? (
             <p className="text-sm text-ink-muted">No other tickets.</p>
           ) : (
             <ul className="flex max-h-40 flex-col gap-1 overflow-auto rounded-md border p-2">
-              {others.map((other) => (
+              {choices.map((other) => (
                 <li key={other.id}>
                   <label className="flex items-center gap-2 text-sm">
                     <input
@@ -206,7 +249,7 @@ export function TicketEditForm({
                       }}
                     />
                     <span className="font-mono text-xs">{other.id}</span>
-                    <span className="truncate">{other.meta.title}</span>
+                    <span className="truncate">{other.title}</span>
                   </label>
                 </li>
               ))}
@@ -247,24 +290,26 @@ export function TicketEditForm({
           </label>
         </div>
         <FieldError id={`${id}-form`}>{fieldError("form")}</FieldError>
-        <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-surface py-3">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              if (dirty) {
-                setConfirmCancel(true);
-              } else {
-                onDone();
-              }
-            }}
-          >
-            Cancel
-          </Button>
-          <ReasonButton type="submit" reason={reason}>
-            Save
-          </ReasonButton>
-        </div>
+        {batch ? null : (
+          <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-surface py-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (dirty) {
+                  setConfirmCancel(true);
+                } else {
+                  onDone();
+                }
+              }}
+            >
+              Cancel
+            </Button>
+            <ReasonButton type="submit" reason={reason}>
+              Save
+            </ReasonButton>
+          </div>
+        )}
       </form>
       <ConfirmDialog
         open={confirmCancel}

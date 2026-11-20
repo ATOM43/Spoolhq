@@ -20,4 +20,6 @@ export const queryKeys = {
   spec: (project: string) => ["spec", project] as const,
   templates: ["templates"] as const,
   job: (id: string) => ["jobs", id] as const,
+  draftJob: (project: string, id: string) =>
+    ["draft-jobs", project, id] as const,
 };

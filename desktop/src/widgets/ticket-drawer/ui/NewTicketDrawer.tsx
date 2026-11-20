@@ -1,14 +1,21 @@
 import { X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { TicketEditForm, type TicketDraft } from "@/features/ticket-edit";
+import { OpenSettingsLink, useAgentBlocker } from "@/features/settings";
+import {
+  cancelDraft,
+  NewTicketForm,
+  type TicketDraft,
+} from "@/features/ticket-edit";
+import { useProject } from "@/entities/project";
 import { useTickets } from "@/entities/ticket";
 import { Button, ConfirmDialog } from "@/shared/ui";
 
 /**
- * The drawer on a ticket that doesn't exist yet: the edit form, empty or filled with
- * `draft` (a planner draft, T41). Nothing is saved until **Save**; the daemon assigns
- * the id, and `onSaved` then opens the ticket's own drawer.
+ * The drawer on a ticket that doesn't exist yet: the edit form, empty (with Describe it
+ * to draft it with the planner) or filled with `draft`. Nothing is saved until **Save**
+ * (or **Save all**); the daemon assigns the ids, and `onSaved` then opens the (first)
+ * ticket's own drawer.
  */
 export function NewTicketDrawer({
   project,
@@ -24,13 +31,21 @@ export function NewTicketDrawer({
   const tickets = useTickets(project);
   const [dirty, setDirty] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const agent = useAgentBlocker();
+  const idle = useProject(project).data?.idle;
+  // The daemon's own refusals, known before asking.
+  const blocker = agent ?? (idle?.code === "no_commands" ? idle.message : null);
   const close = useCallback(() => {
-    if (dirty) {
+    if (jobId !== null) {
+      setStopping(true);
+    } else if (dirty) {
       setLeaving(true);
     } else {
       onClose();
     }
-  }, [dirty, onClose]);
+  }, [dirty, jobId, onClose]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       // A dialog open on top (a confirm) takes Escape for itself.
@@ -59,19 +74,16 @@ export function NewTicketDrawer({
         </Button>
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-auto p-4">
-        <TicketEditForm
+        <NewTicketForm
           project={project}
-          ticket={null}
           draft={draft}
           others={tickets.data?.tickets ?? []}
-          onDone={(saved) => {
-            if (saved) {
-              onSaved(saved);
-            } else {
-              onClose();
-            }
-          }}
+          blocker={blocker}
+          blockerAction={<OpenSettingsLink reason={blocker} />}
+          onSaved={onSaved}
+          onClose={onClose}
           onDirtyChange={setDirty}
+          onDraftingChange={setJobId}
         />
       </div>
       <ConfirmDialog
@@ -85,6 +97,24 @@ export function NewTicketDrawer({
         }}
         onConfirm={() => {
           setLeaving(false);
+          onClose();
+        }}
+      />
+      <ConfirmDialog
+        open={stopping}
+        title="Stop drafting?"
+        consequence="The planner is still drafting; closing stops it and nothing is saved."
+        action="Stop drafting"
+        destructive
+        onCancel={() => {
+          setStopping(false);
+        }}
+        onConfirm={() => {
+          setStopping(false);
+          if (jobId !== null) {
+            // The drawer goes now; the daemon stops the agent on its own time.
+            void cancelDraft(project, jobId).catch(() => undefined);
+          }
           onClose();
         }}
       />

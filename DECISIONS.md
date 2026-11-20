@@ -410,3 +410,5 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 404 · Draft jobs are read at project routes, not `/api/jobs/{id}` · docs/decisions/api.md
 405 · A draft job's usage is a run of kind `draft` · docs/decisions/runloop.md
 406 · Every dev fake-runner scenario drafts; `ticket-draft` names it · docs/decisions/agents.md
+407 · Drafting in the Add ticket form · docs/decisions/desktop.md
+408 · Draft problems the form can't fix don't block · docs/decisions/desktop.md

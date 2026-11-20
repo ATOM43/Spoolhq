@@ -35,7 +35,7 @@ export function draftOf(ticket: TicketDetail): Draft {
   };
 }
 
-/** The Add ticket form before anything is typed; T41 passes a filled one instead. */
+/** The Add ticket form before anything is typed; a planner draft fills it instead. */
 export const EMPTY_DRAFT: Draft = {
   title: "",
   scope: "",
@@ -49,8 +49,8 @@ export const sameDraft = (a: Draft, b: Draft) =>
   JSON.stringify(a) === JSON.stringify(b);
 
 /** Why the draft can't be saved yet, or null. */
-export function checkDraft(draft: Draft): Partial<Record<FieldName, string>> {
-  const errors: Partial<Record<FieldName, string>> = {};
+export function checkDraft(draft: Draft): Problems {
+  const errors: Problems = {};
   const hours = Number(draft.estimate);
   if (draft.title.trim() === "") {
     errors.title = "Give the ticket a title";
@@ -61,8 +61,17 @@ export function checkDraft(draft: Draft): Partial<Record<FieldName, string>> {
   return errors;
 }
 
+export type Problems = Partial<Record<FieldName, string>>;
+
+/** The fields still wrong: the draft's own problems, then the form's checks. */
+export const problemCount = (draft: Draft, drafted: Problems) =>
+  Object.keys({ ...checkDraft(draft), ...drafted }).length;
+
+export const fixFirst = (count: number) =>
+  `Fix ${String(count)} problem${count === 1 ? "" : "s"} first`;
+
 /** The daemon's field name (`meta.depends_on`, `done_when`) as the form's. */
-const FIELDS: Record<string, FieldName> = {
+export const FIELDS: Record<string, FieldName> = {
   "meta.title": "title",
   "meta.depends_on": "dependsOn",
   "meta.estimate_h": "estimate",
