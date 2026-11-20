@@ -5,9 +5,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
+
 from spoolhq.services.runloop.guards import attempt_message, changed_files, edited_notes
 from spoolhq.services.runloop.model import RunContext
 from tests.conftest import commit_file, run_git
+
+# CI runners have no git config, so the commits need an identity from the environment.
+pytestmark = pytest.mark.usefixtures("git_identity")
 
 
 def ctx(repo: Path, base: str) -> RunContext:
