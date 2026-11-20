@@ -1,5 +1,5 @@
 # Decisions
 
-Notable choices and why they were made, newest at the bottom.
+Read this index, then open only the area files your ticket touches. Each line is `number · title · area file`; the entry, with its reason, is in `docs/decisions/<area>.md`.
 
-1. **Generated from the SpoolHQ `fastapi-react` template**: FastAPI, SQLAlchemy 2 and Alembic on SQLite for the backend; React, Vite and TypeScript laid out as Feature-Sliced Design for the frontend; layering enforced by import-linter and eslint-plugin-boundaries.
+SpoolHQ adds the lines and the entries from each ticket's run note when it merges the ticket.

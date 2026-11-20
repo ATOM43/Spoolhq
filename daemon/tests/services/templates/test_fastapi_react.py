@@ -84,6 +84,8 @@ def test_init_generates_one_commit_and_fills_the_commands(
     }
     assert project.template is not None
     assert project.template.name == "fastapi-react"
+    assert project.notes.decision_areas == ["general", "api", "data", "ui", "infra", "testing"]
+    assert "decision_areas:" in (projects_dir / "demo" / "project.yaml").read_text("utf-8")
     assert "Feature-Sliced Design" in (projects_dir / "demo" / "TEMPLATE.md").read_text("utf-8")
 
 
@@ -92,6 +94,7 @@ def test_the_contract_check_passes_with_no_agent() -> None:
     assert result.exit_code == 0, result.output
     for gate in ("install", "lint", "test"):
         assert f"✓ {gate}  just {gate}" in result.output
+    assert "notes:" not in result.output  # the notes check passes before any ticket
     assert "template 'fastapi-react' passes its contract" in result.output
 
 

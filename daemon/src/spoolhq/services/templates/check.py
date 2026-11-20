@@ -1,7 +1,8 @@
 """The contract check: generate a template into a temp folder and run its gates.
 
 No agent is involved: a template passes when the project it generates installs, lints
-and tests clean with the commands its ``spoolhq-template.yaml`` declares.
+and tests clean with the commands its ``spoolhq-template.yaml`` declares, and its notes
+files pass the notes check a merge runs (``services/notes``).
 """
 
 import tempfile
@@ -11,6 +12,7 @@ from pathlib import Path
 
 from spoolhq.services.gates import DEFAULT_TIMEOUTS, GateRun, run_gates
 from spoolhq.services.git import GitError, remove_path
+from spoolhq.services.notes import notes_problems
 from spoolhq.services.templates.contract import TemplateContract, TemplateError, load_contract
 from spoolhq.services.templates.generate import check_safe, init_repo, render
 from spoolhq.services.templates.sources import ResolvedTemplate, open_template
@@ -20,6 +22,12 @@ from spoolhq.services.templates.sources import ResolvedTemplate, open_template
 class CheckResult:
     contract: TemplateContract
     run: GateRun
+    notes: tuple[str, ...] = ()
+    """The notes check's problems in the generated project."""
+
+    @property
+    def passed(self) -> bool:
+        return self.run.passed and not self.notes
 
 
 def check_template(
@@ -30,7 +38,8 @@ def check_template(
     on_resolved: Callable[[ResolvedTemplate], None] | None = None,
 ) -> CheckResult:
     """Generate ``source`` into a temp folder, ``git init`` it and run install, lint and
-    test there (logs in ``log_dir``). The folder is removed afterwards."""
+    test there (logs in ``log_dir``), then the notes check. The folder is removed
+    afterwards."""
     with open_template(source, ref) as template:
         if on_resolved is not None:
             on_resolved(template)
@@ -48,6 +57,7 @@ def check_template(
                 name: float(seconds) for name, seconds in DEFAULT_TIMEOUTS.items()
             }
             run = run_gates(project, contract.commands.gates(), timeouts, log_dir)
+            notes = tuple(notes_problems(project))
         finally:
             remove_path(work)
-    return CheckResult(contract=contract, run=run)
+    return CheckResult(contract=contract, run=run, notes=notes)

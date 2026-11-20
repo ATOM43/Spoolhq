@@ -5,8 +5,10 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal, TypedDict
 
-GateName = Literal["install", "lint", "test"]
+GateName = Literal["install", "lint", "test", "file_size"]
+"""The three command gates, plus the built-in file-size gate (``size.py``)."""
 GATE_NAMES: tuple[GateName, ...] = ("install", "lint", "test")
+"""The command gates, in the order they run."""
 
 
 class GateStatus(StrEnum):

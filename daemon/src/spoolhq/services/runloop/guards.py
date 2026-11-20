@@ -74,3 +74,26 @@ def edited_notes(ctx: RunContext) -> list[str]:
     since = f"{_notes_reference(ctx)}...HEAD"
     changed = _git(ctx, "diff", "--name-only", "--no-renames", "-z", since).split("\0")
     return sorted(path for path in changed if is_notes_path(path))
+
+
+def changed_files(ctx: RunContext) -> list[tuple[str, bytes | None]]:
+    """The files the ticket adds, changes or renames, each with its content before the
+    ticket (``None`` when new), for the file-size gate. "Before" is the merge base with
+    the default branch, so main merged into the branch never counts as the ticket's."""
+    base = run_git(("merge-base", ctx.project.default_branch, "HEAD"), ctx.worktree.path)
+    since = base.stdout.strip() if base.returncode == 0 else ctx.worktree.base_sha
+    status = _git(ctx, "diff", "--name-status", "-M", "--diff-filter=AMR", "-z", since, "HEAD")
+    fields = iter(status.split("\0"))
+    found: list[tuple[str, bytes | None]] = []
+    for kind in fields:
+        if not kind:
+            continue
+        old = new = next(fields)
+        if kind.startswith("R"):
+            new = next(fields)
+        before = None
+        if not kind.startswith("A"):
+            shown = run_git(("show", f"{since}:{old}"), ctx.worktree.path)
+            before = shown.stdout.encode("utf-8") if shown.returncode == 0 else None
+        found.append((new, before))
+    return found

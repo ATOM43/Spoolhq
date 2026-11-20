@@ -482,3 +482,10 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - justfile: `install`, `lint` and `test` split into `-daemon`, `-desktop` and `-rust` parts; `lint-daemon` also runs the daemon tests that read `docs/`, `task.md` or the desktop sources; `test-daemon` runs `pytest -n auto` (`pytest-xdist==3.8.0`, 3 green full runs locally, ~43 s each); `just t <path>` runs one daemon or desktop test path quickly.
 - `graphify-out/` is no longer tracked (ignored, files kept locally); `CLAUDE.md` lost the rebuild rule and gained "Saving tokens".
 - Docs: `architecture.md` ("CI"), `codegraph.md`; DECISIONS 395–398.
+
+## Windows git config race
+
+- Cause (Windows daemon job of run 44615500626, attempt 1): `tests/cli/test_run.py::test_integrate_merges_a_held_ticket` failed with "git show-ref failed (exit 128): warning: unable to access '.git/config': Permission denied". The project load's `default_branch` check (`has_local_branch`, `git show-ref`) read `.git/config` while the resumed run's worktree teardown ran `git branch -D` on the ticket branch, which rewrites the config to drop the branch section and its SpoolHQ marker.
+- `services/git/runner.py`: `run_git` holds an in-process lock per repository while git runs, keyed by `git rev-parse --git-common-dir` (cached per path; a repo and its worktrees share one lock; outside a repo the folder is the key). On Windows a call whose stderr shows git couldn't read or lock the config (`could not lock config file`, `unable to access` or `Permission denied` with `config` on the same line) is tried up to 3 times, 100 ms then 300 ms apart, logging "git config busy; retrying git <subcommand>"; any other failure returns at once.
+- Tests: two threads on one repo never overlap, two repos do (a barrier), a repo, its worktree and a subfolder share one lock, each config message retried then succeeding, three failures returning the error, other failures and Linux/macOS not retried, a stress test (20 threads, 100 `branch -D` and 100 config/ref reads on one repo) on every OS.
+- Docs: DECISIONS 399.

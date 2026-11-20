@@ -18,7 +18,7 @@ from spoolhq.services.agents import (
     Outcome,
     RunResult,
 )
-from spoolhq.services.gates import GateResult, GateRun, check_done_when
+from spoolhq.services.gates import GateResult, GateRun, check_done_when, check_file_sizes
 from spoolhq.services.git import (
     conclude_merge,
     conflict_files,
@@ -30,6 +30,7 @@ from spoolhq.services.notes import RunNote, RunNoteError, parse_run_note
 from spoolhq.services.review import GateLine, ReviewInputs, ReviewResult, review
 from spoolhq.services.runloop.guards import (
     attempt_message,
+    changed_files,
     edited_notes,
     planted_settings,
     refused_settings,
@@ -270,6 +271,11 @@ def run_gates(ctx: RunContext, attempt: Attempt, label: str) -> GateRun:
         attempt_dir(ctx.workspace, attempt),
         on_gate=started,
     )
+    limits = ctx.project.gates
+    sizes = check_file_sizes(
+        ctx.worktree.path, changed_files(ctx), limits.max_file_lines, limits.max_file_lines_exempt
+    )
+    gate_run = GateRun((*gate_run.results, sizes))
     tests = [name for result in gate_run.results for name in result.failing_tests]
     data = {
         "passed": gate_run.passed,

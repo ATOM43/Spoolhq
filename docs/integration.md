@@ -70,7 +70,7 @@ Added slug parsing.
 
 The new entry goes at the top. The newest 5 stay; older ones move, word for word, to the end of `docs/progress-archive.md` (created with a heading when missing), oldest first. Text inside the markers before the first `### ` entry is kept. A file without the markers gets them at its end on the first merge, everything above untouched; a missing file is created with a `# Progress` heading. A file with only one marker, two of either, or the end before the start blocks the ticket ("The notes files don't match: PROGRESS.md needs exactly one spoolhq:recent start and end marker"). Code never rewrites anything outside the markers.
 
-**Decisions, split layout** (`DECISIONS.md` missing, only a heading, or already an index): each decision is appended to `docs/decisions/<area>.md` (created with `# Decisions · <area>`) in the format the [context pack](context.md#a-split-decisionsmd) reads, and its index line to `DECISIONS.md`:
+**Decisions** (the split layout): each decision is appended to `docs/decisions/<area>.md` (created with `# Decisions · <area>`) in the format the [context pack](context.md#a-split-decisionsmd) reads, and its index line to `DECISIONS.md`:
 
 ```markdown
 012. Routes are plural
@@ -79,7 +79,16 @@ The new entry goes at the top. The newest 5 stay; older ones move, word for word
 012 · Routes are plural · docs/decisions/api.md
 ```
 
-`NNN` is one more than the highest number in the index, three digits. **Flat layout** (`DECISIONS.md` holds `N. ` entries and no index line): the entry is appended to `DECISIONS.md` itself, numbered after its highest entry; T46 converts these. Without decisions, an existing `DECISIONS.md` isn't touched; a missing one is created with a `# Decisions` heading.
+`NNN` is one more than the highest number in the index, three digits. Without decisions, an existing `DECISIONS.md` isn't touched; a missing one is created with a `# Decisions` heading.
+
+**Converting old flat notes.** Before writing, every merge runs `convert_notes` (`services/notes/convert.py`); it changes something only in a project still in the old flat layout, so in practice on its first merge, in the same commit:
+
+- `PROGRESS.md` without the markers keeps everything; the markers are added at its end (above), and the entries already in the file stay above them, untouched.
+- A `DECISIONS.md` with no index lines but entries is split. An entry starts at the left margin with `N. ` (numbered) or `- ` / `* ` (unnumbered) and goes on with indented or blank lines; the text before the first entry is its intro. Every entry moves, word for word, to the end of `docs/decisions/general.md` (created with `# Decisions · general`) as `NNN. <rest of its first line>` with its other lines unchanged, keeping its number; unnumbered ones get the numbers after the highest, in order of appearance. `DECISIONS.md` keeps its intro and becomes the index: `NNN · <title> · docs/decisions/general.md`, the title being the bold part of the first line (`1. **Plain SQL**: no ORM.` → `Plain SQL`) or the whole line.
+- A file that can't be split blocks the ticket and changes nothing: "DECISIONS.md couldn't be converted: line 12 isn't part of an entry: ## Later" (a line at the margin after the first entry that isn't one), "… entry 3 appears more than once" or "… line 4 is an entry without a title".
+- The squash commit's body lists what was converted, before the trailers: `- PROGRESS.md: added the spoolhq:recent markers at the end`, `- DECISIONS.md: moved 4 entries word for word to docs/decisions/general.md; DECISIONS.md is now the index`.
+
+A `DECISIONS.md` with index lines, or with only a heading and intro, is already in the split layout and isn't touched; so a hand-written intro must not start lines with `N. `, `- ` or `* `. The notes check below runs after the conversion, so numbers with a gap block the ticket with its usual message.
 
 **The notes check.** Before the commit, `notes_problems` compares the index with the area files: every index line has exactly one entry in `docs/decisions/*.md` and the reverse, numbers run 1..N without gaps or duplicates, each line names the file its entry is in, and each title is its entry's heading (`N. title`, or the bold part of `N. **title** …`). A `DECISIONS.md` without index lines passes. The first problem blocks the ticket: "The notes files don't match: DECISIONS.md: 2 is missing". A notes file that resolves outside the repository (a symlink) is refused the same way.
 

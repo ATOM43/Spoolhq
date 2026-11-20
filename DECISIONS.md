@@ -419,3 +419,7 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 413 · SpoolHQ writes the notes files at merge; agents never do · docs/decisions/projects-tickets.md
 414 · The notes check runs before the integration commit and blocks on the first problem · docs/decisions/projects-tickets.md
 415 · The final-message summary keeps 16,000 characters · docs/decisions/agents.md
+416 · The file-size gate is code the run loop adds after the command gates · docs/decisions/runloop.md
+417 · Old flat decisions move as they are, only renumbered `NNN.` · docs/decisions/projects-tickets.md
+418 · The template starts split, and its contract check runs the notes check · docs/decisions/projects-tickets.md
+419 · SpoolHQ's lint caps PROGRESS.md at 5 recent entries · docs/decisions/core.md

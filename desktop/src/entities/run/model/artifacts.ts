@@ -71,3 +71,7 @@ export function useArtifact<A extends Artifact>(
     retry: false,
   });
 }
+
+/** How a gate is named in the UI: the command gates by name, the built-in one in words. */
+export const gateLabel = (name: string): string =>
+  name === "file_size" ? "File size" : name;

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 
-import type { GateReport, GatesReport } from "@/entities/run";
+import { gateLabel, type GateReport, type GatesReport } from "@/entities/run";
 import { cn } from "@/shared/lib";
 
 import { formatDuration, type LiveDetails } from "../model/details";
@@ -41,7 +41,7 @@ const asState = (status: string): RowState =>
       : "skipped";
 
 /**
- * One row per gate command. A failed row opens on its own and scrolls to the first
+ * One row per gate command, then the built-in "File size" row. A failed row opens on its own and scrolls to the first
  * failure line; output is plain monospace text (untrusted). While the gates run, the
  * rows done so far come from the step events, then "Running <command>…".
  */
@@ -155,7 +155,9 @@ function RowHead({
       ) : (
         <ChevronRight aria-hidden className="size-4 shrink-0" />
       )}
-      <span className="w-12 shrink-0 text-xs text-ink-muted">{name}</span>
+      <span className="w-16 shrink-0 text-xs text-ink-muted">
+        {gateLabel(name)}
+      </span>
       <code className="min-w-0 flex-1 truncate font-mono text-xs">
         {command || "not set"}
       </code>

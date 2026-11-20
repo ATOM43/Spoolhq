@@ -68,6 +68,15 @@ const GATES: Schemas["GatesReport"] = {
       first_failure_line: 2,
       truncated: true,
     },
+    {
+      name: "file_size",
+      command: "max 500 lines per file",
+      state: "passed",
+      duration_ms: 10,
+      output: "",
+      first_failure_line: null,
+      truncated: false,
+    },
   ],
 };
 
@@ -309,6 +318,11 @@ describe("Gates panel", () => {
     expect(lint).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(lint);
     expect(lint).toHaveAttribute("aria-expanded", "true");
+    // The built-in file-size gate is its own row.
+    expect(within(details()).getByText("File size")).toBeInTheDocument();
+    expect(
+      within(details()).getByText("max 500 lines per file"),
+    ).toBeInTheDocument();
     // Untrusted output stays text.
     expect(details().querySelector("script, a")).toBeNull();
     expect(within(details()).getAllByText(XSS).length).toBeGreaterThan(0);

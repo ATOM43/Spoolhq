@@ -1,11 +1,12 @@
 """The notes files through a whole run: the run note, the guard and the writes at merge."""
 
+import json
 from pathlib import Path
 
 import pytest
 
 from spoolhq.services.runloop import LocalIntegrator, RunLoop
-from spoolhq.services.runs import RunRegistry, RunStatus
+from spoolhq.services.runs import RunRegistry, RunStatus, attempt_dir
 from tests.conftest import commit_file, run_git
 from tests.services.runloop.conftest import LoopFactory, ManualClock, Transcripts
 
@@ -57,7 +58,7 @@ def test_existing_notes_files_keep_their_bytes(
     make_loop: LoopFactory, transcripts: Transcripts, clock: ManualClock, repo: Path
 ) -> None:
     progress = "# Our log\n\nKept *exactly*  as is.\n"
-    decisions = "# Why\n\n1. Because.\n"
+    decisions = "# Why\n\nNone yet.\n"  # no entries, so nothing to convert
     claude = "# Rules\n"
     commit_file(repo, "PROGRESS.md", progress, "progress")
     commit_file(repo, "DECISIONS.md", decisions, "decisions")
@@ -178,3 +179,75 @@ def loop_prompts(loop: RunLoop) -> list[str]:
     """The prompts the implementer got, oldest first."""
     implementer = loop.agents.implementer
     return [call[0] for call in implementer.calls]  # type: ignore[attr-defined]
+
+
+@pytest.mark.integration
+def test_a_file_over_the_line_limit_fails_the_gates_and_goes_back(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    clock: ManualClock,
+    registry: RunRegistry,
+    repo: Path,
+) -> None:
+    big = "".join(f"x{i} = {i}\n" for i in range(600))
+    too_long = transcripts.implement({"big.py": big})
+    split = transcripts.implement({"big.py": "x = 1\n"})
+    loop = merge_one(make_loop, transcripts, clock, too_long, split)
+    message = "big.py: 600 lines, over the 500-line limit"
+    status, _, attempts = outcome(registry)
+    assert (status, attempts) == (
+        RunStatus.DONE,
+        [("initial", "gates_failed"), ("gate_retry", "approved")],
+    )
+    assert message in loop_prompts(loop)[1]
+    log = registry.get("demo").run_log
+    first = log.list_attempts(log.list_runs()[0].id)[0]
+    gates = json.loads((attempt_dir(first.workspace, first) / "gates.json").read_text("utf-8"))
+    assert gates["results"][-1]["name"] == "file_size"
+    assert gates["failures"][-1]["output_excerpt"] == message
+
+
+@pytest.mark.integration
+def test_a_flat_project_is_converted_on_its_first_merge(
+    make_loop: LoopFactory, transcripts: Transcripts, clock: ManualClock, repo: Path
+) -> None:
+    flat = "# Why\n\n1. **Plain SQL**: no ORM.\n2. **UTC**\n   Always.\n- **Tabs**: never.\n"
+    commit_file(repo, "DECISIONS.md", flat, "flat decisions")
+    commit_file(repo, "PROGRESS.md", "# Log\n\n## T00\n\nOld.\n", "flat progress")
+    decision = [{"area": "api", "title": "Plural routes", "text": "Why."}]
+    merge_one(make_loop, transcripts, clock, transcripts.implement(decisions=decision))
+    assert show(repo, "DECISIONS.md").decode("utf-8") == (
+        "# Why\n\n"
+        "001 · Plain SQL · docs/decisions/general.md\n"
+        "002 · UTC · docs/decisions/general.md\n"
+        "003 · Tabs · docs/decisions/general.md\n"
+        "004 · Plural routes · docs/decisions/api.md\n"
+    )
+    assert show(repo, "docs/decisions/general.md").decode("utf-8") == (
+        "# Decisions · general\n\n001. **Plain SQL**: no ORM.\n\n002. **UTC**\n   Always.\n\n"
+        "003. **Tabs**: never.\n"
+    )
+    progress = show(repo, "PROGRESS.md").decode("utf-8")
+    assert progress.startswith(f"# Log\n\n## T00\n\nOld.\n\n{START}\n\n### T01 ")
+    body = run_git(repo, "log", "-1", "--format=%B", "main")
+    assert "- PROGRESS.md: added the spoolhq:recent markers at the end\n" in body
+    assert "- DECISIONS.md: moved 3 entries word for word to docs/decisions/general.md" in body
+
+
+@pytest.mark.integration
+def test_an_unparseable_flat_file_blocks_and_changes_nothing(
+    make_loop: LoopFactory,
+    transcripts: Transcripts,
+    clock: ManualClock,
+    registry: RunRegistry,
+    repo: Path,
+) -> None:
+    commit_file(repo, "DECISIONS.md", "# Why\n\n1. **A** x\nStray text.\n", "flat")
+    main = run_git(repo, "rev-parse", "main")
+    merge_one(make_loop, transcripts, clock)
+    status, reason, _ = outcome(registry)
+    assert status is RunStatus.BLOCKED
+    assert (
+        reason == "DECISIONS.md couldn't be converted: line 4 isn't part of an entry: Stray text."
+    )
+    assert run_git(repo, "rev-parse", "main") == main

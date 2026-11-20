@@ -20,7 +20,12 @@ from pydantic import (
 )
 
 from spoolhq.services.agents import READ_ONLY_SHELL, AgentRunner, backend_names, make_runner
-from spoolhq.services.gates import DEFAULT_TIMEOUTS, check_gate_command
+from spoolhq.services.gates import (
+    DEFAULT_EXEMPT,
+    DEFAULT_MAX_FILE_LINES,
+    DEFAULT_TIMEOUTS,
+    check_gate_command,
+)
 from spoolhq.services.git import (
     GitError,
     github_repo,
@@ -269,6 +274,10 @@ class GateTimeouts(_Strict):
 
 class GatesSettings(_Strict):
     timeouts: GateTimeouts = Field(default_factory=GateTimeouts)
+    max_file_lines: int = Field(default=DEFAULT_MAX_FILE_LINES, ge=0, le=1_000_000)
+    """The file-size gate's limit for files a ticket adds or changes; 0 turns it off."""
+    max_file_lines_exempt: list[PathPattern] = Field(default_factory=lambda: list(DEFAULT_EXEMPT))
+    """Globs the file-size gate skips; replaces the default list."""
 
 
 class RunSettings(_Strict):

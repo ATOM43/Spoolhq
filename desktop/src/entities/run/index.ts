@@ -20,6 +20,7 @@ export { useRunHistory, type RunRow } from "./model/history";
 export { runOutcome } from "./model/outcome";
 export { Outcome } from "./ui/Outcome";
 export {
+  gateLabel,
   useArtifact,
   type DiffFile,
   type DiffReport,

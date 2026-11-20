@@ -1,4 +1,4 @@
-import type { GatesReport, ReviewReport } from "@/entities/run";
+import { gateLabel, type GatesReport, type ReviewReport } from "@/entities/run";
 import type { TicketAttempt, TicketDetail } from "@/entities/ticket";
 
 /** The latest run's last attempt, which the blocked reason is about. */
@@ -40,7 +40,8 @@ export function gatesLine(report: GatesReport | null): {
   const failed = ran
     .filter((r) => r.state !== "passed")
     .map(
-      (r) => `${r.name} ${r.state === "timed_out" ? "timed out" : "failed"}`,
+      (r) =>
+        `${gateLabel(r.name)} ${r.state === "timed_out" ? "timed out" : "failed"}`,
     );
   return {
     tone: failed.length > 0 ? "failed" : "passed",

@@ -46,7 +46,15 @@ from spoolhq.services.git import (
     tracked_in,
     unstage,
 )
-from spoolhq.services.notes import Decision, NotesError, RunNote, notes_problems, write_notes
+from spoolhq.services.notes import (
+    ConversionError,
+    Decision,
+    NotesError,
+    RunNote,
+    convert_notes,
+    notes_problems,
+    write_notes,
+)
 from spoolhq.services.projects import Project
 from spoolhq.services.runloop.approval import approval_message, decide
 from spoolhq.services.runloop.integrator import IntegrationResult, IntegrationStatus
@@ -301,11 +309,12 @@ class LocalIntegrator:
             reason = approval_message(ctx, describe(policy.get("rules", [])))
             return _result(IntegrationStatus.HELD, f"{tid} {reason}")
         ctx.step("integrate", "running")
-        if problem := self._write_notes(ctx):
+        problem, converted = self._write_notes(ctx)
+        if problem:
             self._abandon(ctx, journal, restore=True)
             return _result(IntegrationStatus.FAILED, problem)
         note, title = ctx.run.progress_note, ctx.ticket.meta.title
-        sha = commit_staged(path, commit_message(tid, title, note, ctx.run.id))
+        sha = commit_staged(path, commit_message(tid, title, note, ctx.run.id, converted))
         journal = self._state(ctx, journal, IntegrationState.COMMITTED, sha)
         return self._deliver(ctx, journal, sha, main_sha, mode)
 
@@ -350,21 +359,25 @@ class LocalIntegrator:
         ctx.run = ctx.run_log.get_run(ctx.run.id)
         return _result(IntegrationStatus.MERGED, f"{sha[:7]} · {tag_name(tid)}")
 
-    def _write_notes(self, ctx: RunContext) -> str | None:
-        """Write the run note into the notes files in the worktree, stage them and check
-        them (``services/notes``); why the ticket is blocked, or None."""
+    def _write_notes(self, ctx: RunContext) -> tuple[str | None, list[str]]:
+        """Convert old flat notes, write the run note into the notes files in the
+        worktree, stage them and check them (``services/notes``): why the ticket is
+        blocked (or None) and what the conversion changed, for the commit body."""
         path, run = ctx.worktree.path, ctx.run
         decisions = tuple(Decision(**item) for item in run.decisions or [])
         note = RunNote(run.progress_note or NO_PROGRESS, decisions)
         merged_on = self.clock().astimezone(UTC).date()
         try:
+            converted, changes = convert_notes(path)
             files = write_notes(path, ctx.ticket_id, ctx.ticket.meta.title, note, merged_on)
+        except ConversionError as exc:
+            return str(exc), []
         except NotesError as exc:
-            return f"The notes files don't match: {exc}"
-        for file in files:
+            return f"The notes files don't match: {exc}", []
+        for file in dict.fromkeys([*converted, *files]):
             stage(path, file)
         problems = notes_problems(path)
-        return f"The notes files don't match: {problems[0]}" if problems else None
+        return (f"The notes files don't match: {problems[0]}" if problems else None), changes
 
 
 # --- recovery -------------------------------------------------------------------------

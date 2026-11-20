@@ -96,8 +96,11 @@ def _clean_line(text: str) -> str:
     return " ".join("".join(chars).split())
 
 
-def commit_message(ticket_id: str, title: str, note: str | None, run_id: int) -> str:
-    """``T04: <title>``, the progress note wrapped at 72, then the two trailers.
+def commit_message(
+    ticket_id: str, title: str, note: str | None, run_id: int, details: Sequence[str] = ()
+) -> str:
+    """``T04: <title>``, the progress note wrapped at 72, ``details`` as a list (what
+    SpoolHQ changed besides, such as converted notes files), then the two trailers.
 
     The title is untrusted: one line, control characters removed, the subject cut to
     72 characters.
@@ -106,6 +109,8 @@ def commit_message(ticket_id: str, title: str, note: str | None, run_id: int) ->
     parts = [subject]
     if note and (body := _clean_line(note)):
         parts.append(textwrap.fill(body, BODY_WIDTH, break_long_words=False))
+    if details:
+        parts.append("\n".join(f"- {line}" for line in details))
     parts.append(f"SpoolHQ-Ticket: {ticket_id}\nSpoolHQ-Run: {run_id}")
     return "\n\n".join(parts) + "\n"
 

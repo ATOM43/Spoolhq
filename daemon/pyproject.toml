@@ -219,7 +219,7 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "services.templates imports only projects, gates and git"
+name = "services.templates imports only projects, gates, git and notes"
 type = "forbidden"
 source_modules = ["spoolhq.services.templates"]
 # agents is not listed: projects uses its backend registry to validate project.yaml.

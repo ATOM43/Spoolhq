@@ -117,17 +117,6 @@ def test_text_inside_the_markers_before_the_entries_is_kept(tmp_path: Path) -> N
     assert text == f"{START}\n\nSee below.\n\n{entry(1)}\n{END}\n"
 
 
-def test_a_flat_decisions_file_gets_the_entry_appended(tmp_path: Path) -> None:
-    flat = "# Decisions\n\n1. **First.** Because.\n2. **Second.** Also.\n"
-    (tmp_path / "DECISIONS.md").write_text(flat, encoding="utf-8")
-    written = merge(tmp_path, 3, Decision("api", "Third", "Why.\nMore."))
-    assert written == ["PROGRESS.md", "DECISIONS.md"]
-    assert (tmp_path / "DECISIONS.md").read_text(encoding="utf-8") == (
-        flat + "\n003. Third\n    Why.\n    More.\n"
-    )
-    assert not (tmp_path / "docs").exists()
-
-
 def test_without_decisions_an_existing_decisions_file_is_not_touched(tmp_path: Path) -> None:
     (tmp_path / "DECISIONS.md").write_bytes(b"# Why\n\n1. Because.")
     assert merge(tmp_path, 1) == ["PROGRESS.md"]

@@ -84,7 +84,7 @@ It runs the [creation job](api.md#creating-a-project), the same one as the app: 
 spool templates check <source> [--ref REF]
 ```
 
-Generates the template into a temp folder (project name: the template's `name`), runs `git init` and stages the files (no commit, so no identity is needed), then runs the declared `install`, `lint` and `test` as [gates](gates.md), with the default timeouts. It prints the log folder, the source, each gate like `spool gates run` (and the failures' excerpts), and `template '<name>' passes its contract (<seconds> s)`. Exit 0 only when all three pass. The temp folder is removed afterwards; the logs stay.
+Generates the template into a temp folder (project name: the template's `name`), runs `git init` and stages the files (no commit, so no identity is needed), then runs the declared `install`, `lint` and `test` as [gates](gates.md), with the default timeouts, and then the [notes check](integration.md#notes-files) a merge runs (`notes_problems`), so a freshly generated project is known to pass it before any ticket runs. It prints the log folder, the source, each gate like `spool gates run` (and the failures' excerpts), each notes problem as `notes: <problem>`, and `template '<name>' passes its contract (<seconds> s)`. Exit 0 only when all three gates and the notes check pass. The temp folder is removed afterwards; the logs stay.
 
 The built-in templates are checked in SpoolHQ's CI on Linux, macOS and Windows (`daemon/tests/services/templates/test_fastapi_react.py`).
 
@@ -95,11 +95,24 @@ The built-in templates are checked in SpoolHQ's CI on Linux, macOS and Windows (
 3. Add `{{_copier_conf.answers_file}}.jinja` containing `{{ _copier_answers|to_nice_yaml -}}`, so the answers file is written.
 4. Set `_exclude` to keep `spoolhq-template.yaml` out of the project. `_exclude` replaces Copier's defaults, so repeat them (`copier.yml`, `~*`, `*.py[co]`, `__pycache__`, `.git`, `.DS_Store`).
 5. No `_tasks`, `_migrations` or `_jinja_extensions`. Lockfiles belong in the template, so `install` can run locked.
-6. Write `spoolhq-template.yaml`. Make the description say what exists and where new work goes: the planner treats the template's setup as done.
-7. Run `spool templates check <folder>` until it passes.
+6. Start the [notes layout](#the-notes-layout): `PROGRESS.md` with the empty markers, a `DECISIONS.md` index header, `docs/decisions/.gitkeep`, and a `CLAUDE.md` with rules only.
+7. Write `spoolhq-template.yaml`. Make the description say what exists and where new work goes: the planner treats the template's setup as done.
+8. Run `spool templates check <folder>` until it passes.
+
+## The notes layout
+
+A generated project starts in the split layout SpoolHQ writes at each merge ([notes files](integration.md#notes-files)), so its first merge has nothing to convert:
+
+- `PROGRESS.md`: a `# Progress` title, a short `## What exists` summary for people to keep up to date, then the empty `<!-- spoolhq:recent:start -->` and `<!-- spoolhq:recent:end -->` markers SpoolHQ puts entries between.
+- `DECISIONS.md`: the index header (what the index is and that SpoolHQ adds the lines), no entries. Keep lines in it from starting with `N. `, `- ` or `* `, or the first merge would read them as old flat entries.
+- `docs/decisions/.gitkeep`, so the folder exists before the first decision.
+- `CLAUDE.md`: rules only. It says progress and decisions go in the run note, never into the notes files.
+- `project.yaml` (written by SpoolHQ, not the template) lists every setting with its default, including `notes.decision_areas` and `gates.max_file_lines`.
+
+A template keeps its own line check if it has one; SpoolHQ's built-in [file-size gate](gates.md#file-size) runs in every project anyway.
 
 A built-in template also goes in `daemon/src/spoolhq/templates/<name>/`; that folder is excluded from SpoolHQ's own ruff and mypy (it has its own lint setup).
 
 ## `fastapi-react`
 
-The first built-in: a FastAPI backend (`backend/`: SQLAlchemy 2 on SQLite, Alembic, pytest with an 80% coverage floor, ruff with `S`, mypy strict, `app/api` on top of `app/services/<domain>` on top of `app/core`, enforced by import-linter) and a React frontend (`frontend/`: Vite, strict TypeScript, Vitest and Testing Library, ESLint and Prettier, Feature-Sliced Design enforced by eslint-plugin-boundaries), with an example `items` domain through every layer, a justfile (`install`, `dev`, `lint` with a 500-line check, `test`), GitHub Actions CI, `CLAUDE.md`, `PROGRESS.md` and `DECISIONS.md`. The generated project's `README.md` describes its structure. Every dependency is pinned, in `backend/pyproject.toml` and `uv.lock` and in `frontend/package.json` and `pnpm-lock.yaml`.
+The first built-in: a FastAPI backend (`backend/`: SQLAlchemy 2 on SQLite, Alembic, pytest with an 80% coverage floor, ruff with `S`, mypy strict, `app/api` on top of `app/services/<domain>` on top of `app/core`, enforced by import-linter) and a React frontend (`frontend/`: Vite, strict TypeScript, Vitest and Testing Library, ESLint and Prettier, Feature-Sliced Design enforced by eslint-plugin-boundaries), with an example `items` domain through every layer, a justfile (`install`, `dev`, `lint` with a 500-line check on `backend/app`, `backend/migrations` and `frontend/src`, tests exempt, `test`), GitHub Actions CI, and the [notes layout](#the-notes-layout). The generated project's `README.md` describes its structure. Every dependency is pinned, in `backend/pyproject.toml` and `uv.lock` and in `frontend/package.json` and `pnpm-lock.yaml`.

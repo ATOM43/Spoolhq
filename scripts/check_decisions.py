@@ -1,9 +1,12 @@
-"""Fail when DECISIONS.md (the index) and docs/decisions/*.md (the entries) disagree.
+"""Fail when DECISIONS.md (the index) and docs/decisions/*.md (the entries) disagree,
+or when PROGRESS.md holds more than 5 recent entries.
 
 Run by `just lint`. Checks that every index number has exactly one entry in the area
 files and the reverse, that numbers run 1..N without gaps or duplicates, that each
 index line names the file its entry is in, and that each index title is the entry's
-bold heading. Standard library only, so it runs before any dependency is installed.
+bold heading. PROGRESS.md's recent entries are its `## ` headings after the "What
+exists" summary; older ones belong in docs/progress-archive.md. Standard library only,
+so it runs before any dependency is installed.
 """
 
 import re
@@ -14,6 +17,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 INDEX_LINE = re.compile(r"(\d{3,}) · (.+) · (docs/decisions/[a-z0-9-]+\.md)")
 ENTRY_LINE = re.compile(r"(\d+)\. \*\*(.+?)\*\*")
+RECENT = 5
+
+
+def progress_problems(root: Path) -> list[str]:
+    lines = (root / "PROGRESS.md").read_text(encoding="utf-8").splitlines()
+    recent = [line for line in lines if line.startswith("## ") and line != "## What exists"]
+    if len(recent) <= RECENT:
+        return []
+    return [
+        f"PROGRESS.md has {len(recent)} recent entries; move the oldest to docs/progress-archive.md"
+    ]
 
 
 def problems(root: Path) -> list[str]:
@@ -62,7 +76,7 @@ def problems(root: Path) -> list[str]:
 
 
 def main() -> int:
-    found = problems(ROOT)
+    found = problems(ROOT) + progress_problems(ROOT)
     for problem in found:
         print(problem, file=sys.stderr)
     return 1 if found else 0

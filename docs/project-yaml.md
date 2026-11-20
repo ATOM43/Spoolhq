@@ -49,6 +49,8 @@ gates:
     install: 600
     lint: 300
     test: 900
+  max_file_lines: 500                         # optional: the file-size gate, 0 = off
+  max_file_lines_exempt: ["**/*.lock", "**/*-lock.*", "**/*.min.*"]   # optional
 run:
   integration: local                          # local | hold
 ```
@@ -84,6 +86,8 @@ run:
 | `context.code_map_chars` | no | `8000` | Whole number from 0 to 100,000: the cap on the Graphify code map in the implementer's and planner's prompts; `0` leaves it out and never runs Graphify ([code graph](codegraph.md)). |
 | `notes.decision_areas` | no | `[general, api, data, ui, infra, testing]` | 1 to 30 unique names, each 1–40 lowercase letters, digits or hyphens, starting with a letter or digit. The implementer picks one per decision; each area is a file `docs/decisions/<area>.md` ([notes files](integration.md#notes-files)). |
 | `gates.timeouts.install`, `gates.timeouts.lint`, `gates.timeouts.test` | no | `600`, `300`, `900` | Whole number of seconds from 10 to 7,200. When it passes, the gate's whole process tree is stopped ([gates](gates.md#timeouts)). |
+| `gates.max_file_lines` | no | `500` | Whole number from 0 to 1,000,000: no text file a ticket adds or changes may end up longer, unless it was already longer before the ticket and didn't grow ([file size](gates.md#file-size)). `0` turns the gate off. |
+| `gates.max_file_lines_exempt` | no | `["**/*.lock", "**/*-lock.*", "**/*.min.*"]` | Repo-relative globs the file-size gate skips (lockfiles and minified files by default); replaces the default list, so repeat what you want to keep. `**/` also matches at the top level. |
 | `run.integration` | no | `local` | `local` merges each approved ticket into the default branch as one commit ([integration](integration.md)); `hold` keeps every ticket in `awaiting_approval` until `spool run approve` (the merge policy's `hold_mode` rule). |
 | `tracker.kind` | no | `clickup` | Only `clickup` for now. |
 | `tracker.list_id` | when `tracker` is set | | Non-empty string; quote it (`"901"`) if it is all digits. |

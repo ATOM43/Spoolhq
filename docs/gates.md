@@ -21,7 +21,25 @@ Each gate gets a `GateResult`: `name`, `command`, `status`, `exit_code`, `durati
 | `skipped` | Install didn't pass. |
 | `error` | The program wasn't found or couldn't start; `excerpt` holds the message. |
 
-`GateRun` holds the three results, `passed` (all passed) and `first_failure` (the first gate that failed, timed out or errored). `to_gate_failures()` returns the failed and timed-out gates as plain dicts with the fields of T10's `GateFailure` (`command`, `exit_code`, `timed_out`, `output_excerpt`). Two runs on the same worktree give equal results apart from `duration_s`.
+`GateRun` holds the results (in a run, the three plus [file size](#file-size)), `passed` (all passed) and `first_failure` (the first gate that failed, timed out or errored). `to_gate_failures()` returns the failed and timed-out gates as plain dicts with the fields of T10's `GateFailure` (`command`, `exit_code`, `timed_out`, `output_excerpt`). Two runs on the same worktree give equal results apart from `duration_s`.
+
+## File size
+
+After install, lint and test, the run loop adds a built-in fourth gate, `file_size` ("File size" in the app's Gates panel), so a size limit holds in every project, including existing repos without a line check of their own. It is code, not a command: `check_file_sizes` in `services/gates/size.py`, given each file the ticket added, changed or renamed with its content before the ticket (the run loop's `changed_files` in `services/runloop/guards.py` reads them with git, since the gates package imports no other service). "Before" is the merge base with the default branch, so a merge of main into the ticket's branch never counts as the ticket's change.
+
+- The limit is `gates.max_file_lines` in [`project.yaml`](project-yaml.md) (default 500; `0` turns it off and the row shows `skipped`).
+- Lines are counted like SpoolHQ's own `scripts/check_line_limit.py`: `len(text.splitlines())` of the file read as UTF-8.
+- A file at most at the limit passes. A longer one fails, unless it was already longer before the ticket and didn't grow: shrinking or keeping its length is fine.
+- Skipped: files with a NUL byte (binary), symlinks, deleted files and anything matching `gates.max_file_lines_exempt` (default `**/*.lock`, `**/*-lock.*`, `**/*.min.*`).
+
+Its command reads `max 500 lines per file`, and a failure lists every file, one per line:
+
+```text
+src/big.py: 612 lines, over the 500-line limit
+src/old.py grew from 640 to 655 lines; it was already over the limit
+```
+
+A failure goes back to the implementer like any gate failure ("The file-size gate (max 500 lines per file) failed:" and the list in the retry prompt). A template's own line check (the `fastapi-react` justfile's `check_line_limit.py`) stays and runs as part of `lint`. `spool gates run` and the template contract check run only the three commands.
 
 ## No shell
 

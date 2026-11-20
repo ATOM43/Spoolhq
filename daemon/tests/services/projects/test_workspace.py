@@ -729,3 +729,21 @@ def test_bad_decision_areas_are_refused(projects_dir: Path, git_repo: Path) -> N
     ]
     data["notes"] = {"decision_areas": []}
     assert errors_for(projects_dir, data)[0].startswith("project.yaml: notes.decision_areas: ")
+
+
+def test_file_size_gate_settings(projects_dir: Path, git_repo: Path) -> None:
+    data = valid_data(git_repo)
+    write_project(projects_dir, data)
+    gates = load_project("demo", projects_dir=projects_dir).gates
+    assert gates.max_file_lines == 500
+    assert gates.max_file_lines_exempt == ["**/*.lock", "**/*-lock.*", "**/*.min.*"]
+    data["gates"] = {"max_file_lines": 0, "max_file_lines_exempt": ["gen/**"]}
+    write_project(projects_dir, data)
+    gates = load_project("demo", projects_dir=projects_dir).gates
+    assert (gates.max_file_lines, gates.max_file_lines_exempt) == (0, ["gen/**"])
+    data["gates"] = {"max_file_lines": -1}
+    assert errors_for(projects_dir, data)[0].startswith("project.yaml: gates.max_file_lines: ")
+    data["gates"] = {"max_file_lines_exempt": ["../x"]}
+    assert errors_for(projects_dir, data)[0].startswith(
+        "project.yaml: gates.max_file_lines_exempt[0]: "
+    )

@@ -3,6 +3,7 @@
 ``run_gates`` runs them in order without a shell, in a scrubbed environment, with a
 timeout that stops the whole process tree, streams each one's output to a capped log
 and returns structured results with a trimmed excerpt and the failing test names.
+``check_file_sizes`` is the built-in file-size gate the run loop adds after them.
 ``try_command`` runs one command once, for the app's **Test** button.
 ``check_done_when`` maps "Done when" items naming a configured command to its gate.
 This package imports no other service. See ``docs/gates.md``.
@@ -30,8 +31,22 @@ from spoolhq.services.gates.runner import (
     run_gates,
     try_command,
 )
+from spoolhq.services.gates.size import (
+    DEFAULT_EXEMPT,
+    DEFAULT_MAX_FILE_LINES,
+    FILE_SIZE,
+    check_file_sizes,
+    count_lines,
+    is_exempt,
+)
 
 __all__ = [
+    "DEFAULT_EXEMPT",
+    "DEFAULT_MAX_FILE_LINES",
+    "FILE_SIZE",
+    "check_file_sizes",
+    "count_lines",
+    "is_exempt",
     "DEFAULT_TIMEOUTS",
     "GATE_NAMES",
     "SHELL_SYNTAX_ERROR",

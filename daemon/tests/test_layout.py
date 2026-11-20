@@ -124,3 +124,25 @@ def test_a_rust_file_over_the_limit_fails(tmp_path: Path) -> None:
     (folder / "long.rs").write_text("fn a() {}\n" * 501, encoding="utf-8")
     found = _script("check_line_limit").oversized(tmp_path)
     assert found == [("desktop/src-tauri/src/long.rs", 501)]
+
+
+def _progress(root: Path, entries: int) -> Path:
+    body = "".join(f"## Entry {n}\n\nDone.\n\n" for n in range(entries))
+    (root / "PROGRESS.md").write_text(
+        f"# Progress\n\n## What exists\n\nStuff.\n\n{body}", encoding="utf-8"
+    )
+    return root
+
+
+def test_the_repo_progress_holds_at_most_five_recent_entries() -> None:
+    assert _check_decisions().progress_problems(TESTS_DIR.parents[1]) == []
+
+
+def test_five_recent_progress_entries_pass(tmp_path: Path) -> None:
+    assert _check_decisions().progress_problems(_progress(tmp_path, 5)) == []
+
+
+def test_six_recent_progress_entries_fail(tmp_path: Path) -> None:
+    assert _check_decisions().progress_problems(_progress(tmp_path, 6)) == [
+        "PROGRESS.md has 6 recent entries; move the oldest to docs/progress-archive.md"
+    ]

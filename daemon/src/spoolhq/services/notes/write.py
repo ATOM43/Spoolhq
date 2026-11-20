@@ -2,9 +2,9 @@
 
 ``PROGRESS.md``: the newest entries sit between the ``spoolhq:recent`` markers, newest
 first; a sixth is moved, word for word, to the end of ``docs/progress-archive.md``.
-Nothing outside the markers is rewritten. Decisions: with ``DECISIONS.md`` missing or an
-index (split layout), each goes to ``docs/decisions/<area>.md`` as ``NNN. title`` with
-its text indented, plus an index line; a flat ``DECISIONS.md`` gets the entry appended.
+Nothing outside the markers is rewritten. Decisions: each goes to
+``docs/decisions/<area>.md`` as ``NNN. title`` with its text indented, plus an index line
+in ``DECISIONS.md`` (a flat one is converted first, ``convert.py``).
 Files are read and written as bytes (``surrogateescape``), so undecodable bytes and line
 endings survive. See ``docs/integration.md``.
 """
@@ -47,7 +47,7 @@ def read_note_file(repo: Path, rel: str) -> str | None:
     return path.read_bytes().decode("utf-8", "surrogateescape") if path.is_file() else None
 
 
-def _write(repo: Path, rel: str, text: str) -> None:
+def write_note_file(repo: Path, rel: str, text: str) -> None:
     path = _target(repo, rel)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(text.encode("utf-8", "surrogateescape"))
@@ -80,13 +80,13 @@ def _progress(repo: Path, entry: str) -> list[str]:
     entries.insert(0, entry)
     kept, moved = entries[:RECENT], entries[RECENT:]
     managed = "\n".join([*head, *kept])
-    _write(
+    write_note_file(
         repo, PROGRESS, "".join(lines[: first + 1]) + "\n" + managed + "\n" + "".join(lines[last:])
     )
     if not moved:
         return [PROGRESS]
     archive = read_note_file(repo, ARCHIVE) or _ARCHIVE_HEADING
-    _write(repo, ARCHIVE, _append(archive, "".join(f"\n{old}" for old in reversed(moved))))
+    write_note_file(repo, ARCHIVE, _append(archive, "".join(f"\n{old}" for old in reversed(moved))))
     return [PROGRESS, ARCHIVE]
 
 
@@ -111,23 +111,17 @@ def _decisions(repo: Path, decisions: tuple[Decision, ...]) -> list[str]:
     text = read_note_file(repo, DECISIONS)
     written = [DECISIONS] if text is None else []
     text = _DECISIONS_HEADING if text is None else text
-    lines = text.splitlines()
-    index = [int(m[1]) for line in lines if (m := INDEX_LINE.fullmatch(line.strip()))]
-    flat = [int(m[1]) for line in lines if (m := ENTRY_LINE.match(line))]
-    split = bool(index) or not flat
-    number = max(index if split else flat, default=0)
+    index = [int(m[1]) for line in text.splitlines() if (m := INDEX_LINE.fullmatch(line.strip()))]
+    number = max(index, default=0)
     for decision in decisions:
         number += 1
-        if not split:
-            text = _append(text, "\n" + _entry(number, decision))
-            continue
         rel = f"{DECISIONS_DIR}/{decision.area}.md"
         area = read_note_file(repo, rel) or f"# Decisions · {decision.area}\n"
-        _write(repo, rel, _append(area, "\n" + _entry(number, decision)))
+        write_note_file(repo, rel, _append(area, "\n" + _entry(number, decision)))
         last = next((line for line in reversed(text.splitlines()) if line.strip()), "")
         gap = "" if INDEX_LINE.fullmatch(last.strip()) else "\n"
         text = _append(text, f"{gap}{number:03d} · {decision.title} · {rel}\n")
         written.append(rel)
     if decisions or written:
-        _write(repo, DECISIONS, text)
+        write_note_file(repo, DECISIONS, text)
     return list(dict.fromkeys([*written, DECISIONS] if decisions else written))

@@ -69,8 +69,10 @@ def check_command(
     except TemplateError as exc:
         fail("\n".join(f"error: {line}" for line in str(exc).splitlines()))
     print_run(result.run)
-    verdict = "passes" if result.run.passed else "fails"
+    for problem in result.notes:
+        typer.echo(f"notes: {problem}")
+    verdict = "passes" if result.passed else "fails"
     elapsed = time.monotonic() - started
     typer.echo(f"template '{result.contract.name}' {verdict} its contract ({elapsed:.0f} s)")
-    if not result.run.passed:
+    if not result.passed:
         raise typer.Exit(code=1)

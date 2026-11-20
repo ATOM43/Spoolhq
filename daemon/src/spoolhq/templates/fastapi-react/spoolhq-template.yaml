@@ -13,8 +13,9 @@ description: >
   eslint-plugin-boundaries. An example "items" domain runs through every layer:
   model, migration, service, router, entity, feature, widget, page and tests; GET
   /api/health exists. The justfile has install, dev, lint (including a 500-line limit
-  on source files) and test; CI runs them on GitHub Actions. CLAUDE.md, PROGRESS.md
-  and DECISIONS.md exist. Build new work as new domains and slices following the items
+  on source files) and test; CI runs them on GitHub Actions. CLAUDE.md holds the rules;
+  PROGRESS.md (a summary plus SpoolHQ's recent entries), the DECISIONS.md index and
+  docs/decisions/ are written by SpoolHQ at each merge. Build new work as new domains and slices following the items
   example; remove or replace the items example when the spec has no use for it.
 commands:
   install: just install

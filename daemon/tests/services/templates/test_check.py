@@ -43,3 +43,12 @@ def test_an_invalid_contract_runs_nothing(tmp_path: Path) -> None:
     with pytest.raises(TemplateError, match="has no 'install' command"):
         check_template(str(template), log_dir=tmp_path / "logs")
     assert not (tmp_path / "logs").exists()
+
+
+def test_notes_files_that_dont_match_fail_the_check(tmp_path: Path) -> None:
+    files = {"DECISIONS.md": "# Decisions\n\n001 · Gone · docs/decisions/general.md\n"}
+    template = make_template(tmp_path / "tpl", files=files)
+    result = check_template(str(template), log_dir=tmp_path / "logs")
+    assert result.run.passed
+    assert result.notes == ("DECISIONS.md: 1 has no entry in docs/decisions/",)
+    assert not result.passed

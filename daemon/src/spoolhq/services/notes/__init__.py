@@ -3,11 +3,13 @@
 ``parse_run_note`` reads and cleans the agent's ``<run-note>`` block; ``write_notes``
 puts a merged ticket's progress entry and decisions into ``PROGRESS.md``, the archive,
 ``DECISIONS.md`` and ``docs/decisions/``; ``notes_problems`` checks that the index and
-the area files agree. Agents never write these files (``is_notes_path``). This package
+the area files agree; ``convert_notes`` turns an old flat ``DECISIONS.md`` into that
+layout first. Agents never write these files (``is_notes_path``). This package
 imports no other service. See ``docs/integration.md``.
 """
 
 from spoolhq.services.notes.check import notes_problems
+from spoolhq.services.notes.convert import ConversionError, convert_notes
 from spoolhq.services.notes.note import (
     NO_NOTE,
     Decision,
@@ -42,12 +44,14 @@ __all__ = [
     "NO_NOTE",
     "PROGRESS",
     "START",
+    "ConversionError",
     "Decision",
     "NotesError",
     "RunNote",
     "RunNoteError",
     "clean_text",
     "clean_title",
+    "convert_notes",
     "is_notes_path",
     "notes_problems",
     "parse_run_note",
