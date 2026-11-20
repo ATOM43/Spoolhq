@@ -2,7 +2,7 @@ import type { ProjectDetail } from "@/entities/project";
 import type { CurrentRun } from "@/entities/run";
 import { formatTokens, formatUsage as formatProjectUsage } from "@/shared/lib";
 
-export type Tab = "spec" | "tickets" | "run";
+export type Tab = "spec" | "tickets" | "run" | "settings";
 
 /** One row of the screens spec's section 8 table: what the header offers, and where a
  * project opens. */

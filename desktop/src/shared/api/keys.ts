@@ -18,6 +18,8 @@ export const queryKeys = {
   version: ["version"] as const,
   // Not under ["projects"], so run events don't refetch the spec while it is edited.
   spec: (project: string) => ["spec", project] as const,
+  // Not under ["projects"] either, so run events don't reset the Settings tab's form.
+  projectSettings: (project: string) => ["project-settings", project] as const,
   templates: ["templates"] as const,
   job: (id: string) => ["jobs", id] as const,
   draftJob: (project: string, id: string) =>

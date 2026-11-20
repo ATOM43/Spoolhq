@@ -18,6 +18,12 @@ export {
   type SpecFile,
 } from "./model/spec";
 export {
+  loadSettings,
+  saveSettings,
+  useProjectSettings,
+  type SettingsFile,
+} from "./model/settings";
+export {
   projectState,
   settingsErrorLine,
   type ProjectState,

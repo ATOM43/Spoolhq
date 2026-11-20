@@ -101,6 +101,26 @@ describe("Settings", () => {
     vi.mocked(getVersion).mockResolvedValue({ version: "0.3.0" });
   });
 
+  it("stays app-wide: nothing per project, and a pointer to the project's tab", async () => {
+    backends = [backend("claude-code-cli")];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SettingsDialog icon />
+      </QueryClientProvider>,
+    );
+    const gear = screen.getByRole("button", { name: "App settings" });
+    expect(gear).toHaveTextContent("App settings"); // the CSS tooltip
+    await userEvent.click(gear);
+    const dialog = screen.getByRole("dialog", { name: "Settings" });
+    expect(
+      await within(dialog).findByText("Set per project in its Settings tab"),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole("combobox")).toBeNull();
+    expect(GET.mock.calls.some(([path]) => path.includes("{name}"))).toBe(
+      false,
+    );
+  });
+
   it("shows a loading state", async () => {
     GET.mockReturnValue(new Promise(() => undefined));
     renderDialog();

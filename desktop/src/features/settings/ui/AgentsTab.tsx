@@ -8,28 +8,14 @@ import {
   TriangleAlert,
 } from "lucide-react";
 
-import { useAgents, type Agents } from "@/entities/agent";
+import {
+  backendLabel as label,
+  useAgents,
+  type Backend,
+} from "@/entities/agent";
 import { Button, EmptyState, ReasonButton } from "@/shared/ui";
 
 import { SET_UP_FIRST, useAgentBlocker } from "../model/queries";
-
-type Backend = Agents["backends"][number];
-
-const LABELS: Record<string, { title: string; login: string }> = {
-  "claude-code-cli": {
-    title: "Claude Code",
-    login: "run `claude` in a terminal to log in",
-  },
-  "codex-cli": { title: "Codex", login: "run `codex login` in a terminal" },
-  "claude-agent-sdk": {
-    title: "Claude Agent SDK",
-    login: "add an Anthropic API key in Accounts",
-  },
-};
-
-function label(name: string) {
-  return LABELS[name] ?? { title: name, login: "log in to it in a terminal" };
-}
 
 /** Amber only when it blocks the user (no backend ready at all); the optional SDK key
  * never does. */
@@ -165,7 +151,7 @@ export function AgentsTab() {
           : "not found"}
       </p>
       <p className="text-xs text-ink-muted">
-        Which backend each project uses is set in its project.yaml.
+        Set per project in its Settings tab
       </p>
       <div>
         <ReasonButton

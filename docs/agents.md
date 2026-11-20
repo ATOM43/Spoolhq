@@ -67,6 +67,10 @@ agents:
 - `base_url` must be http or https, plain http only for `localhost`, `127.0.0.1` and `::1`, with no username or password.
 - For Claude Code, `base_url` becomes `ANTHROPIC_BASE_URL` in the `claude` process's environment and `model` becomes `--model` ([Claude Code environment variables](https://code.claude.com/docs/en/env-vars); `--model` overrides `ANTHROPIC_MODEL`). They are set for that child only; SpoolHQ never writes `~/.claude`, `~/.claude.json` or any other config of the user's. A daemon's own `ANTHROPIC_BASE_URL` is never passed on; without `base_url` and `model`, the command line and environment are as before.
 
+### In the app: the project's Settings tab
+
+The project panel's **Settings** tab (Spec · Tickets · Run · Settings; Home's card menu **Project settings** opens it with `?tab=settings`) edits these keys in the project's `project.yaml` in the workspace, never in the repo. Its Agents section has the default backend, then planner, implementer and reviewer: a backend dropdown ("Use default" first, then the detected backends), an optional model name, and under **Advanced** a base URL. The model and base URL belong to the backend (`agents.backends.<backend>`), so roles on the same backend share them. A backend that isn't installed or logged in is listed but marked, with its reason as a tooltip. **Save** goes through `PUT /api/projects/{name}/settings` with `If-Match`: a 412 shows "project.yaml changed on disk · Reload · Keep mine", a 422 shows the daemon's message next to its field (plain http to a non-local host, for example), and leaving the tab with unsaved changes asks first. The next run uses the saved backends. Other project settings are still edited in `project.yaml`. App Settings stays app-wide: it lists the backends on this machine and says they are set per project.
+
 ### A custom endpoint never gets your login
 
 Without its own credential, an agent CLI pointed at a custom `base_url` would send your subscription login there. So with a `base_url`, SpoolHQ supplies the credential itself:

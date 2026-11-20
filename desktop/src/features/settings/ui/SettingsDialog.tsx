@@ -40,13 +40,13 @@ function Trigger({ icon, onOpen }: { icon: boolean; onOpen: () => void }) {
     <Button
       variant="ghost"
       size="icon-sm"
-      aria-label="Settings"
+      aria-label="App settings"
       className="group relative"
       onClick={onOpen}
     >
       <Settings aria-hidden />
       <span aria-hidden className={TOOLTIP}>
-        Settings
+        App settings
       </span>
     </Button>
   );

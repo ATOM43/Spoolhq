@@ -1,4 +1,11 @@
-import { CircleAlert, FolderOpen, LoaderCircle, RotateCw } from "lucide-react";
+import {
+  CircleAlert,
+  Ellipsis,
+  FolderOpen,
+  LoaderCircle,
+  RotateCw,
+  Settings,
+} from "lucide-react";
 import { Link } from "react-router";
 
 import {
@@ -123,41 +130,67 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
   );
   const active = project.run_state === "running";
   return (
-    <Link
-      to={`/p/${project.name}`}
-      className="flex h-full flex-col gap-3 rounded-lg border bg-surface p-4 outline-none hover:border-ink-muted/40 focus-visible:ring-[3px] focus-visible:ring-accent/50"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate font-semibold">{project.name}</span>
-        <span className="shrink-0 rounded bg-surface-sunken px-1.5 font-mono text-xs text-ink-muted">
-          {project.template ?? "existing repo"}
-        </span>
+    <div className="relative h-full">
+      <Link
+        to={`/p/${project.name}`}
+        className="flex h-full flex-col gap-3 rounded-lg border bg-surface p-4 outline-none hover:border-ink-muted/40 focus-visible:ring-[3px] focus-visible:ring-accent/50"
+      >
+        <div className="flex items-center justify-between gap-2 pr-8">
+          <span className="truncate font-semibold">{project.name}</span>
+          <span className="shrink-0 rounded bg-surface-sunken px-1.5 font-mono text-xs text-ink-muted">
+            {project.template ?? "existing repo"}
+          </span>
+        </div>
+        <ProgressLine
+          done={project.done}
+          total={project.total}
+          remainingH={project.remaining_h}
+        />
+        {problem ? (
+          <p className="truncate text-sm text-danger" title={problem}>
+            {problem}
+          </p>
+        ) : null}
+        <div className="mt-auto flex items-center justify-between gap-2 text-sm">
+          <ProjectStatus project={project} />
+          <span className="shrink-0 text-ink-muted">
+            {[
+              active
+                ? "Active now"
+                : project.last_activity
+                  ? timeAgo(project.last_activity)
+                  : null,
+              usage,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+        </div>
+      </Link>
+      <CardMenu project={project.name} />
+    </div>
+  );
+}
+
+/** The card's ⋯ menu, beside the card's link (a link can't hold another). */
+function CardMenu({ project }: { project: string }) {
+  return (
+    <details className="group absolute top-3 right-3">
+      <summary
+        aria-label={`${project} actions`}
+        className="flex size-7 cursor-pointer list-none items-center justify-center rounded-md text-ink-muted outline-none hover:bg-surface-sunken focus-visible:ring-[3px] focus-visible:ring-accent/50 [&::-webkit-details-marker]:hidden"
+      >
+        <Ellipsis aria-hidden className="size-4" />
+      </summary>
+      <div className="absolute top-full right-0 z-50 mt-1 min-w-44 rounded-md border bg-surface p-1 shadow-md">
+        <Link
+          to={`/p/${project}?tab=settings`}
+          className="flex items-center gap-2 rounded px-2 py-1.5 text-sm outline-none hover:bg-surface-sunken focus-visible:bg-surface-sunken"
+        >
+          <Settings aria-hidden className="size-4" />
+          Project settings
+        </Link>
       </div>
-      <ProgressLine
-        done={project.done}
-        total={project.total}
-        remainingH={project.remaining_h}
-      />
-      {problem ? (
-        <p className="truncate text-sm text-danger" title={problem}>
-          {problem}
-        </p>
-      ) : null}
-      <div className="mt-auto flex items-center justify-between gap-2 text-sm">
-        <ProjectStatus project={project} />
-        <span className="shrink-0 text-ink-muted">
-          {[
-            active
-              ? "Active now"
-              : project.last_activity
-                ? timeAgo(project.last_activity)
-                : null,
-            usage,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </span>
-      </div>
-    </Link>
+    </details>
   );
 }

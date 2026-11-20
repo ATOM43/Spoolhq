@@ -423,3 +423,8 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 417 · Old flat decisions move as they are, only renumbered `NNN.` · docs/decisions/projects-tickets.md
 418 · The template starts split, and its contract check runs the notes check · docs/decisions/projects-tickets.md
 419 · SpoolHQ's lint caps PROGRESS.md at 5 recent entries · docs/decisions/core.md
+420 · The Settings tab edits a model and base URL per backend · docs/decisions/desktop.md
+421 · Keep mine applies the tab's agents onto the disk version · docs/decisions/desktop.md
+422 · The Settings tab isn't kept mounted; leaving it with changes asks · docs/decisions/desktop.md
+423 · A project card's menu is a `<details>` beside its link · docs/decisions/desktop.md
+424 · A project.yaml 422 names its first problem's field · docs/decisions/api.md

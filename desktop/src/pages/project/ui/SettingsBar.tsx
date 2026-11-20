@@ -8,10 +8,13 @@ export function SettingsBar({
   project,
   reloading,
   onReload,
+  onOpenSettings,
 }: {
   project: ProjectDetail;
   reloading: boolean;
   onReload: () => void;
+  /** The Settings tab, where the agents can be fixed. */
+  onOpenSettings: () => void;
 }) {
   const problem = project.settings_error;
   if (!problem) {
@@ -31,9 +34,16 @@ export function SettingsBar({
         <CopyButton text={problem.file} label="Copy settings file path" />
       </span>
       <Button
-        variant="outline"
+        variant="link"
         size="sm"
         className="ml-auto"
+        onClick={onOpenSettings}
+      >
+        Open Settings tab
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
         disabled={reloading}
         onClick={onReload}
       >

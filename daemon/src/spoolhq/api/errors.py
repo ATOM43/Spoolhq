@@ -17,7 +17,7 @@ from starlette.exceptions import HTTPException
 from starlette.responses import JSONResponse
 
 from spoolhq.services.planner import PlanInvalid
-from spoolhq.services.projects import ProjectError, ProjectValidationError
+from spoolhq.services.projects import ProjectError, ProjectValidationError, split_error
 from spoolhq.services.runloop import RunLoopError
 from spoolhq.services.scheduler import (
     PlanProblem,
@@ -87,7 +87,11 @@ def service_errors() -> Iterator[None]:
         raise ApiError(409, "plan_invalid", str(exc), problems=problems) from exc
     except RunLoopError as exc:
         raise ApiError(RUN_LOOP_STATUS.get(exc.code, 409), exc.code, str(exc)) from exc
-    except (ProjectValidationError, TicketValidationError) as exc:
+    except ProjectValidationError as exc:
+        # The first problem's field, so a form can show the message next to it.
+        field = split_error(exc.errors[0])[0] if exc.errors else None
+        raise ApiError(422, "validation_error", "\n".join(exc.errors), field=field) from exc
+    except TicketValidationError as exc:
         raise ApiError(422, "validation_error", "\n".join(exc.errors)) from exc
     except (ProjectError, TicketError) as exc:
         # shortcut: "no project …"/"no ticket …" is how both services say "unknown";

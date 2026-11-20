@@ -170,6 +170,12 @@ describe("project panel", () => {
       if (path === "/api/settings") {
         return ok({ secrets: { anthropic: { set: false, source: null } } });
       }
+      if (path === "/api/projects/{name}/settings") {
+        return Promise.resolve({
+          data: { settings: { name: "demo" } },
+          response: new Response(null, { headers: { ETag: '"e1"' } }),
+        });
+      }
       if (path === "/api/projects/{name}/spec") {
         return ok({ content: "# Objective" });
       }
@@ -286,6 +292,56 @@ describe("project panel", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens the Settings tab from ?tab=settings and asks before leaving with changes", async () => {
+    showPanel("/p/demo?tab=settings");
+    expect(
+      await screen.findByRole("tab", { name: "Settings", selected: true }),
+    ).toBeInTheDocument();
+    await userEvent.type(
+      await screen.findByLabelText("Reviewer model"),
+      "gpt-5",
+    );
+    await userEvent.click(screen.getByRole("tab", { name: "Spec" }));
+    const confirm = screen.getByRole("dialog", {
+      name: "Leave without saving?",
+    });
+    await userEvent.click(
+      within(confirm).getByRole("button", { name: "Keep going" }),
+    );
+    expect(
+      screen.getByRole("tab", { name: "Settings", selected: true }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Spec" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard changes" }),
+    );
+    expect(
+      screen.getByRole("tab", { name: "Spec", selected: true }),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves the Settings tab at once without changes", async () => {
+    showPanel("/p/demo?tab=settings");
+    await screen.findByLabelText("Reviewer model");
+    await userEvent.click(screen.getByRole("tab", { name: "Run" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("tab", { name: "Run", selected: true }),
+    ).toBeInTheDocument();
+  });
+
+  it("links the invalid-settings bar to the Settings tab", async () => {
+    detail = project({ settings_error: PROBLEM });
+    showPanel("/p/demo?tab=spec");
+    const bar = await screen.findByRole("alert");
+    await userEvent.click(
+      within(bar).getByRole("button", { name: "Open Settings tab" }),
+    );
+    expect(
+      screen.getByRole("tab", { name: "Settings", selected: true }),
+    ).toBeInTheDocument();
+  });
+
   it("shows a red bar naming the invalid field, and Reload refetches", async () => {
     detail = project({
       repo: null,
@@ -321,7 +377,7 @@ describe("project panel", () => {
     detail = project({ settings_error: PROBLEM });
     showPanel();
     await screen.findByRole("alert");
-    const gear = screen.getByRole("button", { name: "Settings" });
+    const gear = screen.getByRole("button", { name: "App settings" });
     expect(gear).toBeEnabled();
     await userEvent.click(gear);
     const dialog = screen.getByRole("dialog", { name: "Settings" });

@@ -13,6 +13,7 @@ import { useCurrentRun, useDropRunEvents } from "@/entities/run";
 import { DaemonError } from "@/shared/api";
 import {
   Button,
+  ConfirmDialog,
   EmptyState,
   Tabs,
   TabsContent,
@@ -24,6 +25,7 @@ import {
   DaemonDownPanel,
   DaemonErrorPanel,
 } from "@/widgets/daemon-down-panel";
+import { ProjectSettings } from "@/widgets/project-settings";
 import { SpecEditor } from "@/widgets/spec-editor";
 import { NewTicketDrawer, TicketDrawer } from "@/widgets/ticket-drawer";
 import { TicketList } from "@/widgets/ticket-list";
@@ -35,7 +37,7 @@ import { RunControls } from "./RunControls";
 import { RunTab } from "./RunTab";
 import { SettingsBar } from "./SettingsBar";
 
-/** V2 · Project panel: header with run controls, tabs Spec · Tickets · Run. */
+/** V2 · Project panel: header with run controls, tabs Spec · Tickets · Run · Settings. */
 export function ProjectPage() {
   const { id = "" } = useParams();
   const { status, checking, retry } = useDaemonStatus();
@@ -146,7 +148,7 @@ const TAB_LIST =
   "h-auto w-full justify-start gap-6 rounded-none border-b bg-transparent px-6 py-0";
 const TAB =
   "h-10 flex-none rounded-none border-0 border-b-2 border-transparent px-0 data-[state=active]:border-accent data-[state=active]:bg-transparent data-[state=active]:shadow-none";
-const TABS: readonly Tab[] = ["spec", "tickets", "run"];
+const TABS: readonly Tab[] = ["spec", "tickets", "run", "settings"];
 /** `?ticket=new`: the drawer on a ticket that isn't saved yet. */
 const NEW_TICKET = "new";
 
@@ -212,6 +214,16 @@ function Loaded({
   );
   useDropRunEvents(project.name);
   const [chosen, setChosen] = useState<Tab | null>(asked ?? initialTab);
+  // Leaving the Settings tab with unsaved changes asks first.
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [leaving, setLeaving] = useState<Tab | null>(null);
+  const goTo = (tab: Tab) => {
+    if (chosen === "settings" && tab !== "settings" && settingsDirty) {
+      setLeaving(tab);
+    } else {
+      setChosen(tab);
+    }
+  };
 
   const ready = !current.isPending && !spec.isPending;
   const state = panelState(project, current.data);
@@ -246,11 +258,29 @@ function Loaded({
         project={project}
         reloading={reloading}
         onReload={onReload}
+        onOpenSettings={() => {
+          goTo("settings");
+        }}
+      />
+      <ConfirmDialog
+        open={leaving !== null}
+        title="Leave without saving?"
+        consequence="Your changes to the agent settings are not saved and will be lost."
+        action="Discard changes"
+        destructive
+        onCancel={() => {
+          setLeaving(null);
+        }}
+        onConfirm={() => {
+          setSettingsDirty(false);
+          setChosen(leaving);
+          setLeaving(null);
+        }}
       />
       <Tabs
         value={chosen ?? "spec"}
         onValueChange={(value) => {
-          setChosen(value as Tab);
+          goTo(value as Tab);
         }}
         className="min-h-0 flex-1 gap-0"
       >
@@ -268,6 +298,9 @@ function Loaded({
                 <span className="sr-only"> (live)</span>
               </span>
             ) : null}
+          </TabsTrigger>
+          <TabsTrigger value="settings" className={TAB}>
+            Settings
           </TabsTrigger>
         </TabsList>
         <div className="relative flex min-h-0 flex-1 flex-col">
@@ -312,6 +345,12 @@ function Loaded({
               onShowTickets={() => {
                 setChosen("tickets");
               }}
+            />
+          </TabsContent>
+          <TabsContent value="settings" className="flex min-h-0 flex-col">
+            <ProjectSettings
+              project={project.name}
+              onDirtyChange={setSettingsDirty}
             />
           </TabsContent>
           {ticket === NEW_TICKET ? (

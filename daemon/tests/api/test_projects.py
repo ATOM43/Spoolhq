@@ -1,5 +1,6 @@
 """Project, settings and spec endpoints: listing, creating, and edits with ETags."""
 
+import difflib
 import hashlib
 import subprocess
 from pathlib import Path
@@ -8,8 +9,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from spoolhq.api.routers import projects as projects_router
+from spoolhq.services.agents import FakeRunner
 from spoolhq.services.projects import load_project, save_project
-from tests.conftest import fake_tool_cmd, run_git
+from spoolhq.services.runloop import Agents
+from tests.conftest import REVIEW_FIXTURES, FakeBackend, fake_tool_cmd, run_git
 
 
 def auth(token: str, **headers: str) -> dict[str, str]:
@@ -300,3 +303,55 @@ def test_summary_sums_usage_and_reports_the_latest_activity(
     assert summary["last_activity"] == log.events_since(0)[-1].ts
     assert summary["run"]["ticket_id"] == "T02"
     assert summary["run_step"] == "gates"
+
+
+def test_saving_a_roles_backend_and_model_changes_only_those_keys(
+    run_client: TestClient,
+    token: str,
+    run_project: Path,
+    projects_dir: Path,
+    fake_backend: FakeBackend,
+) -> None:
+    reviewer = fake_backend("fake-b", FakeRunner(REVIEW_FIXTURES / "approve.jsonl"))
+    path = run_project / "project.yaml"
+    path.write_text(f"# my notes\n{path.read_text(encoding='utf-8')}", encoding="utf-8")
+    before = path.read_text(encoding="utf-8").splitlines()
+    got = run_client.get("/api/projects/demo/settings", headers=auth(token))
+    settings = got.json()["settings"]
+    agents = settings.get("agents", {})
+    settings["agents"] = {**agents, "reviewer": "fake-b", "backends": {"fake-b": {"model": "m1"}}}
+
+    saved = run_client.put(
+        "/api/projects/demo/settings",
+        json={"settings": settings},
+        headers=auth(token, **{"If-Match": got.headers["ETag"]}),
+    )
+    assert saved.status_code == 200
+    after = path.read_text(encoding="utf-8").splitlines()
+    removed = [line[2:].strip() for line in difflib.ndiff(before, after) if line.startswith("- ")]
+    added = [line[2:].strip() for line in difflib.ndiff(before, after) if line.startswith("+ ")]
+    assert set(removed) <= {"backends: {}"}  # the one key whose value changed
+    assert {"reviewer: fake-b", "model: m1"} <= set(added)
+    assert set(added) <= {"agents:", "reviewer: fake-b", "backends:", "fake-b:", "model: m1"}
+    # The next run builds its agents from project.yaml: the reviewer is the new backend.
+    project = load_project("demo", projects_dir=projects_dir)
+    assert Agents.for_project(project.agents).reviewer is reviewer
+
+
+def test_plain_http_to_another_host_is_refused_with_its_field(
+    run_client: TestClient, token: str, run_project: Path
+) -> None:
+    path = run_project / "project.yaml"
+    on_disk = path.read_bytes()
+    got = run_client.get("/api/projects/demo/settings", headers=auth(token))
+    settings = got.json()["settings"]
+    settings["agents"] = {"backends": {"codex-cli": {"base_url": "http://example.com"}}}
+    refused = run_client.put(
+        "/api/projects/demo/settings",
+        json={"settings": settings},
+        headers=auth(token, **{"If-Match": got.headers["ETag"]}),
+    )
+    assert refused.status_code == 422
+    assert error(refused)["field"] == "agents.backends.codex-cli.base_url"
+    assert "plain http is allowed only for localhost" in error(refused)["message"]
+    assert path.read_bytes() == on_disk

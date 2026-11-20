@@ -264,6 +264,16 @@ describe("Home", () => {
     expect(await screen.findByText("Project panel")).toBeInTheDocument();
   });
 
+  it("opens a project's Settings tab from its card menu", async () => {
+    projects = [project("alpha")];
+    renderHome();
+    await userEvent.click(await screen.findByLabelText("alpha actions"));
+    const item = screen.getByRole("link", { name: "Project settings" });
+    expect(item).toHaveAttribute("href", "/p/alpha?tab=settings");
+    await userEvent.click(item);
+    expect(await screen.findByText("Project panel")).toBeInTheDocument();
+  });
+
   it("shows Settings invalid with the first error, never Unknown", async () => {
     projects = [
       project("broken", {
