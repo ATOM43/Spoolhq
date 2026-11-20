@@ -42,7 +42,7 @@ def write_project(projects_dir: Path, content: dict[str, Any] | str, name: str =
     # JSON is valid YAML, so data-driven tests can write dicts directly.
     text = content if isinstance(content, str) else json.dumps(content)
     path = folder / "project.yaml"
-    path.write_text(text, encoding="utf-8")
+    path.write_text(text, encoding="utf-8", newline="\n")
     return path
 
 
