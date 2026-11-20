@@ -271,7 +271,7 @@ describe("Settings tab · Agents", () => {
       apiError(422, {
         field: "agents.implementer.model",
         message:
-          "project.yaml: agents.implementer.model: must be 1 to 100 characters from A-Z a-z 0-9 . _ : / - and not start with -",
+          "project.yaml: agents.implementer.model: must be 1 to 100 characters from A-Z a-z 0-9 . _ : / @ - and not start with -",
       }),
     );
     show();
@@ -282,7 +282,7 @@ describe("Settings tab · Agents", () => {
       expect(model).toHaveAttribute("aria-invalid", "true");
     });
     expect(model).toHaveAccessibleDescription(
-      "must be 1 to 100 characters from A-Z a-z 0-9 . _ : / - and not start with -",
+      "must be 1 to 100 characters from A-Z a-z 0-9 . _ : / @ - and not start with -",
     );
     expect(screen.getByLabelText("Planner model")).toHaveAttribute(
       "aria-invalid",

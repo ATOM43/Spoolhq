@@ -203,7 +203,7 @@ def test_a_file_over_the_line_limit_fails_the_gates_and_goes_back(
     log = registry.get("demo").run_log
     first = log.list_attempts(log.list_runs()[0].id)[0]
     gates = json.loads((attempt_dir(first.workspace, first) / "gates.json").read_text("utf-8"))
-    assert gates["results"][-1]["name"] == "file_size"
+    assert [r["name"] for r in gates["results"]][-3:] == ["file_size", "test_guard", "secret_scan"]
     assert gates["failures"][-1]["output_excerpt"] == message
 
 

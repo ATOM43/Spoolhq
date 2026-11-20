@@ -49,7 +49,7 @@ Failing tests:
 {% if failure.timed_out %}
 {{ failure.command | code }} timed out:
 {% elif failure.exit_code is none %}
-The file-size gate ({{ failure.command }}) failed:
+The built-in gate ({{ failure.command }}) failed:
 {% else %}
 {{ failure.command | code }} exited with code {{ failure.exit_code }}:
 {% endif %}

@@ -235,7 +235,7 @@ class Runner:
         if not self.projects_dir.exists():
             self.projects_dir.mkdir(parents=True)
             self.created.append((self.projects_dir, "empty_dir"))
-        template, description = None, None
+        template, description, extra = None, None, checked.settings()
         if request.template is not None:
             try:
                 with open_template(request.template, self.template_ref) as found:
@@ -247,6 +247,8 @@ class Runner:
             template = {"name": contract.name, "source": found.source, "ref": found.ref}
             self.template_name = contract.name
             description = contract.description
+            if contract.coverage_report is not None:
+                extra["gates"] = {"coverage_report": contract.coverage_report}
         try:
             result = init_project(
                 request.name,
@@ -257,7 +259,7 @@ class Runner:
                 commands=checked.commands,
                 template=template,
                 template_description=description,
-                extra=checked.settings(),
+                extra=extra,
                 check_repo=request.source == "existing",
             )
         except ProjectError as exc:

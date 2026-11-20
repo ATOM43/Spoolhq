@@ -144,3 +144,12 @@ def test_a_copier_failure_is_reported(tmp_path: Path) -> None:
     # render leaves partial output to its caller (cleanup_on_error=False): the creation
     # job's rollback removes it, see test_job.py::test_a_copier_failure_rolls_back.
     assert (repo / "sub").is_dir()
+
+
+def test_a_contract_may_name_its_coverage_report_inside_the_repo(tmp_path: Path) -> None:
+    ok = make_template(tmp_path / "ok", contract=fixture_contract() + "coverage_report: cov.xml\n")
+    with open_template(str(ok)) as template:
+        assert load_contract(template.root, template.label).coverage_report == "cov.xml"
+    bad = make_template(tmp_path / "bad", contract=fixture_contract() + "coverage_report: ../x\n")
+    with pytest.raises(TemplateError, match="coverage_report"), open_template(str(bad)) as template:
+        load_contract(template.root, template.label)

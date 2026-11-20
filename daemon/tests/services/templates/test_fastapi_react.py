@@ -13,7 +13,7 @@ from typer.testing import CliRunner
 
 import spoolhq
 from spoolhq.cli import app
-from spoolhq.services.gates import gate_env
+from spoolhq.services.gates import gate_env, read_total
 from spoolhq.services.projects import load_project
 from spoolhq.services.templates import init_repo, open_template, render
 from tests.conftest import run_git
@@ -85,6 +85,7 @@ def test_init_generates_one_commit_and_fills_the_commands(
     assert project.template is not None
     assert project.template.name == "fastapi-react"
     assert project.notes.decision_areas == ["general", "api", "data", "ui", "infra", "testing"]
+    assert project.gates.coverage_report == "backend/coverage.xml"
     assert "decision_areas:" in (projects_dir / "demo" / "project.yaml").read_text("utf-8")
     assert "Feature-Sliced Design" in (projects_dir / "demo" / "TEMPLATE.md").read_text("utf-8")
 
@@ -132,3 +133,22 @@ def test_lint_catches_a_sibling_slice_import(generated: Path) -> None:
 def test_lint_passes_without_violations(generated: Path) -> None:
     result = just(generated, "lint")
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_lint_catches_open_without_an_encoding(generated: Path) -> None:
+    bad = generated / "backend" / "app" / "core" / "reader.py"
+    bad.write_text('def read() -> str:\n    return open("x").read()\n', encoding="utf-8")
+    try:
+        result = just(generated, "lint")
+    finally:
+        bad.unlink()
+    assert result.returncode != 0
+    assert "unspecified-encoding" in result.stdout  # PLW1514
+
+
+def test_the_test_recipe_writes_the_coverage_report(generated: Path) -> None:
+    result = just(generated, "test")
+    assert result.returncode == 0, result.stdout + result.stderr
+    total = read_total(generated, "backend/coverage.xml")
+    assert total is not None and total >= 80
+    assert run_git(generated, "status", "--porcelain", "--", "backend/coverage.xml") == ""

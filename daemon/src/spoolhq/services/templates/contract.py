@@ -2,7 +2,8 @@
 
 It sits at the template root (and is never copied into the generated project): the
 template's name, a description for the planner and the ``install``, ``lint`` and
-``test`` commands the gates run, with the same no-shell rule as ``project.yaml``.
+``test`` commands the gates run, with the same no-shell rule as ``project.yaml``, and
+optionally the coverage report its test command writes.
 """
 
 from collections.abc import Mapping
@@ -14,7 +15,7 @@ from ruamel.yaml.error import MarkedYAMLError, YAMLError
 
 from spoolhq.services.gates import check_gate_command
 from spoolhq.services.projects.errors import format_errors
-from spoolhq.services.projects.model import check_slug
+from spoolhq.services.projects.model import PathPattern, check_slug
 from spoolhq.services.projects.yaml_io import loader, to_plain
 
 CONTRACT_FILE = "spoolhq-template.yaml"
@@ -74,6 +75,8 @@ class TemplateContract(_Strict):
     summary: Annotated[str, AfterValidator(_check_summary)] | None = None
     """One line for the app's template cards."""
     commands: TemplateCommands
+    coverage_report: PathPattern | None = None
+    """The report its test command writes, set as ``gates.coverage_report``."""
 
 
 def _message(line: str, label: str) -> str:

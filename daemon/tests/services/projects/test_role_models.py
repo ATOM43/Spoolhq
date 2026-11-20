@@ -6,7 +6,7 @@ import pytest
 
 from spoolhq.services.agents.claude_config import build_argv
 from spoolhq.services.agents.model import AgentPolicy, Budget
-from spoolhq.services.projects import load_project, parse_project, save_project
+from spoolhq.services.projects import ProjectError, load_project, parse_project, save_project
 from tests.services.projects.test_workspace import valid_data, write_project
 
 PLAIN = """\
@@ -89,3 +89,16 @@ def test_good_model_names_pass(git_repo: Path, model: str) -> None:
     data = valid_data(git_repo)
     data["agents"] = {"reviewer": {"backend": "codex-cli", "model": model}}
     assert parse_project("demo", data).agents.model_for("reviewer") == (model, "role")
+
+
+@pytest.mark.parametrize(("model", "ok"), [("claude-x@20240620", True), ("-x@y", False)])
+def test_a_model_name_may_contain_an_at_sign_but_not_start_with_a_dash(
+    git_repo: Path, model: str, ok: bool
+) -> None:
+    data = valid_data(git_repo)
+    data["agents"] = {"implementer": {"model": model}}
+    if ok:
+        assert parse_project("demo", data).agents.implementer.model == model  # type: ignore[union-attr]
+    else:
+        with pytest.raises(ProjectError, match="not start with -"):
+            parse_project("demo", data)

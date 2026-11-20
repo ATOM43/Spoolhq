@@ -27,9 +27,10 @@ lint:
     pnpm --dir frontend exec prettier --check .
     pnpm --dir frontend exec tsc --noEmit
 
-# Run both test suites (the backend fails below 80% line coverage).
+# Run both test suites (the backend fails below 80% line coverage and writes
+# backend/coverage.xml, which SpoolHQ's test guard reads).
 test:
-    uv run --directory backend pytest --cov=app --cov-report=term-missing --cov-fail-under=80
+    uv run --directory backend pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=80
     pnpm --dir frontend exec vitest run
 
 # Start the API (with migrations applied) and the Vite dev server; Ctrl-C stops both.

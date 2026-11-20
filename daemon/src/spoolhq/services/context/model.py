@@ -48,7 +48,7 @@ class GateFailure:
     command: str
     """The command as configured, e.g. ``just test``."""
     exit_code: int | None
-    """``None`` when the command timed out, and for the file-size gate."""
+    """``None`` when the command timed out, and for the built-in gates."""
     timed_out: bool
     output_excerpt: str
 

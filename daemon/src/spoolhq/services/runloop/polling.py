@@ -51,6 +51,7 @@ from spoolhq.services.runloop.delivery import GitHubFactory
 from spoolhq.services.runloop.integration import publish_tag, tag_name
 from spoolhq.services.runloop.loop import RunLoop
 from spoolhq.services.runloop.model import RunLoopError, record_phase, user_errors
+from spoolhq.services.runloop.quality import record_main_coverage
 from spoolhq.services.runs import (
     AttemptKind,
     EventKind,
@@ -271,6 +272,7 @@ class GitHubPoller:
             except GitError as exc:
                 logger.warning("cannot delete the PR branch", extra={"error": str(exc)})
         apply_transition(settings.name, tid, "done", projects_dir=self.loop.projects_dir)
+        record_main_coverage(run_log, run.id, tid)
         run_log.set_run_status(run.id, RunStatus.DONE)
         run_log.append_event(
             run.id, EventKind.INTEGRATE, {"commit": merge, "tag": tag, "pr": number}

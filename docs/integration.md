@@ -14,14 +14,14 @@ For an approved run of T04, with `main` as the default branch:
    - A conflict goes back to the implementer (see [Conflicts](#conflicts)).
    - If main had nothing new, there is nothing to merge, and the gates are not rerun: the approved attempt already ran them on this exact tree.
    - Otherwise SpoolHQ concludes the merge with a commit on the run branch and **reruns the gates** in the worktree. Their results and logs replace the approved attempt's `gates.json` and gate logs, which the retry prompt reads. A failure there starts a `gate_retry` attempt, counted against `limits.gate_retries` like any other.
-4. **Build the squash commit** in the worktree: detach `HEAD` at the branch tip, `git reset --soft <main_sha>`, apply the [diff guard](#the-diff-guard), ask the [merge policy](merge-policy.md) (a ticket that needs a person stops here: the worktree goes back to its branch and the ticket waits for `spool run approve`), append the `PROGRESS.md` entry and commit. The commit's only parent is `main_sha`. Its tree is the branch tip, minus build junk, plus the entry. The run branch doesn't move, so a retry starts from the same work. **Journal: `committed`**, with the commit's sha.
+4. **Build the squash commit** in the worktree: detach `HEAD` at the branch tip, `git reset --soft <main_sha>`, apply the [diff guard](#the-diff-guard), ask the [merge policy](merge-policy.md) (its rules include [new dependencies](merge-policy.md#new-dependencies): a name the squash adds to `pyproject.toml`, `package.json`, `Cargo.toml` or a `requirements*.txt` needs a person unless `merge_policy.new_dependencies` is `allow`; a ticket that needs a person stops here: the worktree goes back to its branch and the ticket waits for `spool run approve`), append the `PROGRESS.md` entry and commit. The commit's only parent is `main_sha`. Its tree is the branch tip, minus build junk, plus the entry. The run branch doesn't move, so a retry starts from the same work. **Journal: `committed`**, with the commit's sha.
 5. **Advance main.** This is compare-and-swap: it succeeds only if `main` still points at `main_sha`.
    - `main` checked out: it must still be clean and its `HEAD` must be `main_sha`, then `git merge --ff-only <commit>` there.
    - Otherwise: `git update-ref refs/heads/main <commit> <main_sha>`, which fails if `main` moved.
    - If `main` moved, the worktree goes back to its branch and integration starts over at step 1. After 3 tries the run is blocked: `main kept moving during integration`.
    - **Journal: `advanced`.**
 6. **Tag** `ticket/T04`, lightweight. **Journal: `tagged`.**
-7. **Finish:** the ticket and the run are `done`, the worktree and its branch are torn down, the event `integrate` records `{"commit", "tag"}`, and the run prints `T04 · integrate · merged 3f2a9c1 · ticket/T04`. **Journal: `done`.**
+7. **Finish:** the coverage total in the landed `gates.json` (the rerun's, or the approved attempt's) becomes main's in `<workspace>/coverage.json` ([coverage](gates.md#coverage)); the ticket and the run are `done`, the worktree and its branch are torn down, the event `integrate` records `{"commit", "tag"}`, and the run prints `T04 · integrate · merged 3f2a9c1 · ticket/T04`. **Journal: `done`.**
 
 Each journal state is committed to `state.db` in its own transaction before the next step starts.
 

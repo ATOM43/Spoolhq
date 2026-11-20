@@ -23,8 +23,8 @@ SUMMARY_CHARS = 200
 @dataclass(frozen=True)
 class RuleHit:
     rule: str
-    """``review_required``, ``diff_size``, ``protected_paths``, ``needs_human`` or
-    ``hold_mode``."""
+    """``review_required``, ``diff_size``, ``protected_paths``, ``new_dependencies``,
+    ``needs_human`` or ``hold_mode``."""
     detail: str
 
 
@@ -70,10 +70,12 @@ def evaluate(
     protected: Sequence[str],
     reviewer_summary: str | None,
     hold: bool = False,
+    new_dependencies: Sequence[str] = (),
 ) -> PolicyDecision:
     """Apply every rule. ``reviewer_summary`` is set when the reviewer said
     ``needs_human`` (listed first, so a person reads it first); ``hold`` is
-    ``run.integration: hold``."""
+    ``run.integration: hold``; ``new_dependencies`` the names the diff adds to its
+    manifests (empty when ``merge_policy.new_dependencies`` is ``allow``)."""
     hits: list[RuleHit] = []
     if reviewer_summary is not None:
         summary = " ".join(reviewer_summary.split())[:SUMMARY_CHARS]
@@ -95,6 +97,8 @@ def evaluate(
     ]
     if matched:
         hits.append(RuleHit("protected_paths", _listed(matched)))
+    if new_dependencies:
+        hits.append(RuleHit("new_dependencies", _listed(new_dependencies)))
     if hold:
         hits.append(RuleHit("hold_mode", "run.integration is hold"))
     return PolicyDecision(needs_human=bool(hits), rules=tuple(hits))

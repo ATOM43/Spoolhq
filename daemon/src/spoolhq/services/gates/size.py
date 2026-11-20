@@ -16,7 +16,8 @@ from spoolhq.services.gates.model import GateName, GateResult, GateStatus
 
 FILE_SIZE: GateName = "file_size"
 DEFAULT_MAX_FILE_LINES = 500
-DEFAULT_EXEMPT = ("**/*.lock", "**/*-lock.*", "**/*.min.*")
+LOCKFILE_PATTERNS = ("**/*.lock", "**/*-lock.*")
+DEFAULT_EXEMPT = (*LOCKFILE_PATTERNS, "**/*.min.*")
 
 
 def count_lines(data: bytes) -> int | None:

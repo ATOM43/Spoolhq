@@ -22,7 +22,7 @@ from spoolhq.services.projects.yaml_io import parse
 from tests.conftest import AGENT_FIXTURES, FakeBackend
 
 KNOWN_BACKENDS = "expected one of: claude-code-cli, codex-cli, claude-agent-sdk"
-BAD_MODEL = "must be 1 to 100 characters from A-Z a-z 0-9 . _ : / - and not start with -"
+BAD_MODEL = "must be 1 to 100 characters from A-Z a-z 0-9 . _ : / @ - and not start with -"
 
 
 def valid_data(repo: Path) -> dict[str, Any]:

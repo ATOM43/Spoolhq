@@ -5,8 +5,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal, TypedDict
 
-GateName = Literal["install", "lint", "test", "file_size"]
-"""The three command gates, plus the built-in file-size gate (``size.py``)."""
+GateName = Literal["install", "lint", "test", "file_size", "test_guard", "secret_scan"]
+"""The three command gates, plus the built-in ones: file size (``size.py``), the test
+guard (``test_guard.py``) and the secret scan (``secrets.py``)."""
 GATE_NAMES: tuple[GateName, ...] = ("install", "lint", "test")
 """The command gates, in the order they run."""
 
@@ -31,6 +32,21 @@ class GateFailureData(TypedDict):
     exit_code: int | None
     timed_out: bool
     output_excerpt: str
+
+
+@dataclass(frozen=True)
+class FileChange:
+    """One file a ticket adds, changes, renames or deletes, read by the caller from git."""
+
+    path: str
+    """The path after the ticket (the old one for a deleted file)."""
+    before: bytes | None
+    """The content before the ticket; ``None`` for a new file."""
+    deleted: bool = False
+    old_path: str | None = None
+    """The path before a rename."""
+    added: tuple[tuple[int, str], ...] = ()
+    """The added lines, as (line number in the new file, text)."""
 
 
 @dataclass(frozen=True)

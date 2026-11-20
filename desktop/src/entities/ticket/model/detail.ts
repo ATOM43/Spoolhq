@@ -64,6 +64,8 @@ export function ruleLabel({ rule, detail }: RuleHit): string {
       return `Diff ${detail}`;
     case "protected_paths":
       return `Touches ${detail}`;
+    case "new_dependencies":
+      return `Adds dependencies: ${detail}`;
     case "review_required":
       return "Marked review-required";
     case "needs_human":

@@ -21,7 +21,7 @@ Each gate gets a `GateResult`: `name`, `command`, `status`, `exit_code`, `durati
 | `skipped` | Install didn't pass. |
 | `error` | The program wasn't found or couldn't start; `excerpt` holds the message. |
 
-`GateRun` holds the results (in a run, the three plus [file size](#file-size)), `passed` (all passed) and `first_failure` (the first gate that failed, timed out or errored). `to_gate_failures()` returns the failed and timed-out gates as plain dicts with the fields of T10's `GateFailure` (`command`, `exit_code`, `timed_out`, `output_excerpt`). Two runs on the same worktree give equal results apart from `duration_s`.
+`GateRun` holds the results (in a run, the three plus the built-in [file size](#file-size), [test guard](#test-guard) and [secret scan](#secret-scan)), `passed` (all passed) and `first_failure` (the first gate that failed, timed out or errored). `to_gate_failures()` returns the failed and timed-out gates as plain dicts with the fields of T10's `GateFailure` (`command`, `exit_code`, `timed_out`, `output_excerpt`). Two runs on the same worktree give equal results apart from `duration_s`.
 
 ## File size
 
@@ -39,7 +39,58 @@ src/big.py: 612 lines, over the 500-line limit
 src/old.py grew from 640 to 655 lines; it was already over the limit
 ```
 
-A failure goes back to the implementer like any gate failure ("The file-size gate (max 500 lines per file) failed:" and the list in the retry prompt). A template's own line check (the `fastapi-react` justfile's `check_line_limit.py`) stays and runs as part of `lint`. `spool gates run` and the template contract check run only the three commands.
+A failure goes back to the implementer like any gate failure ("The built-in gate (max 500 lines per file) failed:" and the list in the retry prompt). A template's own line check (the `fastapi-react` justfile's `check_line_limit.py`) stays and runs as part of `lint`. `spool gates run` and the template contract check run only the three commands: the built-in gates need a ticket's diff.
+
+## Test guard
+
+The fifth gate, `test_guard` ("Test guard" in the app), keeps a ticket from making its tests pass by having fewer of them. It is code (`check_tests` in `services/gates/testguard.py`), given the ticket's changes against the same merge base as the file-size gate (`ticket_changes` in `services/runloop/guards.py`: every added, changed, renamed and deleted file with its content before the ticket and its added lines from `git diff -U0`). It looks only at test files, those matching `gates.test_paths` (default `**/tests/**`, `**/test_*.py`, `**/*_test.py`, `**/*.test.*`, `**/*.spec.*`). It fails when the ticket:
+
+- deletes a test file;
+- removes a test: a `def test…` in a `.py` file, or a named `it("…")` / `test("…")` (any `.skip`/`.only` suffix) in a JS/TS file, present before and gone after; a rename git detects keeps its tests, so moving a file passes;
+- adds a skip or focus marker on an added line of a test file: `pytest.mark.skip` (so `skipif` too), `pytest.skip(`, `unittest.skip`, `xfail`, `xdescribe(`, `xit(`, `.skip(`, `.only(`;
+- lowers coverage (below).
+
+**Allowed:** a "Done when" item that names the exact test file (its repo path) or the exact test name allows the removal or marker. A marker belongs to the test on its line, a few lines below it (a decorator) or else the nearest one above. Ticket text can only allow; it never runs anything.
+
+Messages name the file and test, one per line:
+
+```text
+Deleted test file backend/tests/test_old.py
+Removed test test_limit_at_50hz in backend/tests/test_review.py
+Added pytest.mark.skip in backend/tests/test_review.py:12 (test_limit_at_50hz)
+Coverage fell from 91.2% to 88.4%
+```
+
+### Coverage
+
+With `gates.coverage_report` set (a repo-relative path the test command writes), the guard reads the ticket's total after the test gate passes: Cobertura XML (the root tag's `line-rate`, read with a regex, never an XML parser), coverage.py's JSON (`totals.percent_covered`) or Istanbul's `coverage-summary.json` (`total.lines.pct`). A path that leaves the worktree counts as missing. The total goes into the attempt's `gates.json` as `coverage`.
+
+Main's total lives in `<workspace>/coverage.json`. At each merge (a local or direct one, at the integration's finish, and a merged pull request, when the poller sees it), the total in the `gates.json` that landed becomes main's: the integration's gate rerun when main had moved, else the approved attempt's. The gate fails when the ticket's total is more than 0.5 points below main's. Otherwise the gate output says what happened and the gate passes:
+
+- `Coverage 90.9% (main 91.2%)`
+- `Coverage 91.2% recorded; main has none stored yet` (the first merge stores it)
+- `Coverage not compared: no gates.coverage_report in project.yaml`
+- `Coverage not compared: the test gate didn't pass`
+- `Coverage not compared: backend/coverage.xml is missing or unreadable`
+
+## Secret scan
+
+The sixth gate, `secret_scan` ("Secret scan"), checks every **added** line of the ticket (`scan_secrets` in `services/gates/secrets.py`). It runs with the other gates, before review, so a hit goes back to the implementer and never reaches the reviewer's prompt or main. Patterns, first match per line:
+
+| Name | Matches |
+| --- | --- |
+| `private key` | `-----BEGIN … PRIVATE KEY-----` |
+| `AWS access key id` | `AKIA` or `ASIA` and 16 capitals or digits |
+| `GitHub token` | `ghp_`, `gho_` or `github_pat_` and 20+ token characters |
+| `Anthropic key` | `sk-ant-` and 20+ characters |
+| `OpenAI-style key` | `sk-` and 20+ characters |
+| `Slack token` | `xoxa-`, `xoxb-`, `xoxp-`, `xoxo-`, `xoxs-`, `xoxr-` and 10+ characters |
+| `secret assignment` | a name containing `key`, `secret`, `token` or `password` (any case) assigned (`=`, `:`, `:=`) a quoted value of 16+ characters without spaces; a value starting with `/`, `~` or `.`, or holding `$ { } < >` (a path or a template), doesn't count |
+| `high-entropy string` | a quoted string of 32+ characters without spaces whose Shannon entropy is above 4.5 bits per character, outside lockfiles (`**/*.lock`, `**/*-lock.*`) |
+
+A hit reads `Possible secret in config.py:3 (Anthropic key)`, one per line (at most 50, then `… and N more`). **The value itself is never printed**: not in the gate result, `gates.json`, the retry prompt, events, logs or the app. Every pattern runs in linear time (fixed prefixes, possessive quantifiers), since the agent controls the input. What the agent itself wrote stays in its own transcript and the attempt's diff, as any of its work does.
+
+**Allowed:** files matching `gates.secret_scan_allow` (globs, default `[]`, for fixtures with fake keys), and any line carrying the comment `spoolhq:allow-secret`.
 
 ## No shell
 

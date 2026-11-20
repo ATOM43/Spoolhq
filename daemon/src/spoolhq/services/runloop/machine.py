@@ -18,7 +18,7 @@ from spoolhq.services.agents import (
     Outcome,
     RunResult,
 )
-from spoolhq.services.gates import GateResult, GateRun, check_done_when, check_file_sizes
+from spoolhq.services.gates import GateResult, GateRun, check_done_when
 from spoolhq.services.git import (
     conclude_merge,
     conflict_files,
@@ -30,7 +30,6 @@ from spoolhq.services.notes import RunNote, RunNoteError, parse_run_note
 from spoolhq.services.review import GateLine, ReviewInputs, ReviewResult, review
 from spoolhq.services.runloop.guards import (
     attempt_message,
-    changed_files,
     edited_notes,
     planted_settings,
     refused_settings,
@@ -38,6 +37,7 @@ from spoolhq.services.runloop.guards import (
 from spoolhq.services.runloop.integrator import IntegrationStatus
 from spoolhq.services.runloop.model import Ending, EndKind, RunContext, record_step
 from spoolhq.services.runloop.prompting import implementer_prompt
+from spoolhq.services.runloop.quality import builtin_gates
 from spoolhq.services.runloop.transcript import Recorder
 from spoolhq.services.runs import (
     ArtifactName,
@@ -271,16 +271,14 @@ def run_gates(ctx: RunContext, attempt: Attempt, label: str) -> GateRun:
         attempt_dir(ctx.workspace, attempt),
         on_gate=started,
     )
-    limits = ctx.project.gates
-    sizes = check_file_sizes(
-        ctx.worktree.path, changed_files(ctx), limits.max_file_lines, limits.max_file_lines_exempt
-    )
-    gate_run = GateRun((*gate_run.results, sizes))
+    built_in, coverage = builtin_gates(ctx, gate_run)
+    gate_run = GateRun((*gate_run.results, *built_in))
     tests = [name for result in gate_run.results for name in result.failing_tests]
     data = {
         "passed": gate_run.passed,
         "results": [dataclasses.asdict(result) for result in gate_run.results],
         "failures": list(gate_run.to_gate_failures()),
+        "coverage": coverage,
     }
     write_artifact(attempt, ArtifactName.GATES, json.dumps(data, indent=2, default=str))
     first = gate_run.first_failure

@@ -7,7 +7,13 @@ from typing import cast
 
 import pytest
 
-from spoolhq.services.runloop.guards import attempt_message, changed_files, edited_notes
+from spoolhq.services.gates import FileChange
+from spoolhq.services.runloop.guards import (
+    attempt_message,
+    changed_files,
+    edited_notes,
+    ticket_changes,
+)
 from spoolhq.services.runloop.model import RunContext
 from tests.conftest import commit_file, run_git
 
@@ -98,3 +104,23 @@ def test_main_merged_into_the_branch_is_not_the_tickets_change(git_repo: Path) -
     run_git(git_repo, "checkout", "--quiet", "feat")
     run_git(git_repo, "merge", "--quiet", "--no-edit", "-m", "spool: merge main into feat", "main")
     assert changed_files(ctx(git_repo, base)) == [("mine.py", None)]
+
+
+def test_ticket_changes_include_deletions_renames_and_numbered_added_lines(
+    git_repo: Path,
+) -> None:
+    branch(git_repo)
+    commit_file(git_repo, "gone.py", "g\n", "main file")
+    commit_file(git_repo, "keep.py", "a\nb\nc\n", "main file")
+    base = commit_file(git_repo, "old_name.py", "same\n" * 20, "main file")
+    run_git(git_repo, "branch", "-f", "main", "HEAD")
+    run_git(git_repo, "rm", "--quiet", "gone.py")
+    run_git(git_repo, "mv", "old_name.py", "new_name.py")
+    (git_repo / "keep.py").write_text("a\n++x\nb\nc\nd\n", encoding="utf-8", newline="\n")
+    run_git(git_repo, "add", "-A")
+    run_git(git_repo, "commit", "--quiet", "--no-verify", "-m", attempt_message("T01", 1))
+    found = {change.path: change for change in ticket_changes(ctx(git_repo, base))}
+    assert found["gone.py"] == FileChange("gone.py", b"g\n", deleted=True)
+    assert found["keep.py"].added == ((2, "++x"), (5, "d"))
+    assert found["new_name.py"].old_path == "old_name.py"
+    assert found["new_name.py"].added == ()

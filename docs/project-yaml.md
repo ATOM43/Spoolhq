@@ -35,6 +35,7 @@ limits:
 merge_policy:
   max_diff_lines: 400                         # optional
   protected_paths_extra: ["infra/**"]         # optional: added to the default list
+  new_dependencies: approve                   # optional: approve | allow
 git:
   remote: https://github.com/<owner>/<repo>   # optional
 tracker:
@@ -54,6 +55,9 @@ gates:
     test: 900
   max_file_lines: 500                         # optional: the file-size gate, 0 = off
   max_file_lines_exempt: ["**/*.lock", "**/*-lock.*", "**/*.min.*"]   # optional
+  test_paths: ["**/tests/**", "**/test_*.py", "**/*_test.py", "**/*.test.*", "**/*.spec.*"]   # optional
+  coverage_report: backend/coverage.xml       # optional: what the test command writes
+  secret_scan_allow: []                       # optional: globs the secret scan skips
 run:
   integration: local                          # local | hold
 ```
@@ -73,7 +77,7 @@ run:
 | `commands.test` | no | | Non-empty test command; same rules. Without it the project can't plan or run tickets ("Set the stack commands in project.yaml first"). The planner ends every ticket's "Done when" with `` `<test command>` passes ``. |
 | `agents.default` | no | `claude-code-cli` | A known backend: `claude-code-cli`, `codex-cli` or `claude-agent-sdk` ([agents](agents.md#roles-and-backends)). |
 | `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override: a backend name (same values as `agents.default`), or a mapping `{backend, model}` with `backend` a name or `default` (the default when left out) and `model` the role's own model. `agents.planner` is the backend of the [planner](planner.md). `spool agents --project <name>` shows what each role uses. |
-| `agents.<role>.model` | no | | The role's model, used instead of its backend's: two roles on one backend can use different models. A model name is 1 to 100 characters from `A–Z a–z 0–9 . _ : / -` and doesn't start with `-`. A role written from the app is a mapping only when it has a model. |
+| `agents.<role>.model` | no | | The role's model, used instead of its backend's: two roles on one backend can use different models. A model name is 1 to 100 characters from `A–Z a–z 0–9 . _ : / @ -` and doesn't start with `-`. A role written from the app is a mapping only when it has a model. |
 | `agents.backends.<backend>.base_url` | no | | Custom endpoint for that backend, e.g. a local [Ollama](agents.md#local-models-with-ollama). http or https; plain http only for `localhost`, `127.0.0.1` and `::1`; no username or password. A remote one needs its own token ([agents](agents.md#a-custom-endpoint-never-gets-your-login)). |
 | `agents.backends.<backend>.model` | no | | That backend's model for roles without their own; without it, the backend's own default. Same rules as `agents.<role>.model`. |
 | `agents.budget_per_ticket.usd` | no | | Positive number: spending cap per ticket for API backends. |
@@ -83,6 +87,7 @@ run:
 | `merge_policy.max_diff_lines` | no | `400` | Whole number from 10 to 100,000. A squash diff with more added plus removed lines (lockfiles not counted) needs a person ([merge policy](merge-policy.md)). |
 | `merge_policy.protected_paths` | no | the [default list](merge-policy.md#protected-paths) | List of repo-relative patterns (`**` spans folders); replaces the default. A ticket touching a match needs a person. Absolute patterns, `..` folders and empty ones are refused. |
 | `merge_policy.protected_paths_extra` | no | `[]` | Patterns added to `protected_paths`; same rules. |
+| `merge_policy.new_dependencies` | no | `approve` | `approve`: a ticket adding a dependency name to a manifest needs a person ([new dependencies](merge-policy.md#new-dependencies)); `allow` turns the rule off. |
 | `git.remote` | no | | A GitHub URL: `https://github.com/<owner>/<repo>` (optionally ending in `.git`) or `git@github.com:<owner>/<repo>.git`. The owner is 1–39 letters, digits or hyphens; the repository is 1–100 letters, digits, `.`, `_` or `-`; neither may start with `-` or `.`. With it, approved tickets are delivered to GitHub ([GitHub delivery](github.md)); without it, they merge locally. |
 | `context.max_chars` | no | `120000` | Whole number from 20,000 to 2,000,000: the most characters the implementer's prompt may have ([context](context.md)). |
 | `context.progress_entries` | no | `3` | Whole number from 1 to 1,000: how many of the newest `PROGRESS.md` entries the implementer's prompt includes. |
@@ -92,6 +97,9 @@ run:
 | `gates.timeouts.install`, `gates.timeouts.lint`, `gates.timeouts.test` | no | `600`, `300`, `900` | Whole number of seconds from 10 to 7,200. When it passes, the gate's whole process tree is stopped ([gates](gates.md#timeouts)). |
 | `gates.max_file_lines` | no | `500` | Whole number from 0 to 1,000,000: no text file a ticket adds or changes may end up longer, unless it was already longer before the ticket and didn't grow ([file size](gates.md#file-size)). `0` turns the gate off. |
 | `gates.max_file_lines_exempt` | no | `["**/*.lock", "**/*-lock.*", "**/*.min.*"]` | Repo-relative globs the file-size gate skips (lockfiles and minified files by default); replaces the default list, so repeat what you want to keep. `**/` also matches at the top level. |
+| `gates.test_paths` | no | `["**/tests/**", "**/test_*.py", "**/*_test.py", "**/*.test.*", "**/*.spec.*"]` | Repo-relative globs naming test files, for the [test guard](gates.md#test-guard); replaces the default list. |
+| `gates.coverage_report` | no | none | The coverage report the test command writes, repo-relative (Cobertura XML or a JSON summary with a total). Set: a ticket may not lower the total by more than 0.5 points ([coverage](gates.md#coverage)). |
+| `gates.secret_scan_allow` | no | `[]` | Repo-relative globs the [secret scan](gates.md#secret-scan) skips, such as test fixtures with fake keys. |
 | `run.integration` | no | `local` | `local` merges each approved ticket into the default branch as one commit ([integration](integration.md)); `hold` keeps every ticket in `awaiting_approval` until `spool run approve` (the merge policy's `hold_mode` rule). |
 | `tracker.kind` | no | `clickup` | Only `clickup` for now. |
 | `tracker.list_id` | when `tracker` is set | | Non-empty string; quote it (`"901"`) if it is all digits. |
@@ -118,7 +126,7 @@ Every problem is reported at once, one line each, as `project.yaml: <dotted.path
 | Unknown backend | `project.yaml: agents.default: unknown backend 'copilot'; expected one of: claude-code-cli, codex-cli, claude-agent-sdk` |
 | Plain http to another host | `project.yaml: agents.backends.claude-code-cli.base_url: 'http://example.com': plain http is allowed only for localhost; use https` |
 | Credentials in the URL | `project.yaml: agents.backends.claude-code-cli.base_url: must not contain a username or password` |
-| Bad model name | `project.yaml: agents.planner.model: must be 1 to 100 characters from A-Z a-z 0-9 . _ : / - and not start with -` |
+| Bad model name | `project.yaml: agents.planner.model: must be 1 to 100 characters from A-Z a-z 0-9 . _ : / @ - and not start with -` |
 | Budget not positive | `project.yaml: agents.budget_per_ticket.usd: must be greater than 0` |
 | Retries out of range | `project.yaml: limits.gate_retries: must be at most 10` (or `must be at least 0`) |
 | Empty command | `project.yaml: commands.lint: must not be empty` |

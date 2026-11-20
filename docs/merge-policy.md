@@ -18,9 +18,14 @@ Every rule is evaluated, and every one that holds is recorded, not just the firs
 | `review_required` | the ticket has `review_required: true` (set by the planner or you) | `the ticket is marked review_required` |
 | `diff_size` | added plus removed lines exceed `merge_policy.max_diff_lines` (default 400). Lockfiles (`uv.lock`, `poetry.lock`, `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `Cargo.lock`, in any folder) don't count; binary files count as 0 lines | `812 lines > 400` |
 | `protected_paths` | any changed, added, deleted or renamed path (the old or the new name) matches a protected pattern | the matching paths, at most 10, then `and N more` |
+| `new_dependencies` | the diff adds a dependency name to a manifest, and `merge_policy.new_dependencies` is `approve` (the default) | the names, at most 10, then `and N more`; the drawer's chip reads `Adds dependencies: httpx, left-pad` |
 | `hold_mode` | `run.integration: hold` | `run.integration is hold` |
 
 No rule holds: the ticket goes **direct** (local fast-forward, or a push to GitHub).
+
+### New dependencies
+
+The manifests are compared between main and the staged squash (`services/runloop/dependencies.py`), parsed with the standard library: `pyproject.toml` (`project.dependencies`, `project.optional-dependencies`, `dependency-groups`; names normalised like pip, so `SQLAlchemy` is `sqlalchemy`), `package.json` (`dependencies`, `devDependencies`), `Cargo.toml` (`[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, `[workspace.dependencies]`) and `requirements*.txt` (option lines such as `-r` and `-e`, and URLs, are skipped), in any folder. A name present after but not before, per manifest, counts. Version changes, removals and lockfile-only changes don't; a manifest that doesn't parse has no names. With a remote the ticket opens a pull request, without one it waits for your approval, like the other rules. Manifests are also [protected paths](#protected-paths) by default, so that rule fires too unless you change the list; this one names what was added.
 
 ### Protected paths
 

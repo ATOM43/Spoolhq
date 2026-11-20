@@ -103,6 +103,7 @@ const attempt = {
 const RULES = [
   { rule: "diff_size", detail: "612 lines > 400" },
   { rule: "protected_paths", detail: "migrations/" },
+  { rule: "new_dependencies", detail: "httpx, left-pad" },
 ];
 
 /** The fake daemon's files and runs; tests change it and the drawer refetches. */
@@ -414,7 +415,7 @@ describe("note to the agent", () => {
     );
     expect(
       dialog.getByText(
-        "Held by the merge policy: Diff 612 lines > 400, Touches migrations/",
+        "Held by the merge policy: Diff 612 lines > 400, Touches migrations/, Adds dependencies: httpx, left-pad",
       ),
     ).toBeVisible();
     expect(dialog.queryByRole("checkbox")).toBeNull();
@@ -506,7 +507,11 @@ describe("sections", () => {
       within(rules)
         .getAllByRole("listitem")
         .map((li) => li.textContent),
-    ).toEqual(["Diff 612 lines > 400", "Touches migrations/"]);
+    ).toEqual([
+      "Diff 612 lines > 400",
+      "Touches migrations/",
+      "Adds dependencies: httpx, left-pad",
+    ]);
     const attempts = within(drawer.getByRole("region", { name: "Attempts" }));
     const row = attempts.getByRole("button", { name: /^Attempt 3: Approved/ });
     expect(row).toHaveTextContent("22m 05s");

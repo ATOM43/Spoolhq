@@ -37,6 +37,7 @@ commands:
   lint: just lint
   test: just test
   dev: just dev     # optional
+coverage_report: backend/coverage.xml   # optional
 ```
 
 | Key | Required | Rules |
@@ -45,6 +46,7 @@ commands:
 | `description` | yes | Non-empty plain text, at most 2,000 characters. Saved as the workspace's `TEMPLATE.md`; the planner reads it. |
 | `commands.install`, `commands.lint`, `commands.test` | yes | Copied into `project.yaml`'s `commands`. Same rule as there: no shell syntax (`&&`, pipes, redirects…), see [gates](gates.md#no-shell). |
 | `commands.dev` | no | Same rule. Documentation only: SpoolHQ never runs it and `project.yaml` doesn't store it. |
+| `coverage_report` | no | The report the `test` command writes (Cobertura XML or a JSON summary), a repo-relative path without `..`. Copied into `project.yaml` as `gates.coverage_report`, so the [test guard](gates.md#coverage) compares totals from the first ticket. |
 
 Unknown keys are errors. Every problem is reported at once, one line each, in `project.yaml`'s style:
 
@@ -107,7 +109,7 @@ A generated project starts in the split layout SpoolHQ writes at each merge ([no
 - `DECISIONS.md`: the index header (what the index is and that SpoolHQ adds the lines), no entries. Keep lines in it from starting with `N. `, `- ` or `* `, or the first merge would read them as old flat entries.
 - `docs/decisions/.gitkeep`, so the folder exists before the first decision.
 - `CLAUDE.md`: rules only. It says progress and decisions go in the run note, never into the notes files.
-- `project.yaml` (written by SpoolHQ, not the template) lists every setting with its default, including `notes.decision_areas` and `gates.max_file_lines`.
+- `project.yaml` (written by SpoolHQ, not the template) lists every setting with its default, including `notes.decision_areas`, `gates.max_file_lines` and, from the contract, `gates.coverage_report`.
 
 A template keeps its own line check if it has one; SpoolHQ's built-in [file-size gate](gates.md#file-size) runs in every project anyway.
 
@@ -115,4 +117,4 @@ A built-in template also goes in `daemon/src/spoolhq/templates/<name>/`; that fo
 
 ## `fastapi-react`
 
-The first built-in: a FastAPI backend (`backend/`: SQLAlchemy 2 on SQLite, Alembic, pytest with an 80% coverage floor, ruff with `S`, mypy strict, `app/api` on top of `app/services/<domain>` on top of `app/core`, enforced by import-linter) and a React frontend (`frontend/`: Vite, strict TypeScript, Vitest and Testing Library, ESLint and Prettier, Feature-Sliced Design enforced by eslint-plugin-boundaries), with an example `items` domain through every layer, a justfile (`install`, `dev`, `lint` with a 500-line check on `backend/app`, `backend/migrations` and `frontend/src`, tests exempt, `test`), GitHub Actions CI, and the [notes layout](#the-notes-layout). The generated project's `README.md` describes its structure. Every dependency is pinned, in `backend/pyproject.toml` and `uv.lock` and in `frontend/package.json` and `pnpm-lock.yaml`.
+The first built-in: a FastAPI backend (`backend/`: SQLAlchemy 2 on SQLite, Alembic, pytest with an 80% coverage floor writing `backend/coverage.xml` (git-ignored; set as `gates.coverage_report`), ruff with `S` and `PLW1514` (preview limited to that named rule, as in SpoolHQ), mypy strict, `app/api` on top of `app/services/<domain>` on top of `app/core`, enforced by import-linter) and a React frontend (`frontend/`: Vite, strict TypeScript, Vitest and Testing Library, ESLint and Prettier, Feature-Sliced Design enforced by eslint-plugin-boundaries), with an example `items` domain through every layer, a justfile (`install`, `dev`, `lint` with a 500-line check on `backend/app`, `backend/migrations` and `frontend/src`, tests exempt, `test`), GitHub Actions CI, and the [notes layout](#the-notes-layout). The generated project's `README.md` describes its structure. Every dependency is pinned, in `backend/pyproject.toml` and `uv.lock` and in `frontend/package.json` and `pnpm-lock.yaml`.

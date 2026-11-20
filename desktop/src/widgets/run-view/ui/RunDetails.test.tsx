@@ -77,6 +77,24 @@ const GATES: Schemas["GatesReport"] = {
       first_failure_line: null,
       truncated: false,
     },
+    {
+      name: "test_guard",
+      command: "test guard",
+      state: "passed",
+      duration_ms: 3,
+      output: "Coverage 90.9% (main 91.2%)",
+      first_failure_line: null,
+      truncated: false,
+    },
+    {
+      name: "secret_scan",
+      command: "secret scan",
+      state: "passed",
+      duration_ms: 2,
+      output: "",
+      first_failure_line: null,
+      truncated: false,
+    },
   ],
 };
 
@@ -323,6 +341,9 @@ describe("Gates panel", () => {
     expect(
       within(details()).getByText("max 500 lines per file"),
     ).toBeInTheDocument();
+    // So are the test guard and the secret scan.
+    expect(within(details()).getByText("Test guard")).toBeInTheDocument();
+    expect(within(details()).getByText("Secret scan")).toBeInTheDocument();
     // Untrusted output stays text.
     expect(details().querySelector("script, a")).toBeNull();
     expect(within(details()).getAllByText(XSS).length).toBeGreaterThan(0);

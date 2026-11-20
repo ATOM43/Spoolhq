@@ -13,6 +13,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from spoolhq.services.git import staged_changes
+from spoolhq.services.runloop.dependencies import added_dependencies
 from spoolhq.services.runloop.machine import RETRIES_RESET
 from spoolhq.services.runloop.model import NotBlockedError, RunContext, RunLoopError, user_errors
 from spoolhq.services.runloop.policy import DeliveryMode, as_record, delivery_mode, evaluate
@@ -59,13 +60,18 @@ def decide(ctx: RunContext, main_sha: str) -> DeliveryMode:
     summary = None
     if attempt.status is AttemptStatus.NEEDS_HUMAN:
         summary = str(read_artifact(ctx, attempt, ArtifactName.REVIEW).get("summary") or "")
+    changes = staged_changes(ctx.worktree.path, main_sha)
+    added = []
+    if project.merge_policy.new_dependencies == "approve":
+        added = added_dependencies(ctx.worktree.path, main_sha, changes)
     decision = evaluate(
         review_required=ctx.ticket.meta.review_required,
-        changes=staged_changes(ctx.worktree.path, main_sha),
+        changes=changes,
         max_diff_lines=project.merge_policy.max_diff_lines,
         protected=project.merge_policy.protected(),
         reviewer_summary=summary,
         hold=project.run.integration == "hold" and not approved,
+        new_dependencies=added,
     )
     mode = delivery_mode(decision, project.git.remote is not None)
     extra: dict[str, Any] = {}

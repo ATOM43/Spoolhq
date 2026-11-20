@@ -62,7 +62,7 @@ agents:
   reviewer: codex-cli
 ```
 
-A run uses the role's `model`, else its backend's `model` (`agents.backends.<backend>.model`), else the backend's own default. `base_url` stays per backend: it names the server, not the role. A model name is 1 to 100 characters from `A–Z a–z 0–9 . _ : / -` and can't start with `-`, so it never reads as a command-line flag; it reaches each CLI as its own argument (`--model <name>`), never through a shell. `spool agents --project <name>` prints each role's model and where it came from: `model: claude-opus-x (from role)`, `(from backend)`, or `default`.
+A run uses the role's `model`, else its backend's `model` (`agents.backends.<backend>.model`), else the backend's own default. `base_url` stays per backend: it names the server, not the role. A model name is 1 to 100 characters from `A–Z a–z 0–9 . _ : / @ -` and can't start with `-`, so it never reads as a command-line flag; it reaches each CLI as its own argument (`--model <name>`), never through a shell. `spool agents --project <name>` prints each role's model and where it came from: `model: claude-opus-x (from role)`, `(from backend)`, or `default`.
 
 The daemon builds each role's runner per project for every run (`Agents.for_project`), and the planner's when a plan starts; `spool plan generate` and `spool review` use the project's `agents.planner` and `agents.reviewer`.
 

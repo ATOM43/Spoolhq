@@ -61,6 +61,7 @@ from spoolhq.services.runloop.integrator import IntegrationResult, IntegrationSt
 from spoolhq.services.runloop.machine import run_gates
 from spoolhq.services.runloop.model import Merged, RunContext
 from spoolhq.services.runloop.policy import DeliveryMode, describe
+from spoolhq.services.runloop.quality import record_main_coverage
 from spoolhq.services.runs import (
     EventKind,
     Integration,
@@ -150,6 +151,7 @@ def finish(
         manager.teardown(Worktree(journal.ticket_id, branch, path, journal.main_sha, ""))
     else:
         manager.teardown(journal.ticket_id)
+    record_main_coverage(run_log, journal.run_id, journal.ticket_id)
     _set_run(run_log, journal.run_id, RunStatus.DONE)
     run_log.append_event(journal.run_id, EventKind.INTEGRATE, {"commit": sha, "tag": tag})
     set_integration_state(run_log, journal.id, IntegrationState.DONE)

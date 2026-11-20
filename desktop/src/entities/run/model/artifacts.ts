@@ -72,6 +72,11 @@ export function useArtifact<A extends Artifact>(
   });
 }
 
-/** How a gate is named in the UI: the command gates by name, the built-in one in words. */
-export const gateLabel = (name: string): string =>
-  name === "file_size" ? "File size" : name;
+const BUILT_IN: Record<string, string> = {
+  file_size: "File size",
+  test_guard: "Test guard",
+  secret_scan: "Secret scan",
+};
+
+/** How a gate is named in the UI: the command gates by name, the built-in ones in words. */
+export const gateLabel = (name: string): string => BUILT_IN[name] ?? name;

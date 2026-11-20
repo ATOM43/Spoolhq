@@ -25,11 +25,12 @@ from tests.services.runloop.conftest import (
 from tests.services.runloop.test_pull_requests import FakeGitHub
 
 TOKEN = "ghp_fake0123456789abcdefTOKEN"  # noqa: S105 - a fake token
-CASES = ["review_required", "diff_size", "protected_paths", "needs_human"]
+CASES = ["review_required", "diff_size", "protected_paths", "new_dependencies", "needs_human"]
 DETAILS = {
     "review_required": "the ticket is marked review_required",
     "diff_size": "401 lines > 400",
     "protected_paths": ".github/workflows/ci.yml",
+    "new_dependencies": "requests",
     "needs_human": "needs_human.",
 }
 cli = CliRunner()
@@ -88,6 +89,11 @@ def run_case(
         files = {"hello.py": "x = 1\n" * 400}
     elif case == "protected_paths":
         files = {".github/workflows/ci.yml": "on: push\n"}
+    elif case == "new_dependencies":
+        settings = load_project("demo", projects_dir=projects_dir)
+        settings.merge_policy.protected_paths = []  # manifests are protected by default
+        save_project(settings, projects_dir=projects_dir)
+        files = {"requirements.txt": "requests==2.32.0\n"}
     verdict = "needs_human" if case == "needs_human" else "approve"
     github = remote.client if remote is not None else None
     integrator = Delivery(clock=clock, github=github) if github else Delivery(clock=clock)

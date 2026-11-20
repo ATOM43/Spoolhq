@@ -3,7 +3,8 @@
 ``run_gates`` runs them in order without a shell, in a scrubbed environment, with a
 timeout that stops the whole process tree, streams each one's output to a capped log
 and returns structured results with a trimmed excerpt and the failing test names.
-``check_file_sizes`` is the built-in file-size gate the run loop adds after them.
+``check_file_sizes``, ``check_tests`` (the test guard, with the coverage total) and
+``scan_secrets`` are the built-in gates the run loop adds after them.
 ``try_command`` runs one command once, for the app's **Test** button.
 ``check_done_when`` maps "Done when" items naming a configured command to its gate.
 This package imports no other service. See ``docs/gates.md``.
@@ -15,9 +16,11 @@ from spoolhq.services.gates.command import (
     gate_env,
     split_command,
 )
+from spoolhq.services.gates.coverage import read_total, store_total, stored_total
 from spoolhq.services.gates.model import (
     GATE_NAMES,
     DoneWhenCheck,
+    FileChange,
     GateFailureData,
     GateName,
     GateResult,
@@ -31,6 +34,7 @@ from spoolhq.services.gates.runner import (
     run_gates,
     try_command,
 )
+from spoolhq.services.gates.secrets import SECRET_SCAN, scan_secrets
 from spoolhq.services.gates.size import (
     DEFAULT_EXEMPT,
     DEFAULT_MAX_FILE_LINES,
@@ -39,8 +43,23 @@ from spoolhq.services.gates.size import (
     count_lines,
     is_exempt,
 )
+from spoolhq.services.gates.testguard import (
+    DEFAULT_TEST_PATHS,
+    TEST_GUARD,
+    Coverage,
+    check_tests,
+)
 
 __all__ = [
+    "DEFAULT_TEST_PATHS",
+    "SECRET_SCAN",
+    "TEST_GUARD",
+    "Coverage",
+    "check_tests",
+    "read_total",
+    "scan_secrets",
+    "store_total",
+    "stored_total",
     "DEFAULT_EXEMPT",
     "DEFAULT_MAX_FILE_LINES",
     "FILE_SIZE",
@@ -51,6 +70,7 @@ __all__ = [
     "GATE_NAMES",
     "SHELL_SYNTAX_ERROR",
     "DoneWhenCheck",
+    "FileChange",
     "GateFailureData",
     "GateName",
     "GateResult",

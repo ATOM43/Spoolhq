@@ -25,6 +25,7 @@ from spoolhq.services.agents import READ_ONLY_SHELL, AgentRunner, backend_names,
 from spoolhq.services.gates import (
     DEFAULT_EXEMPT,
     DEFAULT_MAX_FILE_LINES,
+    DEFAULT_TEST_PATHS,
     DEFAULT_TIMEOUTS,
     check_gate_command,
 )
@@ -162,15 +163,15 @@ BackendName = Annotated[str, AfterValidator(_check_backend)]
 USE_DEFAULT = "default"
 """A role's ``backend: default``: the role uses ``agents.default``."""
 
-_MODEL_NAME = re.compile(r"[A-Za-z0-9._:/][A-Za-z0-9._:/-]{0,99}")
+_MODEL_NAME = re.compile(r"[A-Za-z0-9._:/@][A-Za-z0-9._:/@-]{0,99}")
 
 
 def _check_model(value: str) -> str:
-    """1 to 100 of ``A-Z a-z 0-9 . _ : / -``, not starting with ``-``, so a model name
+    """1 to 100 of ``A-Z a-z 0-9 . _ : / @ -``, not starting with ``-``, so a model name
     passed as its own argument can never read as a command-line flag."""
     if not _MODEL_NAME.fullmatch(value):
         raise ValueError(
-            "must be 1 to 100 characters from A-Z a-z 0-9 . _ : / - and not start with -"
+            "must be 1 to 100 characters from A-Z a-z 0-9 . _ : / @ - and not start with -"
         )
     return value
 
@@ -281,6 +282,8 @@ class MergePolicy(_Strict):
     """Replaces the default list."""
     protected_paths_extra: list[PathPattern] = Field(default_factory=list)
     """Added to ``protected_paths``."""
+    new_dependencies: Literal["approve", "allow"] = "approve"
+    """``approve``: a ticket adding a dependency to a manifest needs a person."""
 
     def protected(self) -> list[str]:
         return [*self.protected_paths, *self.protected_paths_extra]
@@ -338,6 +341,12 @@ class GatesSettings(_Strict):
     """The file-size gate's limit for files a ticket adds or changes; 0 turns it off."""
     max_file_lines_exempt: list[PathPattern] = Field(default_factory=lambda: list(DEFAULT_EXEMPT))
     """Globs the file-size gate skips; replaces the default list."""
+    test_paths: list[PathPattern] = Field(default_factory=lambda: list(DEFAULT_TEST_PATHS))
+    """Globs naming test files, for the test guard; replaces the default list."""
+    coverage_report: PathPattern | None = None
+    """The coverage report the test command writes (Cobertura XML or a JSON summary)."""
+    secret_scan_allow: list[PathPattern] = Field(default_factory=list)
+    """Globs the secret scan skips."""
 
 
 class RunSettings(_Strict):

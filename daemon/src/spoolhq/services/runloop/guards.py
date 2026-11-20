@@ -1,9 +1,11 @@
 """Checks on what an attempt may touch: agent settings (blocked, a security issue) and
-the notes files only SpoolHQ writes (sent back to the agent). Both look at the whole
-branch against a merge base, so main moving meanwhile never counts.
+the notes files only SpoolHQ writes (sent back to the agent), and the ticket's changes
+the built-in gates check. All look at the whole branch against a merge base, so main
+moving meanwhile never counts.
 """
 
 from spoolhq.services.agents import changed_settings, repo_settings_refusal
+from spoolhq.services.gates import FileChange
 from spoolhq.services.git import run_git
 from spoolhq.services.notes import is_notes_path
 from spoolhq.services.runloop.model import Ending, EndKind, RunContext
@@ -76,24 +78,70 @@ def edited_notes(ctx: RunContext) -> list[str]:
     return sorted(path for path in changed if is_notes_path(path))
 
 
-def changed_files(ctx: RunContext) -> list[tuple[str, bytes | None]]:
-    """The files the ticket adds, changes or renames, each with its content before the
-    ticket (``None`` when new), for the file-size gate. "Before" is the merge base with
-    the default branch, so main merged into the branch never counts as the ticket's."""
+def _merge_base(ctx: RunContext) -> str:
     base = run_git(("merge-base", ctx.project.default_branch, "HEAD"), ctx.worktree.path)
-    since = base.stdout.strip() if base.returncode == 0 else ctx.worktree.base_sha
-    status = _git(ctx, "diff", "--name-status", "-M", "--diff-filter=AMR", "-z", since, "HEAD")
+    return base.stdout.strip() if base.returncode == 0 else ctx.worktree.base_sha
+
+
+def _added_lines(ctx: RunContext, since: str, *paths: str) -> tuple[tuple[int, str], ...]:
+    """The lines the ticket adds to one file, numbered in the new file, from ``-U0``.
+    Only lines inside hunks count, so an added line starting with ``++`` is still one."""
+    diff = _git(
+        ctx,
+        "diff",
+        "-U0",
+        "-M",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-textconv",
+        since,
+        "HEAD",
+        "--",
+        *paths,
+    )
+    added: list[tuple[int, str]] = []
+    number, in_hunk = 0, False
+    for line in diff.split("\n"):
+        if line.startswith("@@"):
+            in_hunk = True
+            number = int(line.split("+", 1)[1].split(",", 1)[0].split(" ", 1)[0])
+        elif in_hunk and line.startswith("+"):
+            added.append((number, line[1:]))
+            number += 1
+    return tuple(added)
+
+
+def ticket_changes(ctx: RunContext, *, with_added: bool = True) -> list[FileChange]:
+    """The files the ticket adds, changes, renames or deletes, each with its content
+    before the ticket and its added lines, for the built-in gates. "Before" is the merge
+    base with the default branch, so main merged into the branch never counts."""
+    since = _merge_base(ctx)
+    status = _git(ctx, "diff", "--name-status", "-M", "--diff-filter=AMRD", "-z", since, "HEAD")
     fields = iter(status.split("\0"))
-    found: list[tuple[str, bytes | None]] = []
+    found: list[FileChange] = []
     for kind in fields:
         if not kind:
             continue
         old = new = next(fields)
-        if kind.startswith("R"):
+        renamed = kind.startswith("R")
+        if renamed:
             new = next(fields)
         before = None
         if not kind.startswith("A"):
             shown = run_git(("show", f"{since}:{old}"), ctx.worktree.path)
             before = shown.stdout.encode("utf-8") if shown.returncode == 0 else None
-        found.append((new, before))
+        deleted = kind.startswith("D")
+        paths = (old, new) if renamed else (new,)
+        added = _added_lines(ctx, since, *paths) if with_added and not deleted else ()
+        found.append(FileChange(new, before, deleted, old if renamed else None, added))
     return found
+
+
+def changed_files(ctx: RunContext) -> list[tuple[str, bytes | None]]:
+    """The files the ticket adds, changes or renames with their content before it, for
+    the file-size gate."""
+    return [
+        (change.path, change.before)
+        for change in ticket_changes(ctx, with_added=False)
+        if not change.deleted
+    ]

@@ -41,7 +41,7 @@ const asState = (status: string): RowState =>
       : "skipped";
 
 /**
- * One row per gate command, then the built-in "File size" row. A failed row opens on its own and scrolls to the first
+ * One row per gate command, then the built-in "File size", "Test guard" and "Secret scan" rows. A failed row opens on its own and scrolls to the first
  * failure line; output is plain monospace text (untrusted). While the gates run, the
  * rows done so far come from the step events, then "Running <command>…".
  */

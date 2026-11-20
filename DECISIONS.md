@@ -429,3 +429,9 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 423 · A project card's menu is a `<details>` beside its link · docs/decisions/desktop.md
 424 · A project.yaml 422 names its first problem's field · docs/decisions/api.md
 425 · A role can carry its own model; base URL stays per backend · docs/decisions/agents.md
+426 · The test guard and secret scan are code gates on the ticket's diff, after the file-size gate · docs/decisions/runloop.md
+427 · A found secret is reported by path, line and pattern name only · docs/decisions/runloop.md
+428 · Main's coverage total is a workspace file written at each merge from the landed gates.json · docs/decisions/runloop.md
+429 · New dependencies are a merge-policy rule, read from manifests with the standard library · docs/decisions/runloop.md
+430 · The template names its coverage report in its contract · docs/decisions/projects-tickets.md
+431 · Model names may contain `@` · docs/decisions/agents.md
