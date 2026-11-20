@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **44 tickets in 6 phases, about 101 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **45 tickets in 6 phases, about 102 hours** for one developer.
 
 **What v1 includes**
 
@@ -84,7 +84,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
 | T21 | Tickets tab and plan review | 4 Desktop UI | T15, T36 | 2.5 |
 | T22 | Live run | 4 Desktop UI | T37 | 2 |
-| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45 | 3 |
+| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45, T46 | 3 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T40 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
@@ -105,8 +105,9 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T42 | Repo safety | 4 Desktop UI | T36 | 1.5 |
 | T43 | Existing repo onboarding | 4 Desktop UI | T42 | 2.5 |
 | T44 | Drafting in the form | 4 Desktop UI | T41 | 2 |
-| T45 | Agent notes layout for projects | 3 Planner and Git | T14, T16 | 2 |
-|  | **Total** |  |  | **101** |
+| T45 | Agent notes written by code | 3 Planner and Git | T14, T16 | 1.5 |
+| T46 | Notes layout in templates and old projects | 3 Planner and Git | T45 | 1.5 |
+|  | **Total** |  |  | **102** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T26 (44 h).
 
@@ -328,7 +329,7 @@ Done when:
 
 ## Phase 3 — Planner, templates and GitHub delivery
 
-Nine tickets add the parts around the loop: turning a spec into tickets, starting projects from templates, delivering through GitHub, more agent backends, the code graph and the agent notes layout. From here the orchestrator implements its own tickets while you review.
+Ten tickets add the parts around the loop: turning a spec into tickets, starting projects from templates, delivering through GitHub, more agent backends, the code graph, agent notes written by code and that notes layout in templates and old projects. From here the orchestrator implements its own tickets while you review.
 
 ### T15 · Planner agent
 
@@ -427,24 +428,36 @@ Done when:
 - [ ] The adapter passes the contract suite
 - [ ] The API key never appears in argv, logs or files
 
-### T45 · Agent notes layout for projects
+### T45 · Agent notes written by code
 
-Keep a project's PROGRESS and DECISIONS small, split and correct, written by code. *Depends on: T14, T16 · 2 h*
+Make SpoolHQ the only writer of a project's notes files. *Depends on: T14, T16 · 1.5 h*
 
-- The agent never edits the notes files. Its end-of-run note carries the progress entry and its decisions as data: area, title and text for each.
-- At merge, SpoolHQ writes them: the progress entry, PROGRESS trimmed to a short summary plus the last five entries with older ones moved to `docs/progress-archive.md`, each decision into `docs/decisions/<area>.md` with the next number, and its line in the `DECISIONS.md` index.
-- Areas come from `notes.decision_areas` in `project.yaml`, with a default list; a decision with an unknown area goes back to the agent with the allowed list.
-- A diff that touches `PROGRESS.md`, `DECISIONS.md`, `docs/progress-archive.md` or `docs/decisions/` fails the policy step, like planted agent settings.
-- A check at merge confirms every index line matches exactly one entry.
-- Templates start with this layout and a rules-only `CLAUDE.md`.
-- Existing projects with flat files are converted on their first merge, keeping every entry word for word.
+- The implementer returns, in its final message as today, a structured run note: `progress` (one entry, 1 to 1,500 characters) and `decisions` (0 to 5, each with `area`, `title` of one line up to 100 characters, and `text` up to 2,000 characters). SpoolHQ cleans every field first: control characters removed, no newline or ` · ` in a title, a text line starting with `#` indented by one space. The prompt says to put progress and decisions only in the note and never to edit the notes files, overriding the repo's own `CLAUDE.md`. A missing or unreadable note fails the attempt with "The agent didn't return its run note", retried like a gate failure.
+- Areas come from `notes.decision_areas` in `project.yaml`, default `[general, api, data, ui, infra, testing]`; an unknown area fails the attempt with "Unknown decision area '<x>'; use one of: …", counted against the gate retries.
+- A diff (against the merge base) that adds or changes `PROGRESS.md`, `DECISIONS.md`, `docs/progress-archive.md` or anything under `docs/decisions/` fails the policy step with "The agent edited notes files: <file>; put progress and decisions in the run note instead" and goes back to the agent as a retry.
+- At merge, in the same commit and under the run lock, SpoolHQ writes the notes, byte-exact outside what it adds: the entry `### T07 · <title> (<date>)` at the top of `PROGRESS.md`'s managed part between `<!-- spoolhq:recent:start -->` and `<!-- spoolhq:recent:end -->` (markers added at the end on the first merge), the newest 5 kept there and older ones moved word for word to the end of `docs/progress-archive.md`; each decision as `NNN. <title>` with its text indented in `docs/decisions/<area>.md` plus `NNN · <title> · docs/decisions/<area>.md` in the `DECISIONS.md` index (split layout), or appended to a flat `DECISIONS.md` in the same format.
+- A notes check before the integration commit (a service, for T46 too): every index line matches exactly one entry and the reverse, numbers have no gaps or duplicates, titles match; a failure blocks the ticket with "The notes files don't match: <first problem>".
+- The dev fake runner returns a structured note in every implementer scenario.
 
 Done when:
 
-- [ ] After many merges, PROGRESS holds a summary and the last five entries, and nothing is lost
+- [ ] Plan.md lists T45 and T46, with consistent table, totals and critical path
+- [ ] After many merges, PROGRESS holds the newest 5 entries and nothing is lost
 - [ ] Each decision lands in its area file with an index line, written by code
-- [ ] An agent diff touching the notes files fails the policy step
-- [ ] A flat project is converted on its first merge with every entry kept
+- [ ] An agent diff touching the notes files goes back to the agent as a retry
+- [ ] Lint and tests pass, and CI is green on Linux, macOS and Windows
+
+### T46 · Notes layout in templates and old projects
+
+Start new projects with the split notes layout and convert old flat ones. *Depends on: T45 · 1.5 h*
+
+- The fastapi-react template ships `PROGRESS.md` with the managed markers, a `DECISIONS.md` index, `docs/decisions/`, a rules-only `CLAUDE.md` and `notes.decision_areas` in its `project.yaml`.
+- On the first merge in a project whose notes files are flat, SpoolHQ converts them, keeping every entry word for word: progress entries into the managed section (last 5) and the archive, full decisions into `docs/decisions/general.md` with an index.
+
+Done when:
+
+- [ ] A project generated from the template passes the notes check before any ticket runs
+- [ ] A flat project is converted on its first merge with every entry kept word for word
 
 ## Phase 4 — Desktop UI (v0 screens)
 
@@ -718,7 +731,7 @@ Done when:
 
 ### T23 · Packaging
 
-One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43, T44, T45 · 3 h*
+One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43, T44, T45, T46 · 3 h*
 
 - The daemon is bundled with PyInstaller and shipped as a Tauri sidecar; the app starts it when it is not running.
 - Closing the window leaves the daemon and any run going, with a tray icon to quit.
