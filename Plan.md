@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **46 tickets in 6 phases, about 104.5 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **47 tickets in 6 phases, about 106.5 hours** for one developer.
 
 **What v1 includes**
 
@@ -84,7 +84,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
 | T21 | Tickets tab and plan review | 4 Desktop UI | T15, T36 | 2.5 |
 | T22 | Live run | 4 Desktop UI | T37 | 2 |
-| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47 | 3 |
+| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48 | 3 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T40 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
@@ -108,7 +108,8 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T45 | Agent notes written by code | 3 Planner and Git | T14, T16 | 1.5 |
 | T46 | Notes layout in templates and old projects | 3 Planner and Git | T45 | 2 |
 | T47 | Project settings: agents | 4 Desktop UI | T32, T27 | 2 |
-|  | **Total** |  |  | **104.5** |
+| T48 | Quality gates for projects | 3 Planner and Git | T46 | 2 |
+|  | **Total** |  |  | **106.5** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T26 (44 h).
 
@@ -330,7 +331,7 @@ Done when:
 
 ## Phase 3 — Planner, templates and GitHub delivery
 
-Ten tickets add the parts around the loop: turning a spec into tickets, starting projects from templates, delivering through GitHub, more agent backends, the code graph, agent notes written by code, and that notes layout in templates and old projects with a file-size gate for every project. From here the orchestrator implements its own tickets while you review.
+Eleven tickets add the parts around the loop: turning a spec into tickets, starting projects from templates, delivering through GitHub, more agent backends, the code graph, agent notes written by code, that notes layout in templates and old projects with a file-size gate for every project, and quality gates that keep weakened tests, secrets and unreviewed dependencies off main. From here the orchestrator implements its own tickets while you review.
 
 ### T15 · Planner agent
 
@@ -465,6 +466,21 @@ Done when:
 - [ ] A ticket that makes a file too long fails its gates in every project, including existing repos
 - [ ] SpoolHQ's own lint fails when PROGRESS has more than 5 recent entries
 - [ ] Lint and tests pass, and CI is green on Linux, macOS and Windows
+
+### T48 · Quality gates for projects
+
+Stop weakened tests, leaked secrets and unreviewed dependencies from reaching main. *Depends on: T46 · 2 h*
+
+- A built-in **test guard** gate: fails when the ticket's diff deletes test files or test functions, adds skip markers (`pytest.mark.skip`, `xfail`, `.skip(`, `.only(`), or lowers coverage below the base branch's, unless the ticket's "Done when" explicitly names the removal.
+- A built-in **secret scan** of the diff: common key and token patterns and high-entropy strings in added lines; a hit fails the gate and never prints the secret itself.
+- **New dependencies** in a lockfile or manifest send the ticket to approval through the merge policy, with the rule "Adds dependencies: <names>".
+- The fastapi-react template's `just lint` gains what SpoolHQ uses on itself, where missing: mypy strict, ruff `S`, the UTF-8 rule, layer rules, and a coverage floor.
+
+Done when:
+
+- [ ] A ticket that deletes or skips a test fails the test guard
+- [ ] A ticket that adds an API key fails the secret scan without printing it
+- [ ] A ticket that adds a dependency waits for approval
 
 ## Phase 4 — Desktop UI (v0 screens)
 
@@ -755,7 +771,7 @@ Done when:
 
 ### T23 · Packaging
 
-One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47 · 3 h*
+One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48 · 3 h*
 
 - The daemon is bundled with PyInstaller and shipped as a Tauri sidecar; the app starts it when it is not running.
 - Closing the window leaves the daemon and any run going, with a tray icon to quit.
