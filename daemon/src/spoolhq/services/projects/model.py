@@ -12,11 +12,13 @@ from urllib.parse import urlsplit
 from pydantic import (
     AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     StringConstraints,
     ValidationInfo,
     field_validator,
+    model_serializer,
 )
 
 from spoolhq.services.agents import READ_ONLY_SHELL, AgentRunner, backend_names, make_runner
@@ -157,33 +159,91 @@ def _check_backend(value: str) -> str:
 
 
 BackendName = Annotated[str, AfterValidator(_check_backend)]
+USE_DEFAULT = "default"
+"""A role's ``backend: default``: the role uses ``agents.default``."""
+
+_MODEL_NAME = re.compile(r"[A-Za-z0-9._:/][A-Za-z0-9._:/-]{0,99}")
+
+
+def _check_model(value: str) -> str:
+    """1 to 100 of ``A-Z a-z 0-9 . _ : / -``, not starting with ``-``, so a model name
+    passed as its own argument can never read as a command-line flag."""
+    if not _MODEL_NAME.fullmatch(value):
+        raise ValueError(
+            "must be 1 to 100 characters from A-Z a-z 0-9 . _ : / - and not start with -"
+        )
+    return value
+
+
+ModelName = Annotated[str, AfterValidator(_check_model)]
+ModelSource = Literal["role", "backend", "default"]
 
 
 class BackendSettings(_Strict):
     """A custom endpoint and model for one backend, e.g. a local Ollama server."""
 
     base_url: Annotated[str, AfterValidator(_check_base_url)] | None = None
-    model: NonEmptyStr | None = None
+    model: ModelName | None = None
+
+
+class RoleSettings(_Strict):
+    """A role's backend and, optionally, its own model. Written back as the plain backend
+    name when it has no model, so files without role models stay as they are."""
+
+    backend: Annotated[str, AfterValidator(lambda v: _role_backend(v))] = USE_DEFAULT
+    model: ModelName | None = None
+
+    @model_serializer
+    def _dump(self) -> str | dict[str, str]:
+        data = {"backend": self.backend} if "backend" in self.model_fields_set else {}
+        if self.model is not None:
+            data["model"] = self.model
+        return self.backend if set(data) == {"backend"} else data
+
+
+def _role_backend(value: str) -> str:
+    return value if value == USE_DEFAULT else _check_backend(value)
+
+
+def _role_from_name(value: object) -> object:
+    """``reviewer: codex-cli`` is ``{backend: codex-cli}``; a bad name names the role."""
+    return {"backend": _role_backend(value)} if isinstance(value, str) else value
+
+
+RoleField = Annotated[RoleSettings | None, BeforeValidator(_role_from_name)]
 
 
 class Agents(_Strict):
     default: BackendName = "claude-code-cli"
-    planner: BackendName | None = None
-    implementer: BackendName | None = None
-    reviewer: BackendName | None = None
+    planner: RoleField = None
+    implementer: RoleField = None
+    reviewer: RoleField = None
     backends: dict[BackendName, BackendSettings] = Field(default_factory=dict)
     budget_per_ticket: Budget | None = None
 
     def backend_for(self, role: Role) -> str:
         """The role's backend: its override, or ``default``."""
-        override: str | None = getattr(self, role)
-        return override or self.default
+        settings: RoleSettings | None = getattr(self, role)
+        if settings is None or settings.backend == USE_DEFAULT:
+            return self.default
+        return settings.backend
+
+    def model_for(self, role: Role) -> tuple[str | None, ModelSource]:
+        """The role's model and where it comes from: the role's own, else its backend's,
+        else none (the backend's own default)."""
+        settings: RoleSettings | None = getattr(self, role)
+        if settings is not None and settings.model is not None:
+            return settings.model, "role"
+        backend = self.backends.get(self.backend_for(role))
+        if backend is not None and backend.model is not None:
+            return backend.model, "backend"
+        return None, "default"
 
     def runner_for(self, role: Role) -> AgentRunner:
-        """The role's runner, with its backend's ``base_url`` and ``model``."""
+        """The role's runner, with its backend's ``base_url`` and the role's model."""
         name = self.backend_for(role)
         backend = self.backends.get(name, BackendSettings())
-        return make_runner(name, base_url=backend.base_url, model=backend.model)
+        return make_runner(name, base_url=backend.base_url, model=self.model_for(role)[0])
 
     def shell_warnings(self) -> list[str]:
         """A warning for each read-only role on a backend whose agent has a shell."""

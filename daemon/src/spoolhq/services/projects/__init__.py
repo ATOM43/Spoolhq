@@ -23,6 +23,7 @@ from spoolhq.services.projects.model import (
     NotesSettings,
     Project,
     Role,
+    RoleSettings,
     TemplateInfo,
     Tracker,
 )
@@ -61,6 +62,7 @@ __all__ = [
     "NO_TEST_COMMAND",
     "Project",
     "Role",
+    "RoleSettings",
     "ProjectError",
     "ProjectValidationError",
     "TemplateInfo",

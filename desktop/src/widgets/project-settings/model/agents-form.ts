@@ -1,7 +1,8 @@
 /**
- * The Agents section's form and how it maps to `project.yaml`'s `agents`. A model and a
- * base URL belong to a backend (`agents.backends.<name>`), so roles on the same backend
- * share them. Only what the user changed is touched; the daemon writes just those keys.
+ * The Agents section's form and how it maps to `project.yaml`'s `agents`. A role is a
+ * backend name, or `{backend, model}` when it has its own model; each backend's model
+ * and base URL (`agents.backends.<name>`) are that backend's defaults. Only what the
+ * user changed is touched; the daemon writes just those keys.
  */
 import { DaemonError } from "@/shared/api";
 
@@ -20,13 +21,19 @@ export interface BackendFields {
   base_url: string;
 }
 
+export interface RoleFields {
+  backend: string; // "" = Use default
+  model: string; // "" = the backend's model
+}
+
 export interface AgentsForm {
   default: string;
-  planner: string; // "" = Use default
-  implementer: string;
-  reviewer: string;
+  roles: Record<Role, RoleFields>;
   backends: Record<string, BackendFields>;
 }
+
+/** A role's `backend: default` in a mapping. */
+const USE_DEFAULT = "default";
 
 type Data = Record<string, unknown>;
 
@@ -53,15 +60,35 @@ export function formFrom(settings: Data): AgentsForm {
   );
   return {
     default: text(agents.default) || DEFAULT_BACKEND,
-    planner: text(agents.planner),
-    implementer: text(agents.implementer),
-    reviewer: text(agents.reviewer),
+    roles: {
+      planner: roleFrom(agents.planner),
+      implementer: roleFrom(agents.implementer),
+      reviewer: roleFrom(agents.reviewer),
+    },
     backends: Object.fromEntries(backends),
   };
 }
 
-export function backendFor(form: AgentsForm, role: Role): string {
-  return form[role] || form.default;
+function roleFrom(value: unknown): RoleFields {
+  const entry = typeof value === "string" ? { backend: value } : record(value);
+  const backend = text(entry.backend);
+  return {
+    backend: backend === USE_DEFAULT ? "" : backend,
+    model: text(entry.model),
+  };
+}
+
+/** A role as `project.yaml` holds it: a mapping only when it has a model. */
+function roleValue(fields: RoleFields, before: unknown): unknown {
+  const same = roleFrom(before);
+  if (same.backend === fields.backend && same.model === fields.model.trim()) {
+    return before; // unchanged: keep the file's spelling
+  }
+  const model = fields.model.trim();
+  if (!model) {
+    return fields.backend || undefined;
+  }
+  return fields.backend ? { backend: fields.backend, model } : { model };
 }
 
 export function fieldsOf(form: AgentsForm, backend: string): BackendFields {
@@ -84,7 +111,7 @@ export function withAgents(base: Data, form: AgentsForm): Data {
     agents.default = form.default;
   }
   for (const role of ROLES) {
-    agents = put(agents, role, form[role] || undefined);
+    agents = put(agents, role, roleValue(form.roles[role], before[role]));
   }
   let backends: Data = { ...record(before.backends) };
   for (const [name, fields] of Object.entries(form.backends)) {

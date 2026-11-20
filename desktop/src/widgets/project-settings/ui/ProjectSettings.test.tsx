@@ -141,11 +141,63 @@ describe("Settings tab · Agents", () => {
       agents: {
         default: "claude-code-cli",
         budget_per_ticket: { usd: 5 },
-        reviewer: "codex-cli",
-        backends: { "codex-cli": { model: "gpt-5" } },
+        reviewer: { backend: "codex-cli", model: "gpt-5" },
       },
     });
     expect(screen.getByText("Saved")).toBeInTheDocument();
+  });
+
+  it("sends a mapping only for roles with a model", async () => {
+    PUT.mockImplementation((_path, init) =>
+      withEtag((init as { body: unknown }).body, '"e2"'),
+    );
+    show();
+    await userEvent.type(
+      await screen.findByLabelText("Planner model"),
+      "claude-opus-x",
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText("Implementer backend"),
+      "codex-cli",
+    );
+    await userEvent.click(screen.getByText("Advanced"));
+    await userEvent.type(
+      screen.getByLabelText("Claude Code default model"),
+      "claude-haiku-x",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(PUT).toHaveBeenCalled();
+    });
+    expect(sentBody().agents).toEqual({
+      default: "claude-code-cli",
+      budget_per_ticket: { usd: 5 },
+      planner: { model: "claude-opus-x" },
+      implementer: "codex-cli",
+      backends: { "claude-code-cli": { model: "claude-haiku-x" } },
+    });
+  });
+
+  it("shows each role's own model from the file, and keeps an untouched mapping", async () => {
+    settings = {
+      name: "demo",
+      agents: { planner: { backend: "default", model: "big" } },
+    };
+    PUT.mockImplementation((_path, init) =>
+      withEtag((init as { body: unknown }).body, '"e2"'),
+    );
+    show();
+    expect(await screen.findByLabelText("Planner model")).toHaveValue("big");
+    expect(screen.getByLabelText("Planner backend")).toHaveValue("");
+    await userEvent.type(screen.getByLabelText("Reviewer model"), "small");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(PUT).toHaveBeenCalled();
+    });
+    expect(sentBody().agents).toEqual({
+      planner: { backend: "default", model: "big" },
+      reviewer: { model: "small" },
+    });
   });
 
   it("Use default removes the role's key", async () => {
@@ -214,6 +266,30 @@ describe("Settings tab · Agents", () => {
     expect(screen.getByLabelText("Planner model")).toHaveValue("");
   });
 
+  it("puts a role model's 422 next to that role's model", async () => {
+    PUT.mockRejectedValueOnce(
+      apiError(422, {
+        field: "agents.implementer.model",
+        message:
+          "project.yaml: agents.implementer.model: must be 1 to 100 characters from A-Z a-z 0-9 . _ : / - and not start with -",
+      }),
+    );
+    show();
+    const model = await screen.findByLabelText("Implementer model");
+    await userEvent.type(model, "-rf");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(model).toHaveAttribute("aria-invalid", "true");
+    });
+    expect(model).toHaveAccessibleDescription(
+      "must be 1 to 100 characters from A-Z a-z 0-9 . _ : / - and not start with -",
+    );
+    expect(screen.getByLabelText("Planner model")).toHaveAttribute(
+      "aria-invalid",
+      "false",
+    );
+  });
+
   it("puts a 422 next to its field", async () => {
     PUT.mockRejectedValueOnce(
       apiError(422, {
@@ -223,10 +299,8 @@ describe("Settings tab · Agents", () => {
       }),
     );
     show();
-    await userEvent.click(
-      (await screen.findAllByText("Advanced"))[0] as HTMLElement,
-    );
-    const url = screen.getByLabelText("Planner base URL");
+    await userEvent.click(await screen.findByText("Advanced"));
+    const url = screen.getByLabelText("Claude Code base URL");
     await userEvent.type(url, "http://example.com");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => {

@@ -34,7 +34,8 @@ from tests.services.runloop.conftest import PASSING, FakeGates, ManualClock, Mer
 
 def set_roles(projects_dir: Path, **roles: str) -> None:
     settings = load_project("demo", projects_dir=projects_dir)
-    agents = settings.agents.model_copy(update=roles)
+    current = settings.agents.model_dump(mode="json", exclude_unset=True)
+    agents = type(settings.agents).model_validate({**current, **roles})
     save_project(settings.model_copy(update={"agents": agents}), projects_dir=projects_dir)
 
 

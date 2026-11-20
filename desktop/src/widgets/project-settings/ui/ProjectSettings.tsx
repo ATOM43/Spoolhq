@@ -1,6 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ChevronRight,
   CircleAlert,
   CircleCheck,
   CircleDashed,
@@ -9,9 +8,9 @@ import {
   RotateCw,
   TriangleAlert,
 } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { backendLabel, useAgents, type Backend } from "@/entities/agent";
+import { useAgents, type Backend } from "@/entities/agent";
 import {
   saveSettings,
   useProjectSettings,
@@ -19,30 +18,21 @@ import {
 } from "@/entities/project";
 import { openSettings } from "@/features/settings";
 import { queryKeys } from "@/shared/api";
-import {
-  Button,
-  describedBy,
-  EmptyState,
-  Field,
-  Input,
-  ReasonButton,
-} from "@/shared/ui";
+import { Button, EmptyState, ReasonButton } from "@/shared/ui";
 
 import {
-  backendFor,
   conflictOf,
   fieldsOf,
   formFrom,
   isDirty,
   problemOf,
-  ROLE_TITLES,
   ROLES,
   withAgents,
   type AgentsForm,
   type BackendFields,
   type Problem,
-  type Role,
 } from "../model/agents-form";
+import { BackendDefaults, RoleFields } from "./AgentFields";
 import { BackendSelect } from "./BackendSelect";
 
 interface Props {
@@ -197,10 +187,17 @@ function AgentsSection({
     problem?.field === field ? problem.message : null;
   const shownFields = [
     "agents.default",
-    ...ROLES.flatMap((role) => {
-      const name = `agents.backends.${backendFor(form, role)}`;
-      return [`agents.${role}`, `${name}.model`, `${name}.base_url`];
-    }),
+    ...ROLES.flatMap((role) => [
+      `agents.${role}`,
+      `agents.${role}.backend`,
+      `agents.${role}.model`,
+    ]),
+    ...[...backends.map((b) => b.name), ...Object.keys(form.backends)].flatMap(
+      (name) => [
+        `agents.backends.${name}.model`,
+        `agents.backends.${name}.base_url`,
+      ],
+    ),
   ];
   const otherProblem =
     problem && !shownFields.includes(problem.field ?? "") ? problem : null;
@@ -276,12 +273,17 @@ function AgentsSection({
               form={form}
               backends={backends}
               errorFor={errorFor}
-              onRole={(value) => {
-                edit({ ...form, [role]: value });
+              onChange={(fields) => {
+                edit({ ...form, roles: { ...form.roles, [role]: fields } });
               }}
-              onBackend={editBackend}
             />
           ))}
+          <BackendDefaults
+            form={form}
+            backends={backends}
+            errorFor={errorFor}
+            onChange={editBackend}
+          />
           {otherProblem ? (
             <p
               role="alert"
@@ -329,94 +331,5 @@ function AgentsSection({
         </p>
       </div>
     </div>
-  );
-}
-
-function RoleFields({
-  role,
-  form,
-  backends,
-  errorFor,
-  onRole,
-  onBackend,
-}: {
-  role: Role;
-  form: AgentsForm;
-  backends: Backend[];
-  errorFor: (field: string) => string | null;
-  onRole: (value: string) => void;
-  onBackend: (name: string, fields: Partial<BackendFields>) => void;
-}) {
-  const id = useId();
-  const title = ROLE_TITLES[role];
-  const backend = backendFor(form, role);
-  const fields = fieldsOf(form, backend);
-  const prefix = `agents.backends.${backend}`;
-  const modelError = errorFor(`${prefix}.model`);
-  const urlError = errorFor(`${prefix}.base_url`);
-  const [advanced, setAdvanced] = useState(fields.base_url !== "");
-  const shared = `For every role on ${backendLabel(backend).title}.`;
-  return (
-    <fieldset className="flex flex-col gap-3 rounded-md border p-4">
-      <legend className="px-1 text-sm font-semibold">{title}</legend>
-      <BackendSelect
-        label={`${title} backend`}
-        value={form[role]}
-        useDefault={form.default}
-        backends={backends}
-        error={errorFor(`agents.${role}`)}
-        onChange={onRole}
-      />
-      <Field
-        id={`${id}-model`}
-        label={`${title} model`}
-        hint={`Optional; empty uses the backend's own default. ${shared}`}
-        error={modelError}
-      >
-        <Input
-          id={`${id}-model`}
-          value={fields.model}
-          aria-invalid={!!modelError}
-          aria-describedby={describedBy(`${id}-model`)}
-          onChange={(event) => {
-            onBackend(backend, { model: event.target.value });
-          }}
-        />
-      </Field>
-      <details
-        open={advanced || !!urlError}
-        onToggle={(event) => {
-          setAdvanced(event.currentTarget.open);
-        }}
-        className="group"
-      >
-        <summary className="flex cursor-pointer list-none items-center gap-1 text-sm text-ink-muted select-none [&::-webkit-details-marker]:hidden">
-          <ChevronRight
-            aria-hidden
-            className="size-4 transition-transform group-open:rotate-90"
-          />
-          Advanced
-        </summary>
-        <div className="mt-3">
-          <Field
-            id={`${id}-url`}
-            label={`${title} base URL`}
-            hint={`A custom endpoint, e.g. a local Ollama. Plain http only for localhost. ${shared}`}
-            error={urlError}
-          >
-            <Input
-              id={`${id}-url`}
-              value={fields.base_url}
-              placeholder="https://…"
-              aria-invalid={!!urlError}
-              aria-describedby={describedBy(`${id}-url`)}
-              onChange={(event) => {
-                onBackend(backend, { base_url: event.target.value });
-              }}
-            />
-          </Field>
-        </div>
-      </details>
-    </fieldset>
   );
 }

@@ -9,7 +9,7 @@ import pytest
 from spoolhq.core.daemon_lock import acquire_lock
 from spoolhq.services.agents import AgentPolicy, FakeRunner
 from spoolhq.services.git import WorktreeManager
-from spoolhq.services.projects import load_project, save_project
+from spoolhq.services.projects import RoleSettings, load_project, save_project
 from spoolhq.services.runloop import (
     RUN_LOCK,
     IntegrationResult,
@@ -529,8 +529,8 @@ def test_a_codex_reviewer_or_planner_is_warned_about_at_run_start(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     settings = load_project("demo", projects_dir=projects_dir)
-    settings.agents.reviewer = "codex-cli"
-    settings.agents.planner = "codex-cli"
+    settings.agents.reviewer = RoleSettings(backend="codex-cli")
+    settings.agents.planner = RoleSettings(backend="codex-cli")
     save_project(settings, projects_dir=projects_dir)
     loop, _ = make_loop([transcripts.implement()], [transcripts.review("approve")])
 

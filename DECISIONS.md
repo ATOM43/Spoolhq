@@ -428,3 +428,4 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 422 · The Settings tab isn't kept mounted; leaving it with changes asks · docs/decisions/desktop.md
 423 · A project card's menu is a `<details>` beside its link · docs/decisions/desktop.md
 424 · A project.yaml 422 names its first problem's field · docs/decisions/api.md
+425 · A role can carry its own model; base URL stays per backend · docs/decisions/agents.md

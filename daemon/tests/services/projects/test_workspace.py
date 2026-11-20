@@ -22,6 +22,7 @@ from spoolhq.services.projects.yaml_io import parse
 from tests.conftest import AGENT_FIXTURES, FakeBackend
 
 KNOWN_BACKENDS = "expected one of: claude-code-cli, codex-cli, claude-agent-sdk"
+BAD_MODEL = "must be 1 to 100 characters from A-Z a-z 0-9 . _ : / - and not start with -"
 
 
 def valid_data(repo: Path) -> dict[str, Any]:
@@ -120,7 +121,7 @@ tracker:
 """,
     )
     project = load_project("demo", projects_dir=projects_dir)
-    assert project.agents.reviewer == "claude-code-cli"
+    assert project.agents.backend_for("reviewer") == "claude-code-cli"
     backend = project.agents.backends["claude-code-cli"]
     assert (backend.base_url, backend.model) == ("http://localhost:11434", "qwen3-coder")
     assert project.agents.budget_per_ticket is not None
@@ -215,7 +216,10 @@ def test_missing_required_field_is_named(projects_dir: Path, git_repo: Path, fie
             "http://localhost:99999",
             "'http://localhost:99999' is not a valid URL",
         ),
-        ("agents.backends.claude-code-cli.model", " ", "must not be empty"),
+        ("agents.backends.claude-code-cli.model", " ", BAD_MODEL),
+        ("agents.planner.model", "-rf", BAD_MODEL),
+        ("agents.implementer.model", "a b", BAD_MODEL),
+        ("agents.reviewer.model", "x" * 101, BAD_MODEL),
         ("agents.budget_per_ticket.usd", -1, "must be greater than 0"),
         ("agents.budget_per_ticket.tokens", 0, "must be greater than 0"),
         ("limits.gate_retries", 11, "must be at most 10"),

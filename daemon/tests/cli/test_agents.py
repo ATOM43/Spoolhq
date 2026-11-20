@@ -14,7 +14,7 @@ from spoolhq.services.agents import (
     ClaudeCliRunner,
     CodexCliRunner,
 )
-from spoolhq.services.projects import BackendSettings, load_project, save_project
+from spoolhq.services.projects import BackendSettings, RoleSettings, load_project, save_project
 from tests.conftest import (
     AGENT_FIXTURES,
     CODEX_FIXTURES,
@@ -183,14 +183,15 @@ def test_backends_are_separated_by_a_blank_line(monkeypatch: pytest.MonkeyPatch)
     assert result.output.splitlines()[3:5] == ["", "claude-code-cli"]
 
 
-def test_project_shows_each_roles_backend_model_and_endpoint(
+def test_project_shows_each_roles_backend_model_its_source_and_endpoint(
     workspace: Path, projects_dir: Path, fake_backend: FakeBackend
 ) -> None:
     fake_backend("fake-reviewer", ClaudeCliRunner())
     settings = load_project("demo", projects_dir=projects_dir)
     agents = settings.agents.model_copy(
         update={
-            "reviewer": "fake-reviewer",
+            "planner": RoleSettings(model="claude-opus-x"),
+            "reviewer": RoleSettings(backend="fake-reviewer"),
             "backends": {
                 "claude-code-cli": BackendSettings(
                     base_url="http://localhost:11434", model="qwen3-coder"
@@ -202,15 +203,15 @@ def test_project_shows_each_roles_backend_model_and_endpoint(
     result = runner.invoke(app, ["agents", "--project", "demo"])
     assert result.exit_code == 0, result.output
     assert result.output.splitlines() == [
-        "planner      claude-code-cli  model: qwen3-coder  endpoint: http://localhost:11434",
-        "implementer  claude-code-cli  model: qwen3-coder  endpoint: http://localhost:11434",
+        "planner      claude-code-cli  model: claude-opus-x (from role)  endpoint: http://localhost:11434",
+        "implementer  claude-code-cli  model: qwen3-coder (from backend)  endpoint: http://localhost:11434",
         "reviewer     fake-reviewer  model: default  endpoint: default",
     ]
 
 
 def test_project_warns_about_a_codex_reviewer(workspace: Path, projects_dir: Path) -> None:
     settings = load_project("demo", projects_dir=projects_dir)
-    agents = settings.agents.model_copy(update={"reviewer": "codex-cli"})
+    agents = settings.agents.model_copy(update={"reviewer": RoleSettings(backend="codex-cli")})
     save_project(settings.model_copy(update={"agents": agents}), projects_dir=projects_dir)
     result = runner.invoke(app, ["agents", "--project", "demo"])
     assert result.exit_code == 0, result.output

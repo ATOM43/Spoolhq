@@ -355,3 +355,44 @@ def test_plain_http_to_another_host_is_refused_with_its_field(
     assert error(refused)["field"] == "agents.backends.codex-cli.base_url"
     assert "plain http is allowed only for localhost" in error(refused)["message"]
     assert path.read_bytes() == on_disk
+
+
+@pytest.mark.parametrize("model", ["-rf", "two words", "x" * 101])
+def test_a_bad_role_model_is_refused_with_its_field(
+    run_client: TestClient, token: str, run_project: Path, model: str
+) -> None:
+    path = run_project / "project.yaml"
+    on_disk = path.read_bytes()
+    got = run_client.get("/api/projects/demo/settings", headers=auth(token))
+    settings = got.json()["settings"]
+    settings["agents"] = {"planner": {"backend": "default", "model": model}}
+    refused = run_client.put(
+        "/api/projects/demo/settings",
+        json={"settings": settings},
+        headers=auth(token, **{"If-Match": got.headers["ETag"]}),
+    )
+    assert refused.status_code == 422
+    assert error(refused)["field"] == "agents.planner.model"
+    assert path.read_bytes() == on_disk
+
+
+def test_a_role_model_is_written_as_a_mapping_and_nothing_else_changes(
+    run_client: TestClient, token: str, run_project: Path
+) -> None:
+    path = run_project / "project.yaml"
+    before = path.read_text(encoding="utf-8").splitlines()
+    got = run_client.get("/api/projects/demo/settings", headers=auth(token))
+    settings = got.json()["settings"]
+    settings["agents"] = {**settings.get("agents", {}), "planner": {"model": "claude-opus-x"}}
+    saved = run_client.put(
+        "/api/projects/demo/settings",
+        json={"settings": settings},
+        headers=auth(token, **{"If-Match": got.headers["ETag"]}),
+    )
+    assert saved.status_code == 200
+    assert saved.json()["settings"]["agents"]["planner"] == {"model": "claude-opus-x"}
+    after = path.read_text(encoding="utf-8").splitlines()
+    removed = [line for line in difflib.ndiff(before, after) if line.startswith("- ")]
+    added = [line[2:].strip() for line in difflib.ndiff(before, after) if line.startswith("+ ")]
+    assert removed == []
+    assert added == ["planner:", "model: claude-opus-x"]

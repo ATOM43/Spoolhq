@@ -26,4 +26,27 @@ describe("agents form", () => {
     form.backends["codex-cli"] = { model: " ", base_url: "" };
     expect(withAgents(base, form)).toEqual({ agents: { backends: {} } });
   });
+
+  it("reads a role as a name or a mapping", () => {
+    const form = formFrom({
+      agents: {
+        planner: "codex-cli",
+        reviewer: { backend: "default", model: "m" },
+      },
+    });
+    expect(form.roles).toEqual({
+      planner: { backend: "codex-cli", model: "" },
+      implementer: { backend: "", model: "" },
+      reviewer: { backend: "", model: "m" },
+    });
+  });
+
+  it("writes a plain name when a role's model is emptied", () => {
+    const base = { agents: { planner: { backend: "codex-cli", model: "m" } } };
+    const form = formFrom(base);
+    form.roles.planner.model = "";
+    expect(withAgents(base, form)).toEqual({
+      agents: { planner: "codex-cli" },
+    });
+  });
 });

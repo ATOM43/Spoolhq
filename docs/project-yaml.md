@@ -21,6 +21,9 @@ commands:
 agents:
   default: claude-code-cli        # or codex-cli, claude-agent-sdk
   reviewer: codex-cli             # optional per-role override
+  planner:                        # or a mapping, for the role's own model
+    backend: default              # a backend name, or default (agents.default)
+    model: claude-opus-x          # used instead of the backend's model
   backends:                       # optional: a custom endpoint and model per backend
     claude-code-cli: { base_url: http://localhost:11434, model: qwen3-coder }
   budget_per_ticket:
@@ -69,9 +72,10 @@ run:
 | `commands.lint` | no | | Non-empty lint command; same rules. |
 | `commands.test` | no | | Non-empty test command; same rules. Without it the project can't plan or run tickets ("Set the stack commands in project.yaml first"). The planner ends every ticket's "Done when" with `` `<test command>` passes ``. |
 | `agents.default` | no | `claude-code-cli` | A known backend: `claude-code-cli`, `codex-cli` or `claude-agent-sdk` ([agents](agents.md#roles-and-backends)). |
-| `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override; same values as `agents.default`. `agents.planner` is the backend of the [planner](planner.md). `spool agents --project <name>` shows what each role uses. |
+| `agents.planner`, `agents.implementer`, `agents.reviewer` | no | `agents.default` | Per-role override: a backend name (same values as `agents.default`), or a mapping `{backend, model}` with `backend` a name or `default` (the default when left out) and `model` the role's own model. `agents.planner` is the backend of the [planner](planner.md). `spool agents --project <name>` shows what each role uses. |
+| `agents.<role>.model` | no | | The role's model, used instead of its backend's: two roles on one backend can use different models. A model name is 1 to 100 characters from `A–Z a–z 0–9 . _ : / -` and doesn't start with `-`. A role written from the app is a mapping only when it has a model. |
 | `agents.backends.<backend>.base_url` | no | | Custom endpoint for that backend, e.g. a local [Ollama](agents.md#local-models-with-ollama). http or https; plain http only for `localhost`, `127.0.0.1` and `::1`; no username or password. A remote one needs its own token ([agents](agents.md#a-custom-endpoint-never-gets-your-login)). |
-| `agents.backends.<backend>.model` | no | | Model name for that backend; without it, the backend's own default. |
+| `agents.backends.<backend>.model` | no | | That backend's model for roles without their own; without it, the backend's own default. Same rules as `agents.<role>.model`. |
 | `agents.budget_per_ticket.usd` | no | | Positive number: spending cap per ticket for API backends. |
 | `agents.budget_per_ticket.tokens` | no | | Positive whole number: cap on weighted tokens per ticket for subscription backends; one plan generation (both attempts) counts as one ticket. Weighted tokens = input + output + cache writes + cache reads × 0.1, since cache reads cost a tenth of fresh input. T29, for example, used about 2.2M raw tokens (2.1M of them cache reads) but about 300k weighted. `spool runs show` lists the raw numbers and the weighted total. |
 | `limits.gate_retries` | no | `3` | Whole number from 0 to 10. |
@@ -114,6 +118,7 @@ Every problem is reported at once, one line each, as `project.yaml: <dotted.path
 | Unknown backend | `project.yaml: agents.default: unknown backend 'copilot'; expected one of: claude-code-cli, codex-cli, claude-agent-sdk` |
 | Plain http to another host | `project.yaml: agents.backends.claude-code-cli.base_url: 'http://example.com': plain http is allowed only for localhost; use https` |
 | Credentials in the URL | `project.yaml: agents.backends.claude-code-cli.base_url: must not contain a username or password` |
+| Bad model name | `project.yaml: agents.planner.model: must be 1 to 100 characters from A-Z a-z 0-9 . _ : / - and not start with -` |
 | Budget not positive | `project.yaml: agents.budget_per_ticket.usd: must be greater than 0` |
 | Retries out of range | `project.yaml: limits.gate_retries: must be at most 10` (or `must be at least 0`) |
 | Empty command | `project.yaml: commands.lint: must not be empty` |

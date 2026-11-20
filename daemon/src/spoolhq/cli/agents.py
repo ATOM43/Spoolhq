@@ -68,12 +68,14 @@ def describe_worktrees(worktrees_dir: Path) -> str:
 
 
 def describe_roles(agents: Agents) -> list[str]:
-    """One line per role: its backend, model and endpoint (``default`` when not set)."""
+    """One line per role: its backend, the model it uses and where that comes from (the
+    role, its backend, or the backend's own default), and the endpoint."""
     lines = []
     for role in ROLES:
         name = agents.backend_for(role)
         backend = agents.backends.get(name)
-        model = backend.model if backend and backend.model else "default"
+        chosen, source = agents.model_for(role)
+        model = f"{chosen} (from {source})" if chosen else "default"
         endpoint = backend.base_url if backend and backend.base_url else "default"
         lines.append(f"{role:<12} {name}  model: {model}  endpoint: {endpoint}")
     return lines

@@ -53,6 +53,17 @@ All are frozen dataclasses with a `kind`:
 
 `project.yaml` picks a backend per role: `agents.planner`, `agents.implementer` and `agents.reviewer`, each falling back to `agents.default` ([project.yaml](project-yaml.md)). `backends.py` holds the registry from backend name to adapter factory; it knows `claude-code-cli`, `codex-cli` and `claude-agent-sdk` (tests add fakes). An unknown name is refused when `project.yaml` loads, naming the field.
 
+A role can also be a mapping with its own model, so two roles on one backend can use different models (a larger model for the planner, a smaller one for the implementer, both through Claude Code):
+
+```yaml
+agents:
+  planner: { backend: default, model: claude-opus-x }
+  implementer: { model: claude-haiku-x }   # backend left out: agents.default
+  reviewer: codex-cli
+```
+
+A run uses the role's `model`, else its backend's `model` (`agents.backends.<backend>.model`), else the backend's own default. `base_url` stays per backend: it names the server, not the role. A model name is 1 to 100 characters from `A–Z a–z 0–9 . _ : / -` and can't start with `-`, so it never reads as a command-line flag; it reaches each CLI as its own argument (`--model <name>`), never through a shell. `spool agents --project <name>` prints each role's model and where it came from: `model: claude-opus-x (from role)`, `(from backend)`, or `default`.
+
 The daemon builds each role's runner per project for every run (`Agents.for_project`), and the planner's when a plan starts; `spool plan generate` and `spool review` use the project's `agents.planner` and `agents.reviewer`.
 
 Each backend takes an optional `base_url` and `model` under `agents.backends`:
@@ -69,7 +80,7 @@ agents:
 
 ### In the app: the project's Settings tab
 
-The project panel's **Settings** tab (Spec · Tickets · Run · Settings; Home's card menu **Project settings** opens it with `?tab=settings`) edits these keys in the project's `project.yaml` in the workspace, never in the repo. Its Agents section has the default backend, then planner, implementer and reviewer: a backend dropdown ("Use default" first, then the detected backends), an optional model name, and under **Advanced** a base URL. The model and base URL belong to the backend (`agents.backends.<backend>`), so roles on the same backend share them. A backend that isn't installed or logged in is listed but marked, with its reason as a tooltip. **Save** goes through `PUT /api/projects/{name}/settings` with `If-Match`: a 412 shows "project.yaml changed on disk · Reload · Keep mine", a 422 shows the daemon's message next to its field (plain http to a non-local host, for example), and leaving the tab with unsaved changes asks first. The next run uses the saved backends. Other project settings are still edited in `project.yaml`. App Settings stays app-wide: it lists the backends on this machine and says they are set per project.
+The project panel's **Settings** tab (Spec · Tickets · Run · Settings; Home's card menu **Project settings** opens it with `?tab=settings`) edits these keys in the project's `project.yaml` in the workspace, never in the repo. Its Agents section has the default backend, then planner, implementer and reviewer: a backend dropdown ("Use default" first, then the detected backends) and the role's own model ("Leave empty to use the backend's model"). Under **Advanced**, each backend's defaults: its model and base URL (`agents.backends.<backend>`). A role is saved as a mapping only when it has a model, else as the plain backend name. A backend that isn't installed or logged in is listed but marked, with its reason as a tooltip. **Save** goes through `PUT /api/projects/{name}/settings` with `If-Match`: a 412 shows "project.yaml changed on disk · Reload · Keep mine", a 422 shows the daemon's message next to its field (plain http to a non-local host, for example), and leaving the tab with unsaved changes asks first. The next run uses the saved backends. Other project settings are still edited in `project.yaml`. App Settings stays app-wide: it lists the backends on this machine and says they are set per project.
 
 ### A custom endpoint never gets your login
 
