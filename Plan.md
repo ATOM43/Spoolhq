@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **45 tickets in 6 phases, about 102 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **46 tickets in 6 phases, about 104.5 hours** for one developer.
 
 **What v1 includes**
 
@@ -84,7 +84,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
 | T21 | Tickets tab and plan review | 4 Desktop UI | T15, T36 | 2.5 |
 | T22 | Live run | 4 Desktop UI | T37 | 2 |
-| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45, T46 | 3 |
+| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47 | 3 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T40 | 3 |
 | T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
@@ -106,8 +106,9 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T43 | Existing repo onboarding | 4 Desktop UI | T42 | 2.5 |
 | T44 | Drafting in the form | 4 Desktop UI | T41 | 2 |
 | T45 | Agent notes written by code | 3 Planner and Git | T14, T16 | 1.5 |
-| T46 | Notes layout in templates and old projects | 3 Planner and Git | T45 | 1.5 |
-|  | **Total** |  |  | **102** |
+| T46 | Notes layout in templates and old projects | 3 Planner and Git | T45 | 2 |
+| T47 | Project settings: agents | 4 Desktop UI | T32, T27 | 2 |
+|  | **Total** |  |  | **104.5** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T26 (44 h).
 
@@ -329,7 +330,7 @@ Done when:
 
 ## Phase 3 — Planner, templates and GitHub delivery
 
-Ten tickets add the parts around the loop: turning a spec into tickets, starting projects from templates, delivering through GitHub, more agent backends, the code graph, agent notes written by code and that notes layout in templates and old projects. From here the orchestrator implements its own tickets while you review.
+Ten tickets add the parts around the loop: turning a spec into tickets, starting projects from templates, delivering through GitHub, more agent backends, the code graph, agent notes written by code, and that notes layout in templates and old projects with a file-size gate for every project. From here the orchestrator implements its own tickets while you review.
 
 ### T15 · Planner agent
 
@@ -449,19 +450,25 @@ Done when:
 
 ### T46 · Notes layout in templates and old projects
 
-Start new projects with the split notes layout and convert old flat ones. *Depends on: T45 · 1.5 h*
+Start new projects with the split notes layout, convert old flat ones, and hold file size in every project. *Depends on: T45 · 2 h*
 
-- The fastapi-react template ships `PROGRESS.md` with the managed markers, a `DECISIONS.md` index, `docs/decisions/`, a rules-only `CLAUDE.md` and `notes.decision_areas` in its `project.yaml`.
-- On the first merge in a project whose notes files are flat, SpoolHQ converts them, keeping every entry word for word: progress entries into the managed section (last 5) and the archive, full decisions into `docs/decisions/general.md` with an index.
+- Template (fastapi-react): `PROGRESS.md` with a short summary heading and the empty `spoolhq:recent` markers; `DECISIONS.md` with the index header and no entries, plus `docs/decisions/.gitkeep`; a rules-only `CLAUDE.md` saying progress and decisions go in the run note, never into the notes files; `notes.decision_areas` with the default list in the generated `project.yaml`. The template's contract check also runs the notes check, so a freshly generated project passes it before any ticket runs.
+- File size as a built-in gate: `gates.max_file_lines` in `project.yaml` (default 500, 0 turns it off) checks only text files the ticket added or changed, counted like SpoolHQ's own script. A changed file must stay within the limit, unless it was already over before the ticket and didn't grow. Lockfiles, minified files and `gates.max_file_lines_exempt` (globs, default `["**/*.lock", "**/*-lock.*", "**/*.min.*"]`) are exempt. It runs after lint and test and fails with "<path>: 612 lines, over the 500-line limit" or "<path> grew from 640 to 655 lines; it was already over the limit", back to the implementer like any gate failure. The Gates panel shows it as its own row, "File size". A template's own line check stays.
+- Old flat projects are converted on their first merge, before the new notes are written, in the same commit: PROGRESS without markers keeps everything and gets the markers at the end; a flat `DECISIONS.md` has every entry moved word for word into `docs/decisions/general.md` in the T45 format, keeping its number (unnumbered entries numbered in order of appearance), and becomes the index. The notes check runs afterwards; a file that can't be parsed into entries blocks the ticket with "DECISIONS.md couldn't be converted: <reason>" and changes nothing. The commit body records the conversion.
+- SpoolHQ's own `scripts/check_decisions.py` also fails when `PROGRESS.md` holds more than 5 recent entries: "PROGRESS.md has 7 recent entries; move the oldest to docs/progress-archive.md".
 
 Done when:
 
+- [ ] Plan.md lists the extended T46 and T47, with consistent table, totals and critical path
 - [ ] A project generated from the template passes the notes check before any ticket runs
 - [ ] A flat project is converted on its first merge with every entry kept word for word
+- [ ] A ticket that makes a file too long fails its gates in every project, including existing repos
+- [ ] SpoolHQ's own lint fails when PROGRESS has more than 5 recent entries
+- [ ] Lint and tests pass, and CI is green on Linux, macOS and Windows
 
 ## Phase 4 — Desktop UI (v0 screens)
 
-Eighteen tickets put a minimal face on the daemon and package it: two screens (Home and the project panel), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Nineteen tickets put a minimal face on the daemon and package it: two screens (Home and the project panel, with its Settings tab), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -729,9 +736,26 @@ Done when:
 - [ ] Two or three drafts show as tabs and save together with Save all
 - [ ] A draft with problems can't be saved until fixed
 
+### T47 · Project settings: agents
+
+Pick each role's backend and model from the app. *Depends on: T32, T27 · 2 h*
+
+- A fourth tab in the project panel: **Spec · Tickets · Run · Settings**. Project settings live only in this tab and are stored in that project's `project.yaml` in the workspace, never in the repo.
+- In T47 the tab has one section, **Agents**: planner, implementer and reviewer, each with a backend dropdown from the detected backends ("Use default" first), an optional model name, and under **Advanced** a base URL (plain http only for localhost). Plus the default backend.
+- Saves through the existing settings route with ETag; a 412 shows the "Changed on disk · Reload · Keep mine" bar; a 422 shows next to its field.
+- App Settings (the existing dialog) stays app-wide only. Its gear tooltip reads "App settings", and its Agents tab line reads "Set per project in its Settings tab".
+- The panel's invalid-settings bar links to the Settings tab; a project card's menu on Home gets "Project settings".
+- The rest of the project settings (commands, merge policy, limits, ClickUp) join this tab in v0.2.
+
+Done when:
+
+- [ ] Changing a role's backend in the tab saves to `project.yaml`, and the next run uses it
+- [ ] An invalid base URL is refused next to its field
+- [ ] App Settings shows nothing per project
+
 ### T23 · Packaging
 
-One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43, T44, T45, T46 · 3 h*
+One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47 · 3 h*
 
 - The daemon is bundled with PyInstaller and shipped as a Tauri sidecar; the app starts it when it is not running.
 - Closing the window leaves the daemon and any run going, with a tray icon to quit.
