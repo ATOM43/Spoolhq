@@ -59,6 +59,7 @@ from spoolhq.services.runs.model import (
     RunStatus,
     Usage,
 )
+from spoolhq.services.runs.notes import record_run_note
 from spoolhq.services.runs.policy import record_policy
 from spoolhq.services.runs.pulls import open_pull_requests, set_pull_request
 from spoolhq.services.runs.recovery import INTERRUPTED_REASON, recover_interrupted
@@ -122,6 +123,7 @@ __all__ = [
     "open_pull_requests",
     "pull_request_integration",
     "record_policy",
+    "record_run_note",
     "recover_interrupted",
     "set_pull_request",
     "set_integration_state",

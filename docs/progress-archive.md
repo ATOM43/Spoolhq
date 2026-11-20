@@ -474,3 +474,11 @@ T29 made `spool run status` show `last merged: ticket · short sha · ticket/id`
 - Conflict retry: T42's planted-settings check already compares against the main merged in (the integrator sets `base_sha` on a conflict); no code change, now covered by tests.
 - Tests: daemon (files to T05 + `ticket/T07` + a T09 run → T10; a held lock → 409 with the fixed message and nothing written, then free; a CLI subprocess and an API create waiting on a held lock get T01 and T02; with the fake runner, settings written while resolving a conflict block with "The agent changed agent settings: .claude/settings.json", settings changed on main before and during the retry don't and the ticket merges — this one fails if `base_sha` isn't moved), Vitest (has_spec false with non-blank starter text → "Write a spec first", a real spec → "Generate a plan first").
 - Docs: `ticket-format.md` (Ticket ids), `integration.md` (the retry check); DECISIONS 392–394.
+
+## Faster CI
+
+- Baseline (last 5 green runs on main): `check` took 9.0 min on Linux, 13.6 on macOS and 22.8 on Windows on average (about 31 min wall-clock with queueing); the slowest steps were `just test` on Windows (18.4 min, 17 of them pytest), on macOS (10.3) and on Linux (5.6).
+- CI: `ci.yml` became `lint.yml` (Linux), `daemon.yml` (3 OS), `frontend.yml` (Linux) and `rust.yml` (3 OS: fmt, Clippy, `cargo test`, debug build), each with a `paths` filter and a per-workflow, per-branch `concurrency` group; uv, pnpm-store and Rust caches; `just` from the pinned `rust-just` wheel through uv instead of a GitHub download; `Swatinem/rust-cache` v2.9.3 added, pinned to its SHA.
+- justfile: `install`, `lint` and `test` split into `-daemon`, `-desktop` and `-rust` parts; `lint-daemon` also runs the daemon tests that read `docs/`, `task.md` or the desktop sources; `test-daemon` runs `pytest -n auto` (`pytest-xdist==3.8.0`, 3 green full runs locally, ~43 s each); `just t <path>` runs one daemon or desktop test path quickly.
+- `graphify-out/` is no longer tracked (ignored, files kept locally); `CLAUDE.md` lost the rebuild rule and gained "Saving tokens".
+- Docs: `architecture.md` ("CI"), `codegraph.md`; DECISIONS 395–398.

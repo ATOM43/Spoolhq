@@ -116,12 +116,15 @@ class Transcripts:
         files: Mapping[str, str] | None = None,
         *,
         note: str = "Added hello.",
+        decisions: Sequence[Mapping[str, str]] = (),
+        final: str | None = None,
         tokens: int = 1000,
         cache_reads: int = 0,
         outcome: str = "success",
     ) -> Path:
         """An implementer run writing ``files``; ``outcome``: success, usage_limit,
-        error, policy_violation or max_turns."""
+        error, policy_violation or max_turns. The final message ends with a run note of
+        ``note`` and ``decisions``, unless ``final`` replaces the whole message."""
         if outcome == "policy_violation":
             return self._write([{**_init([*INIT_TOOLS, "WebFetch"])}])
         writes = [
@@ -143,9 +146,9 @@ class Transcripts:
         elif outcome == "max_turns":
             lines.append(_result("", tokens, "error_max_turns"))
         else:
-            lines.append(
-                _result(f"Done.\n<progress>{note}</progress>", tokens, cache_reads=cache_reads)
-            )
+            body = json.dumps({"progress": note, "decisions": list(decisions)})
+            text = f"Done.\n<run-note>{body}</run-note>" if final is None else final
+            lines.append(_result(text, tokens, cache_reads=cache_reads))
         return self._write(lines)
 
     def review(

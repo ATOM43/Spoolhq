@@ -92,6 +92,12 @@ def previous_attempt(ctx: RunContext, kind: AttemptKind) -> PreviousAttempt | No
             "files conflict. Resolve every conflict marker in them and keep the intent of both "
             "sides; don't run git commands that change anything."
         )
+    elif gates.get("refused"):
+        note = (
+            f"SpoolHQ refused your last attempt: {gates['stopped']}. Your changes so far are "
+            "committed; continue from them, undo any change you made to the notes files, and "
+            "end with the run note."
+        )
     elif "stopped" in gates:
         note = (
             f"Your last attempt stopped before the checks ran ({gates['stopped']}). "
@@ -156,5 +162,6 @@ def implementer_prompt(ctx: RunContext, kind: AttemptKind) -> str:
         decisions_lines=ctx.project.context.decisions_lines,
         code_map=code_map(ctx),
         code_map_chars=ctx.project.context.code_map_chars,
+        decision_areas=tuple(ctx.project.notes.decision_areas),
     )
     return build_implementer_prompt(inputs, override_dir=ctx.workspace / PROMPTS_DIR).text

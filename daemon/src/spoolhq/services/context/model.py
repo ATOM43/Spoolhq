@@ -11,6 +11,7 @@ DEFAULT_MAX_CHARS = 120_000
 DEFAULT_PROGRESS_ENTRIES = 3
 DEFAULT_DECISIONS_LINES = 20
 DEFAULT_CODE_MAP_CHARS = 8_000
+DEFAULT_DECISION_AREAS = ("general", "api", "data", "ui", "infra", "testing")
 ATTEMPT_KINDS: tuple[str, ...] = ("gate_retry", "review_retry", "conflict_retry", "pr_changes")
 
 
@@ -103,6 +104,8 @@ class ContextInputs:
     """The code graph report's summary (``services/codegraph``); untrusted."""
     code_map_chars: int = DEFAULT_CODE_MAP_CHARS
     """The code map's cap; 0 leaves it out."""
+    decision_areas: tuple[str, ...] = DEFAULT_DECISION_AREAS
+    """The areas a decision in the run note may name (``notes.decision_areas``)."""
 
     def __post_init__(self) -> None:
         if self.max_chars < 1:

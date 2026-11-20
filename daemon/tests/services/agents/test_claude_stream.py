@@ -23,7 +23,7 @@ from spoolhq.services.agents import (
 )
 from spoolhq.services.agents.claude_stream import epoch_to_datetime, summarize, usd_to_micro
 from spoolhq.services.agents.model import AgentEvent, Billing
-from spoolhq.services.context import extract_progress_note
+from spoolhq.services.notes import parse_run_note
 from tests.conftest import AGENT_FIXTURES
 
 RESET = datetime(2026, 10, 18, 10, 0, tzinfo=UTC)
@@ -86,7 +86,7 @@ def test_success_writes_file(worktree: Path) -> None:
     assert run.files_changed == ("hello.txt",)
     assert (run.input_tokens, run.output_tokens) == (1200, 300)
     assert run.cost_micro_usd is None
-    assert run.summary == "Created hello.txt."
+    assert run.summary.startswith("Created hello.txt.\n<run-note>")
     assert run.error is None
     assert run.reset_at is None
     assert run.num_turns == 2
@@ -161,20 +161,21 @@ def test_cached_tokens_count_as_input(worktree: Path) -> None:
     assert (run.input_tokens, run.output_tokens) == (2 + 5272 + 4220, 31)
 
 
-def test_summary_is_cut_to_4000_characters(worktree: Path) -> None:
+def test_summary_is_cut_to_16000_characters(worktree: Path) -> None:
     parser = ClaudeStreamParser(worktree, billing="subscription")
-    replay(parser, [INIT, result(result="a" * 1000 + "x" * 4000)])
-    assert parser.finish().summary == "[… 1,000 characters cut …]\n" + "x" * 4000
+    replay(parser, [INIT, result(result="a" * 1000 + "x" * 16_000)])
+    assert parser.finish().summary == "[… 1,000 characters cut …]\n" + "x" * 16_000
 
 
-def test_summary_keeps_the_progress_note_at_the_end(worktree: Path) -> None:
-    note = "<progress>Added the workspace folder.</progress>"
-    text = "Long report. " * 1000
-    text = text[: 10_000 - len(note)] + note
-    assert len(text) == 10_000
+def test_summary_keeps_the_longest_run_note_at_the_end(worktree: Path) -> None:
+    decision = {"area": "general", "title": "t" * 100, "text": "x" * 2_000}
+    body = json.dumps({"progress": "p" * 1_500, "decisions": [decision] * 5})
+    note = f"<run-note>{body}</run-note>"
+    text = "Long report. " * 3000 + note
     parser = ClaudeStreamParser(worktree, billing="subscription")
     replay(parser, [INIT, result(result=text)])
-    assert extract_progress_note(parser.finish().summary) == "Added the workspace folder."
+    parsed = parse_run_note(parser.finish().summary, ["general"])
+    assert (len(parsed.progress), len(parsed.decisions)) == (1_500, 5)
 
 
 def test_tool_input_summary_is_cut_to_2000_characters(worktree: Path) -> None:

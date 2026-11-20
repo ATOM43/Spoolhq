@@ -704,3 +704,28 @@ def test_has_spec_ignores_a_blank_or_untouched_starter(workspace: Path, projects
     assert has_spec("demo", projects_dir=projects_dir)
     spec.unlink()
     assert not has_spec("demo", projects_dir=projects_dir)
+
+
+def test_decision_areas_default_and_custom(projects_dir: Path, git_repo: Path) -> None:
+    data = valid_data(git_repo)
+    write_project(projects_dir, data)
+    notes = load_project("demo", projects_dir=projects_dir).notes
+    assert notes.decision_areas == ["general", "api", "data", "ui", "infra", "testing"]
+    data["notes"] = {"decision_areas": ["backend", "web-ui"]}
+    write_project(projects_dir, data)
+    assert load_project("demo", projects_dir=projects_dir).notes.decision_areas == [
+        "backend",
+        "web-ui",
+    ]
+
+
+def test_bad_decision_areas_are_refused(projects_dir: Path, git_repo: Path) -> None:
+    data = valid_data(git_repo)
+    data["notes"] = {"decision_areas": ["api", "../x"]}
+    assert errors_for(projects_dir, data)[0].startswith("project.yaml: notes.decision_areas[1]: ")
+    data["notes"] = {"decision_areas": ["api", "api"]}
+    assert errors_for(projects_dir, data) == [
+        "project.yaml: notes.decision_areas: decision areas must be unique"
+    ]
+    data["notes"] = {"decision_areas": []}
+    assert errors_for(projects_dir, data)[0].startswith("project.yaml: notes.decision_areas: ")

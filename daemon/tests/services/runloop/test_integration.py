@@ -130,11 +130,10 @@ def test_three_tickets_give_three_squash_commits_with_green_gates(
         notes = ["DECISIONS.md", "PROGRESS.md"] if n == 1 else ["PROGRESS.md"]
         assert sorted(files) == [*notes, f"mod{n}.py", f"test_mod{n}.py"]
         progress = git(repo, "show", f"{sha}:PROGRESS.md")
-        assert progress.count("\n## ") == n
+        assert progress.count("\n### ") == n
         assert progress.startswith("# Progress\n")
-        assert progress.endswith(
-            f"## {tid} · Say hello {tid} (2026-10-18)\n\nAdded mod{n} and its test."
-        )
+        newest = f"### {tid} · Say hello {tid} (2026-10-18)\n\nAdded mod{n} and its test.\n"
+        assert f"<!-- spoolhq:recent:start -->\n\n{newest}" in progress
         parent = sha
 
         # The gates pass when rerun at each commit.

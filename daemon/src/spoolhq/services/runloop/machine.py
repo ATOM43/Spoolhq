@@ -17,10 +17,7 @@ from spoolhq.services.agents import (
     Budget,
     Outcome,
     RunResult,
-    changed_settings,
-    repo_settings_refusal,
 )
-from spoolhq.services.context import extract_progress_note
 from spoolhq.services.gates import GateResult, GateRun, check_done_when
 from spoolhq.services.git import (
     conclude_merge,
@@ -29,7 +26,14 @@ from spoolhq.services.git import (
     run_git,
     unresolved_files,
 )
+from spoolhq.services.notes import RunNote, RunNoteError, parse_run_note
 from spoolhq.services.review import GateLine, ReviewInputs, ReviewResult, review
+from spoolhq.services.runloop.guards import (
+    attempt_message,
+    edited_notes,
+    planted_settings,
+    refused_settings,
+)
 from spoolhq.services.runloop.integrator import IntegrationStatus
 from spoolhq.services.runloop.model import Ending, EndKind, RunContext, record_step
 from spoolhq.services.runloop.prompting import implementer_prompt
@@ -43,6 +47,7 @@ from spoolhq.services.runs import (
     RunLog,
     append_transcript,
     attempt_dir,
+    record_run_note,
     write_artifact,
 )
 
@@ -59,9 +64,6 @@ _NEXT_KIND = {
 }
 
 Step = Ending | AttemptKind
-# Agent settings at any depth (repo_settings.is_settings_path), so git never lists
-# big ignored trees such as node_modules.
-SETTINGS_PATHSPECS = (":(glob)**/.claude/**", ":(glob)**/.codex/**", ":(glob)**/.mcp.json")
 
 
 def _git(ctx: RunContext, *args: str) -> str:
@@ -177,7 +179,12 @@ def agent_stopped(
     return retry_or_block(ctx, AttemptKind.REVIEW_RETRY, f"reviewer stopped ({outcome})")
 
 
-# --- the prompt ------------------------------------------------------------------------
+def send_back(ctx: RunContext, attempt: Attempt, message: str) -> Step:
+    """Fail the attempt with ``message`` and hand it back to the agent as a gate retry."""
+    ctx.phase("implement", f"{ctx.ticket_id} attempt {attempt.number} · {message}", attempt)
+    write_artifact(attempt, ArtifactName.GATES, json.dumps({"stopped": message, "refused": True}))
+    ctx.run_log.finish_attempt(attempt.id, AttemptStatus.ERROR)
+    return retry_or_block(ctx, AttemptKind.GATE_RETRY, message)
 
 
 # --- the steps ------------------------------------------------------------------------
@@ -229,7 +236,7 @@ def implement(ctx: RunContext, attempt: Attempt) -> tuple[RunResult, str]:
 def commit(ctx: RunContext, attempt: Attempt, label: str) -> None:
     """Commit everything in the worktree; the files changed come from git."""
     before = _git(ctx, "rev-parse", "HEAD").strip()
-    message = f"spool: {ctx.ticket_id} attempt {attempt.number}"
+    message = attempt_message(ctx.ticket_id, attempt.number)
     sha = ctx.worktrees.commit_all(ctx.worktree, message)
     if sha is None and merge_head(ctx.worktree.path):  # a resolved merge with no change
         sha = conclude_merge(ctx.worktree.path, message)
@@ -237,39 +244,6 @@ def commit(ctx: RunContext, attempt: Attempt, label: str) -> None:
     text = f"{sha[:7]} ({len(files)} files)" if sha else "no changes"
     ctx.phase("commit", f"{label} · commit · {text}", attempt)
     write_artifact(attempt, ArtifactName.DIFF, _git(ctx, "diff", f"{ctx.worktree.base_sha}...HEAD"))
-
-
-def refused_settings(ctx: RunContext, attempt: Attempt) -> Ending | None:
-    """Blocked before any agent starts if a backend of this run would load the repo's
-    own agent settings (checked every attempt: an earlier one could have left some)."""
-    for runner in (ctx.agents.implementer, ctx.agents.reviewer):
-        if refused := repo_settings_refusal(runner, ctx.worktree.path):
-            ctx.step("implement", "failed", attempt)
-            ctx.run_log.finish_attempt(attempt.id, AttemptStatus.ERROR)
-            return Ending(EndKind.BLOCKED, refused)
-    return None
-
-
-def planted_settings(ctx: RunContext, attempt: Attempt) -> Ending | None:
-    """Blocked if the branch adds or changes agent settings, committed or git-ignored, so
-    they never reach main or the next attempt."""
-    committed = _git(ctx, "diff", "--name-only", "-z", f"{ctx.worktree.base_sha}...HEAD")
-    ignored = _git(
-        ctx,
-        "ls-files",
-        "-z",
-        "--others",
-        "--ignored",
-        "--exclude-standard",
-        "--",
-        *SETTINGS_PATHSPECS,
-    )
-    files = changed_settings([*committed.split("\0"), *ignored.split("\0")])
-    if not files:
-        return None
-    ctx.step("policy", "failed", attempt)
-    ctx.run_log.finish_attempt(attempt.id, AttemptStatus.ERROR)
-    return Ending(EndKind.BLOCKED, f"The agent changed agent settings: {', '.join(files)}")
 
 
 def run_gates(ctx: RunContext, attempt: Attempt, label: str) -> GateRun:
@@ -421,13 +395,24 @@ def attempt_once(ctx: RunContext, attempt: Attempt) -> Step:
         return agent_stopped(
             ctx, attempt, "implementer", result.outcome, result.error, result.reset_at
         )
-    note = extract_progress_note(final_text)
-    if note is not None:
-        ctx.run = ctx.run_log.set_progress_note(ctx.run.id, note)
+    try:
+        note: RunNote | str = parse_run_note(final_text, ctx.project.notes.decision_areas)
+    except RunNoteError as exc:
+        note = str(exc)
     commit(ctx, attempt, label)
-    ctx.step("implement", "passed", attempt)
+    ctx.step("implement", "failed" if isinstance(note, str) else "passed", attempt)
     if ending := planted_settings(ctx, attempt):
         return ending
+    if files := edited_notes(ctx):
+        ctx.step("policy", "failed", attempt)
+        edited = f"The agent edited notes files: {', '.join(files)}"
+        return send_back(
+            ctx, attempt, f"{edited}; put progress and decisions in the run note instead"
+        )
+    if isinstance(note, str):
+        return send_back(ctx, attempt, note)
+    decisions = [dataclasses.asdict(decision) for decision in note.decisions]
+    ctx.run = record_run_note(ctx.run_log, ctx.run.id, note.progress, decisions)
     if ending := interrupted(ctx, attempt):
         return ending
 

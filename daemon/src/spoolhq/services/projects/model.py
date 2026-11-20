@@ -14,6 +14,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StringConstraints,
     ValidationInfo,
     field_validator,
 )
@@ -237,6 +238,27 @@ class ContextSettings(_Strict):
     0 leaves it out (see docs/codegraph.md)."""
 
 
+DecisionArea = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9-]{0,39}$")]
+
+
+class NotesSettings(_Strict):
+    """The notes files SpoolHQ writes at merge (docs/integration.md#notes-files)."""
+
+    decision_areas: list[DecisionArea] = Field(
+        default_factory=lambda: ["general", "api", "data", "ui", "infra", "testing"],
+        min_length=1,
+        max_length=30,
+    )
+    """Each decision goes to ``docs/decisions/<area>.md``; the agent picks one of these."""
+
+    @field_validator("decision_areas")
+    @classmethod
+    def _unique(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("decision areas must be unique")
+        return value
+
+
 class GateTimeouts(_Strict):
     """Seconds each gate may run before its process tree is stopped (docs/gates.md)."""
 
@@ -283,6 +305,7 @@ class Project(_Strict):
     git: GitSettings = Field(default_factory=GitSettings)
     tracker: Tracker | None = None
     context: ContextSettings = Field(default_factory=ContextSettings)
+    notes: NotesSettings = Field(default_factory=NotesSettings)
     gates: GatesSettings = Field(default_factory=GatesSettings)
     run: RunSettings = Field(default_factory=RunSettings)
 

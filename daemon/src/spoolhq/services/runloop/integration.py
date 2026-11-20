@@ -3,7 +3,7 @@
 ``LocalIntegrator`` merges the current main into the run's worktree, reruns the gates
 if that brought anything, stages the squash on top of main there and asks the merge
 policy (``approval.decide``): a ticket that needs a person waits for ``spool run
-approve``. Otherwise it commits the squash (with the ``PROGRESS.md`` entry), then
+approve``. Otherwise it commits the squash (with the notes SpoolHQ writes), then
 fast-forwards main to it and tags it. main itself is only ever
 fast-forwarded. Every step is written to the integration journal first, so
 ``recover_integrations`` can finish or undo an integration a crash cut off. The git
@@ -16,7 +16,6 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from spoolhq.services.context import format_progress_entry
 from spoolhq.services.git import (
     DirtyRepoError,
     GitError,
@@ -47,6 +46,7 @@ from spoolhq.services.git import (
     tracked_in,
     unstage,
 )
+from spoolhq.services.notes import Decision, NotesError, RunNote, notes_problems, write_notes
 from spoolhq.services.projects import Project
 from spoolhq.services.runloop.approval import approval_message, decide
 from spoolhq.services.runloop.integrator import IntegrationResult, IntegrationStatus
@@ -71,10 +71,8 @@ from spoolhq.services.scheduler import apply_transition
 logger = logging.getLogger(__name__)
 
 MAX_TRIES = 3
-PROGRESS_FILE = "PROGRESS.md"
-PROGRESS_HEADING = b"# Progress\n"
-DECISIONS_FILE = "DECISIONS.md"
-DECISIONS_HEADING = b"# Decisions\n"
+NO_PROGRESS = "No progress note from the agent."
+"""For a run whose note predates T45 (held or interrupted across the upgrade)."""
 LISTED_FILES = 100
 MOVED = "main kept moving during integration"
 
@@ -293,7 +291,7 @@ class LocalIntegrator:
             self._abandon(ctx, journal, restore=True)
             message = f"file too large to commit: {big[0]} ({big[1] / 2**20:.1f} MB)"
             return _result(IntegrationStatus.FAILED, message)
-        # The policy sees exactly what would land, less SpoolHQ's own PROGRESS.md entry.
+        # The policy sees exactly what would land, less the notes SpoolHQ writes.
         ctx.step("policy", "running")
         mode = decide(ctx, main_sha)
         ctx.step("policy", "passed")
@@ -303,7 +301,9 @@ class LocalIntegrator:
             reason = approval_message(ctx, describe(policy.get("rules", [])))
             return _result(IntegrationStatus.HELD, f"{tid} {reason}")
         ctx.step("integrate", "running")
-        self._append_progress(ctx)
+        if problem := self._write_notes(ctx):
+            self._abandon(ctx, journal, restore=True)
+            return _result(IntegrationStatus.FAILED, problem)
         note, title = ctx.run.progress_note, ctx.ticket.meta.title
         sha = commit_staged(path, commit_message(tid, title, note, ctx.run.id))
         journal = self._state(ctx, journal, IntegrationState.COMMITTED, sha)
@@ -350,24 +350,21 @@ class LocalIntegrator:
         ctx.run = ctx.run_log.get_run(ctx.run.id)
         return _result(IntegrationStatus.MERGED, f"{sha[:7]} · {tag_name(tid)}")
 
-    def _append_progress(self, ctx: RunContext) -> None:
-        """Append the ticket's entry to ``PROGRESS.md`` in the worktree and stage it; a
-        missing ``PROGRESS.md`` or ``DECISIONS.md`` is created with a heading first. The
-        existing bytes are kept as they are; ``CLAUDE.md`` is never written."""
-        path = ctx.worktree.path
-        decisions = path / DECISIONS_FILE
-        if not decisions.exists() and not decisions.is_symlink():
-            decisions.write_bytes(DECISIONS_HEADING)
-            stage(path, DECISIONS_FILE)
-        file = path / PROGRESS_FILE
-        old = file.read_bytes() if file.is_file() else PROGRESS_HEADING
+    def _write_notes(self, ctx: RunContext) -> str | None:
+        """Write the run note into the notes files in the worktree, stage them and check
+        them (``services/notes``); why the ticket is blocked, or None."""
+        path, run = ctx.worktree.path, ctx.run
+        decisions = tuple(Decision(**item) for item in run.decisions or [])
+        note = RunNote(run.progress_note or NO_PROGRESS, decisions)
         merged_on = self.clock().astimezone(UTC).date()
-        entry = format_progress_entry(
-            ctx.ticket_id, ctx.ticket.meta.title, ctx.run.progress_note, merged_on
-        )
-        old += b"" if old.endswith(b"\n") else b"\n"
-        file.write_bytes(old + b"\n" + entry.encode("utf-8"))
-        stage(path, PROGRESS_FILE)
+        try:
+            files = write_notes(path, ctx.ticket_id, ctx.ticket.meta.title, note, merged_on)
+        except NotesError as exc:
+            return f"The notes files don't match: {exc}"
+        for file in files:
+            stage(path, file)
+        problems = notes_problems(path)
+        return f"The notes files don't match: {problems[0]}" if problems else None
 
 
 # --- recovery -------------------------------------------------------------------------

@@ -42,6 +42,8 @@ context:
   progress_entries: 3                         # optional: newest PROGRESS.md entries in the prompt
   decisions_lines: 20                         # optional: newest DECISIONS.md lines in the prompt
   code_map_chars: 8000                        # optional: the Graphify code map's cap, 0 = off
+notes:
+  decision_areas: [general, api, data, ui, infra, testing]   # optional
 gates:
   timeouts:                                   # optional, in seconds
     install: 600
@@ -80,6 +82,7 @@ run:
 | `context.progress_entries` | no | `3` | Whole number from 1 to 1,000: how many of the newest `PROGRESS.md` entries the implementer's prompt includes. |
 | `context.decisions_lines` | no | `20` | Whole number from 1 to 10,000: how many of the newest non-blank `DECISIONS.md` lines the implementer's prompt includes. |
 | `context.code_map_chars` | no | `8000` | Whole number from 0 to 100,000: the cap on the Graphify code map in the implementer's and planner's prompts; `0` leaves it out and never runs Graphify ([code graph](codegraph.md)). |
+| `notes.decision_areas` | no | `[general, api, data, ui, infra, testing]` | 1 to 30 unique names, each 1–40 lowercase letters, digits or hyphens, starting with a letter or digit. The implementer picks one per decision; each area is a file `docs/decisions/<area>.md` ([notes files](integration.md#notes-files)). |
 | `gates.timeouts.install`, `gates.timeouts.lint`, `gates.timeouts.test` | no | `600`, `300`, `900` | Whole number of seconds from 10 to 7,200. When it passes, the gate's whole process tree is stopped ([gates](gates.md#timeouts)). |
 | `run.integration` | no | `local` | `local` merges each approved ticket into the default branch as one commit ([integration](integration.md)); `hold` keeps every ticket in `awaiting_approval` until `spool run approve` (the merge policy's `hold_mode` rule). |
 | `tracker.kind` | no | `clickup` | Only `clickup` for now. |

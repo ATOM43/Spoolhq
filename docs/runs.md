@@ -22,7 +22,7 @@ A terminal status sets `ended_at`, and a run that has ended can't change again: 
 
 `page_runs(run_log, cursor, limit)` (`history.py`) reads the run history newest first, behind an opaque cursor; see [api.md](api.md#paged-run-history).
 
-`set_run_status(run_id, status, reason, reset_at=None)` stores `reset_at` (when a usage limit resets) on a paused run and clears it on any other change; `set_progress_note(run_id, note)` stores the implementer's `<progress>` note, which integration uses for the commit message and `PROGRESS.md`.
+`set_run_status(run_id, status, reason, reset_at=None)` stores `reset_at` (when a usage limit resets) on a paused run and clears it on any other change; `record_run_note(run_log, run_id, progress, decisions)` (`notes.py`) stores the implementer's latest [run note](context.md#the-run-note), which integration uses for the commit message and the notes files.
 
 An **attempt** is one implementer pass inside a run, together with its gates and review.
 
@@ -37,12 +37,12 @@ An **attempt** is one implementer pass inside a run, together with its gates and
 
 - Every connection sets `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON` and `busy_timeout=5000`. A committed transaction survives a crash of the process; a power loss can drop the last few transactions.
 - One connection per `RunLog`, opened with `check_same_thread=False` and guarded by a lock, so a `RunLog` can be shared between threads. `isolation_level=None`: each method is one explicit `BEGIN IMMEDIATE` … `COMMIT`.
-- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 7.
-- A database newer than the code is refused: `state.db: schema version 8 is newer than this SpoolHQ supports (7); upgrade SpoolHQ.`
+- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 8.
+- A database newer than the code is refused: `state.db: schema version 9 is newer than this SpoolHQ supports (8); upgrade SpoolHQ.`
 - A file that isn't a SQLite database is refused: `state.db: not a SpoolHQ database (file is not a database)`.
 - All SQL takes its values as parameters; ticket text and agent output never become SQL.
 
-### Schema (version 7)
+### Schema (version 8)
 
 ```sql
 CREATE TABLE runs (
@@ -53,13 +53,14 @@ CREATE TABLE runs (
     daemon_instance TEXT NOT NULL,   -- the daemon that started the run
     started_at TEXT NOT NULL,
     ended_at TEXT,
-    progress_note TEXT,              -- version 2: the implementer's <progress> note
+    progress_note TEXT,              -- version 2: the run note's progress entry
     reset_at TEXT,                   -- version 2: when a paused run's usage limit resets
     kind TEXT NOT NULL DEFAULT 'ticket',  -- version 5: 'ticket' or 'plan'
     pr_number INTEGER,               -- version 6: the pull request it was delivered as
     pr_url TEXT,                     -- version 6
     pr_branch TEXT,                  -- version 6: spoolhq/<id>-<slug> on GitHub
-    policy TEXT                      -- version 7: the latest merge-policy decision, JSON
+    policy TEXT,                     -- version 7: the latest merge-policy decision, JSON
+    decisions TEXT                   -- version 8: the run note's decisions, JSON
 );
 
 CREATE TABLE attempts (
@@ -91,7 +92,7 @@ CREATE TABLE events (
 );
 ```
 
-Version 3 adds the integration journal, `integrations` ([integration.md](integration.md#the-journal-schema-version-3)); version 4 the cache-read tokens; version 5 the run's kind; version 6 the run's pull request ([GitHub delivery](github.md#pr-mode); `set_pull_request` and `open_pull_requests` in `services/runs/pulls.py`); version 7 the run's latest merge-policy decision ([merge policy](merge-policy.md#the-record); `record_policy` in `services/runs/policy.py` writes it and its event in one transaction).
+Version 3 adds the integration journal, `integrations` ([integration.md](integration.md#the-journal-schema-version-3)); version 4 the cache-read tokens; version 5 the run's kind; version 6 the run's pull request ([GitHub delivery](github.md#pr-mode); `set_pull_request` and `open_pull_requests` in `services/runs/pulls.py`); version 7 the run's latest merge-policy decision ([merge policy](merge-policy.md#the-record); `record_policy` in `services/runs/policy.py` writes it and its event in one transaction); version 8 the run note's decisions (`record_run_note`).
 
 Triggers `BEFORE UPDATE` and `BEFORE DELETE` on `events` raise `events are append-only`, so not even a hand-written statement can change history. Indexes: `runs(ticket_id)`, `runs(status)`, `attempts(run_id)`, `events(run_id, id)`.
 

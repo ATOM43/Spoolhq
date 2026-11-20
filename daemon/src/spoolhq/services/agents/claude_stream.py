@@ -52,7 +52,8 @@ KNOWN_TYPES = frozenset({"system", "assistant", "user", "result", "rate_limit_ev
 # Partial-message chunks; only sent with --include-partial-messages, and never needed.
 IGNORED_TYPES = frozenset({"stream_event"})
 SUMMARY_LIMIT = 2000
-RESULT_LIMIT = 4000
+RESULT_LIMIT = 16_000
+"""Room for the longest run note (T45) at the end of the final message."""
 MICRO = Decimal(1_000_000)
 # "Claude AI usage limit reached|1792310400": the epoch is the reset time.
 USAGE_LIMIT_RE = re.compile(r"usage limit[^|]*(?:\|\s*(\d+))?", re.IGNORECASE)
@@ -69,7 +70,7 @@ def summarize(value: Any, limit: int = SUMMARY_LIMIT) -> str:
 
 
 def keep_end(text: str, limit: int = RESULT_LIMIT) -> str:
-    """The last ``limit`` characters, where the agent's ``<progress>`` note is."""
+    """The last ``limit`` characters, where the agent's ``<run-note>`` is."""
     if len(text) <= limit:
         return text
     return f"[… {len(text) - limit:,} characters cut …]\n{text[-limit:]}"

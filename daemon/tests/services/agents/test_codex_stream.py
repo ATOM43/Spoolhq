@@ -43,6 +43,7 @@ def done(**usage: int) -> dict[str, Any]:
     return {"type": "turn.completed", "usage": usage}
 
 
+RUN_NOTE = '<run-note>{"progress": "Added hello.txt.", "decisions": []}</run-note>'
 START = {"type": "thread.started", "thread_id": "t"}
 
 
@@ -57,11 +58,11 @@ def test_a_run_that_writes_a_file(worktree: Path) -> None:
             input_summary='[{"kind": "add", "path": "hello.txt"}]',
         ),
         FileEdit(path="hello.txt"),
-        Message(text="Created hello.txt.\n<progress>Added hello.txt.</progress>"),
+        Message(text=f"Created hello.txt.\n{RUN_NOTE}"),
         Usage(input_tokens=1200, output_tokens=300, cache_read_tokens=0, cache_creation_tokens=0),
     ]
     assert result.outcome is Outcome.COMPLETED
-    assert result.summary.endswith("<progress>Added hello.txt.</progress>")
+    assert result.summary.endswith(RUN_NOTE)
     assert result.files_changed == ("hello.txt",)
     assert (result.input_tokens, result.output_tokens, result.cost_micro_usd) == (1200, 300, None)
     assert (result.backend, result.backend_version, result.model) == ("codex-cli", "0.166.0", "m")
@@ -233,4 +234,4 @@ def test_a_real_codex_stream(worktree: Path) -> None:
     ]
     assert result.debug == {"unknown_events": 0}
     assert (result.input_tokens, result.output_tokens) > (0, 0)
-    assert "<progress>" in result.summary
+    assert "<progress>" in result.summary  # recorded before T45

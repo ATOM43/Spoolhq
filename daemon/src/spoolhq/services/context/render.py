@@ -301,6 +301,7 @@ def build_implementer_prompt(
             for name, command in inputs.commands.items()
         ],
         "read_only_git": list(READ_ONLY_GIT),
+        "decision_areas": list(inputs.decision_areas),
         **{name: None for name, _, _ in slots},
     }
     current = len(template.render(variables))

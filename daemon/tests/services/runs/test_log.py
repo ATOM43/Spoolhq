@@ -23,6 +23,7 @@ from spoolhq.services.runs import (
     RunStatus,
     db,
     format_ts,
+    record_run_note,
     recover_interrupted,
     state_db_path,
 )
@@ -42,14 +43,14 @@ def raw(workspace: Path) -> sqlite3.Connection:
 # Schema -------------------------------------------------------------------------------
 
 
-def test_fresh_database_has_version_7_and_all_tables(workspace: Path) -> None:
+def test_fresh_database_has_version_8_and_all_tables(workspace: Path) -> None:
     assert not (workspace / ".spoolhq").exists()
     with RunLog(workspace, daemon_instance="A"):
         pass
 
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 7
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 8
         tables = {
             name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
@@ -70,7 +71,7 @@ def test_opening_twice_is_idempotent(workspace: Path) -> None:
         assert [run.ticket_id for run in log.list_runs()] == ["T04"]
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
     finally:
         conn.close()
 
@@ -79,15 +80,15 @@ def test_newer_schema_is_refused(workspace: Path) -> None:
     with RunLog(workspace, daemon_instance="A"):
         pass
     conn = raw(workspace)
-    conn.execute("PRAGMA user_version = 8")
+    conn.execute("PRAGMA user_version = 9")
     conn.close()
 
     with pytest.raises(RunLogError) as info:
         RunLog(workspace, daemon_instance="A")
     assert str(info.value) == (
-        "state.db: schema version 8 is newer than this SpoolHQ supports (7); upgrade SpoolHQ."
+        "state.db: schema version 9 is newer than this SpoolHQ supports (8); upgrade SpoolHQ."
     )
-    with pytest.raises(RunLogError, match="schema version 8 is newer"):
+    with pytest.raises(RunLogError, match="schema version 9 is newer"):
         RunLog.open_read_only(workspace)
 
 
@@ -595,11 +596,13 @@ def test_reopen_run_only_from_interrupted(workspace: Path) -> None:
         }
 
 
-def test_progress_note_is_stored_on_the_run(run_log: RunLog) -> None:
+def test_the_run_note_is_stored_on_the_run(run_log: RunLog) -> None:
     run = run_log.start_run("T04")
-    assert run.progress_note is None
-    assert run_log.set_progress_note(run.id, "Added X.").progress_note == "Added X."
-    assert run_log.get_run(run.id).progress_note == "Added X."
+    assert (run.progress_note, run.decisions) == (None, None)
+    decision = {"area": "api", "title": "Ü", "text": "why"}
+    stored = record_run_note(run_log, run.id, "Added X.", [decision])
+    assert (stored.progress_note, stored.decisions) == ("Added X.", [decision])
+    assert run_log.get_run(run.id).decisions == [decision]
 
 
 def test_version_1_database_is_migrated(workspace: Path) -> None:

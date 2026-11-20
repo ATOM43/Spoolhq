@@ -343,3 +343,10 @@ def test_huge_ticket_is_a_budget_error() -> None:
         "raise context.max_chars in project.yaml"
     )
     assert f"{unlimited.chars:,}".startswith("2,00")
+
+
+def test_the_prompt_lists_the_projects_decision_areas() -> None:
+    inputs = dataclasses.replace(fixture_inputs(), decision_areas=("backend", "web-ui"))
+    text = build_implementer_prompt(inputs).text
+    assert "- Each `area` is one of: backend, web-ui." in text
+    assert "Never edit `PROGRESS.md`, `DECISIONS.md`" in text

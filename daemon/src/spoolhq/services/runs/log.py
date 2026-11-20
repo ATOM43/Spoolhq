@@ -277,13 +277,6 @@ class RunLog:
             )
             return self._run(tx.conn, run_id)
 
-    def set_progress_note(self, run_id: int, note: str | None) -> Run:
-        """Store the implementer's progress note on the run (T14 appends it to PROGRESS.md)."""
-        with self.transaction() as tx:
-            self._run(tx.conn, run_id)
-            tx.conn.execute("UPDATE runs SET progress_note = ? WHERE id = ?", (note, run_id))
-            return self._run(tx.conn, run_id)
-
     def start_attempt(
         self,
         run_id: int,

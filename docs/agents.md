@@ -37,7 +37,7 @@ All are frozen dataclasses with a `kind`:
 
 ### Outcomes and the result
 
-`RunResult` has `outcome`, `summary` (the final text; a longer one keeps its last 4,000 characters after a `[… 6,000 characters cut …]` line, so the closing `<progress>` block survives), `files_changed` (sorted, deduplicated, relative), `input_tokens`, `output_tokens`, `cost_micro_usd`, `reset_at`, `denials`, `num_turns`, `backend`, `backend_version`, `model`, `error` and `debug` (counters such as `unknown_events`).
+`RunResult` has `outcome`, `summary` (the final text; a longer one keeps its last 16,000 characters after a `[… 6,000 characters cut …]` line, so the closing `<run-note>` block survives), `files_changed` (sorted, deduplicated, relative), `input_tokens`, `output_tokens`, `cost_micro_usd`, `reset_at`, `denials`, `num_turns`, `backend`, `backend_version`, `model`, `error` and `debug` (counters such as `unknown_events`).
 
 | Outcome | From |
 | --- | --- |

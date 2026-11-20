@@ -116,7 +116,12 @@ _V7 = """
 ALTER TABLE runs ADD COLUMN policy TEXT;
 """
 
-MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7)
+# Agent notes written by code (T45): the run note's decisions, as JSON.
+_V8 = """
+ALTER TABLE runs ADD COLUMN decisions TEXT;
+"""
+
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8)
 """Migration ``n`` (1-based) takes the database from version ``n - 1`` to ``n``."""
 
 SCHEMA_VERSION = len(MIGRATIONS)

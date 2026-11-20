@@ -1,6 +1,6 @@
 # Integration
 
-When the reviewer approves a ticket, SpoolHQ turns the run's branch into **one commit on the local default branch**, tagged `ticket/<id>`, with the ticket's entry appended to `PROGRESS.md`. With `git.remote` set, the commit is pushed to GitHub before `main` moves, or opened as a pull request: see [GitHub delivery](github.md).
+When the reviewer approves a ticket, SpoolHQ turns the run's branch into **one commit on the local default branch**, tagged `ticket/<id>`, with the ticket's progress entry and decisions written to the [notes files](#notes-files). With `git.remote` set, the commit is pushed to GitHub before `main` moves, or opened as a pull request: see [GitHub delivery](github.md).
 
 The code is in two parts. The git mechanics are `services/git/integrate.py`: plain values in, no other service. The orchestration is `services/runloop/integration.py`: `LocalIntegrator`, the journal, the gates rerun, the conflict hand-off and recovery. The journal table and its API live in `services/runs/journal.py`.
 
@@ -44,13 +44,46 @@ SpoolHQ-Run: 12
 ```
 
 - **Subject:** `T04: <title>`, at most 72 characters. The title is untrusted, so whitespace and control characters (newlines, tabs, escape sequences) become single spaces before it is cut.
-- **Body:** the implementer's progress note stored on the run, wrapped at 72 characters. Without a note there is no body paragraph.
+- **Body:** the progress entry of the implementer's run note, wrapped at 72 characters.
 - **Trailers:** `SpoolHQ-Ticket` and `SpoolHQ-Run`.
 - The message is passed as one argument. Author and committer come from the user's git config, with `user.useConfigOnly=true`; hooks and signing are disabled as for every SpoolHQ git call ([git](git.md#hooks-and-signing)).
 
-### PROGRESS.md
+## Notes files
 
-The squash commit appends `format_progress_entry(…)` ([context](context.md#the-progress-note)) to the repository's `PROGRESS.md`, using the run's progress note and the merge date in UTC. If the file doesn't exist, it is created with a `# Progress` heading first; an existing one keeps its bytes and only gets the entry after them. A missing `DECISIONS.md` is created in the same commit with a `# Decisions` heading (the agent adds decisions to it); an existing one isn't touched. `CLAUDE.md` is never written.
+SpoolHQ is the only writer of a project's notes files: `PROGRESS.md`, `docs/progress-archive.md`, `DECISIONS.md` and `docs/decisions/*.md`. The implementer hands its progress entry and decisions back in its [run note](context.md#the-run-note); the squash commit writes them, under the project's run lock, after the merge policy decided (so they don't count toward the diff size). Everything outside what SpoolHQ adds keeps its bytes, and files are read and written as bytes, so line endings and undecodable bytes survive. `CLAUDE.md` is never written. The code is `services/notes/` (`write_notes`, `notes_problems`), which imports no other service.
+
+**PROGRESS.md.** The newest entries sit between two marker lines, newest first:
+
+```markdown
+<!-- spoolhq:recent:start -->
+
+### T07 · Parse slugs (2026-11-20)
+
+Added slug parsing.
+
+### T06 · … (2026-11-19)
+
+…
+
+<!-- spoolhq:recent:end -->
+```
+
+The new entry goes at the top. The newest 5 stay; older ones move, word for word, to the end of `docs/progress-archive.md` (created with a heading when missing), oldest first. Text inside the markers before the first `### ` entry is kept. A file without the markers gets them at its end on the first merge, everything above untouched; a missing file is created with a `# Progress` heading. A file with only one marker, two of either, or the end before the start blocks the ticket ("The notes files don't match: PROGRESS.md needs exactly one spoolhq:recent start and end marker"). Code never rewrites anything outside the markers.
+
+**Decisions, split layout** (`DECISIONS.md` missing, only a heading, or already an index): each decision is appended to `docs/decisions/<area>.md` (created with `# Decisions · <area>`) in the format the [context pack](context.md#a-split-decisionsmd) reads, and its index line to `DECISIONS.md`:
+
+```markdown
+012. Routes are plural
+    Like the rest of the API.
+
+012 · Routes are plural · docs/decisions/api.md
+```
+
+`NNN` is one more than the highest number in the index, three digits. **Flat layout** (`DECISIONS.md` holds `N. ` entries and no index line): the entry is appended to `DECISIONS.md` itself, numbered after its highest entry; T46 converts these. Without decisions, an existing `DECISIONS.md` isn't touched; a missing one is created with a `# Decisions` heading.
+
+**The notes check.** Before the commit, `notes_problems` compares the index with the area files: every index line has exactly one entry in `docs/decisions/*.md` and the reverse, numbers run 1..N without gaps or duplicates, each line names the file its entry is in, and each title is its entry's heading (`N. title`, or the bold part of `N. **title** …`). A `DECISIONS.md` without index lines passes. The first problem blocks the ticket: "The notes files don't match: DECISIONS.md: 2 is missing". A notes file that resolves outside the repository (a symlink) is refused the same way.
+
+**Agents can't edit them.** After each attempt's commit, a branch that adds, changes, deletes or renames a notes file fails the `policy` step with "The agent edited notes files: <file>; put progress and decisions in the run note instead". Unlike [planted agent settings](agents.md#repo-safety), this is not a security issue, so it goes back to the agent as a gate retry. The diff runs from the merge base with the newest commit on the branch that no attempt made (SpoolHQ's squash on a pull request branch, a merge of main), or the branch's base: main or SpoolHQ changing the notes meanwhile never counts.
 
 ## Conflicts
 

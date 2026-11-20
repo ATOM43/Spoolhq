@@ -1,10 +1,10 @@
-"""Context: the prompt an agent starts with, and the progress note it hands back.
+"""Context: the prompt an agent starts with.
 
 ``build_implementer_prompt`` renders the implementer's prompt (the ticket, the relevant
 part of the spec, the repository's notes and, on a retry, what went wrong) from a
-sandboxed Jinja2 template, within a character budget. ``extract_progress_note`` reads
-the agent's ``<progress>`` block from its final message. This package imports no
-other service package; callers pass plain values in. See ``docs/context.md``.
+sandboxed Jinja2 template, within a character budget. The run note the agent hands
+back is read by ``services/notes``. This package imports no other service package;
+callers pass plain values in. See ``docs/context.md``.
 """
 
 from spoolhq.core.agent_policy import READ_ONLY_GIT
@@ -28,7 +28,6 @@ from spoolhq.services.context.model import (
     ReviewNote,
     TicketView,
 )
-from spoolhq.services.context.progress import extract_progress_note, format_progress_entry
 from spoolhq.services.context.render import (
     IMPLEMENTER_TEMPLATE,
     build_implementer_prompt,
@@ -56,8 +55,6 @@ __all__ = [
     "Trimmed",
     "build_implementer_prompt",
     "escape_closing_tag",
-    "extract_progress_note",
-    "format_progress_entry",
     "keep_connected",
     "keep_head",
     "read_repo_docs",

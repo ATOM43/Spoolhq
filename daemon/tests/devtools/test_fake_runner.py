@@ -1,5 +1,6 @@
 """The dev fake runner's scenarios, end to end through the API with the real gates."""
 
+import json
 import shlex
 import shutil
 import sys
@@ -15,7 +16,8 @@ from pydantic import TypeAdapter
 from spoolhq.api import create_app
 from spoolhq.core.config import load_settings
 from spoolhq.devtools import SCENARIOS, dev_agents, fake_runner
-from spoolhq.devtools.fake_runner import fill_verdict
+from spoolhq.devtools.fake_runner import SCENARIOS_DIR, fill_verdict
+from spoolhq.services.notes import parse_run_note
 from spoolhq.services.projects import load_project, save_project
 from spoolhq.services.runloop import DiffReport, GatesReport, ReviewReport
 
@@ -66,6 +68,15 @@ def run_next(client: TestClient, token: str) -> dict[str, Any]:
     raise AssertionError("the run did not end")
 
 
+def test_every_implementer_scenario_returns_a_run_note() -> None:
+    for name in {name for implementer, _ in SCENARIOS.values() for name in implementer}:
+        final = json.loads((SCENARIOS_DIR / name).read_text(encoding="utf-8").splitlines()[-1])
+        note = parse_run_note(final["result"], ["general"])
+        assert note.progress
+        expected = ["general"] * (2 if name == "implement-again.jsonl" else 1)
+        assert [d.area for d in note.decisions] == expected, name
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("scenario", "status", "attempts"),
@@ -83,6 +94,11 @@ def test_scenarios_that_merge(
         assert "test_fake_runner_review_fix" in merged
         reviewer = client.app.state.runloop.agents.reviewer  # type: ignore[attr-defined]
         assert len(reviewer.calls) == 2
+    index = (git_repo / "DECISIONS.md").read_text(encoding="utf-8")
+    general = (git_repo / "docs" / "decisions" / "general.md").read_text(encoding="utf-8")
+    decisions = 2 if scenario == "review-changes" else 1
+    assert index.count(" · docs/decisions/general.md") == general.count("\n00") == decisions
+    assert "### T07 · Parse slugs" in (git_repo / "PROGRESS.md").read_text(encoding="utf-8")
     _check_reports(client, token, current["run"]["id"], scenario)
     ticket = client.get(
         f"/api/projects/demo/tickets/{current['run']['ticket_id']}", headers=auth(token)

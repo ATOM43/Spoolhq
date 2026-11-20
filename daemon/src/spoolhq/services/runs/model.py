@@ -103,7 +103,7 @@ class Run:
     started_at: str
     ended_at: str | None
     progress_note: str | None = None
-    """The implementer's ``<progress>`` note from its last completed attempt, for T14."""
+    """The progress entry of the implementer's latest run note, written at merge (T45)."""
     reset_at: str | None = None
     """When a run paused by a usage limit may resume; ``None`` otherwise."""
     kind: RunKind = RunKind.TICKET
@@ -114,6 +114,8 @@ class Run:
     """The pull request's branch on GitHub, ``spoolhq/<ticket_id>-<slug>``."""
     policy: dict[str, Any] | None = None
     """The latest merge-policy decision (T18): ``mode`` and ``rules`` (``rule``, ``detail``)."""
+    decisions: list[dict[str, str]] | None = None
+    """The latest run note's decisions (``area``, ``title``, ``text``), written at merge."""
 
 
 @dataclass(frozen=True)

@@ -412,3 +412,10 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 406 · Every dev fake-runner scenario drafts; `ticket-draft` names it · docs/decisions/agents.md
 407 · Drafting in the Add ticket form · docs/decisions/desktop.md
 408 · Draft problems the form can't fix don't block · docs/decisions/desktop.md
+409 · The implementer's run note is a JSON `<run-note>` block in its final message · docs/decisions/runloop.md
+410 · A bad run note or an agent edit of a notes file goes back as a gate retry · docs/decisions/runloop.md
+411 · The notes guard diffs from the newest commit on the branch that no attempt made · docs/decisions/runloop.md
+412 · The run note's decisions are stored on the run row (schema 8) · docs/decisions/runloop.md
+413 · SpoolHQ writes the notes files at merge; agents never do · docs/decisions/projects-tickets.md
+414 · The notes check runs before the integration commit and blocks on the first problem · docs/decisions/projects-tickets.md
+415 · The final-message summary keeps 16,000 characters · docs/decisions/agents.md
