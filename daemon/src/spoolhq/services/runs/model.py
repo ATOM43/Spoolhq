@@ -89,6 +89,8 @@ class EventKind(StrEnum):
     LOG = "log"
     INTEGRATE = "integrate"
     POLICY_DECISION = "policy.decision"
+    TRACKER_FAILED = "tracker.failed"
+    """A tracker action failed for good: ``{"action", "ticket_id", "error"}`` (T24)."""
 
 
 @dataclass(frozen=True)

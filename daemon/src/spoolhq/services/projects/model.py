@@ -356,9 +356,26 @@ class RunSettings(_Strict):
     integration: Literal["local", "hold"] = "local"
 
 
+class StatusMap(_Strict):
+    """The tracker status each ticket status shows as, compared case-insensitively.
+    The defaults are a new ClickUp list's three statuses."""
+
+    draft: NonEmptyStr = "to do"
+    ready: NonEmptyStr = "to do"
+    running: NonEmptyStr = "in progress"
+    awaiting_approval: NonEmptyStr = "in progress"
+    blocked: NonEmptyStr = "in progress"
+    done: NonEmptyStr = "complete"
+
+
 class Tracker(_Strict):
+    """One-way sync of tickets to an issue tracker (docs/tracker.md). ``kind`` names the
+    adapter in ``services/tracker/registry.py``; any other value fails validation."""
+
     kind: Literal["clickup"] = "clickup"
     list_id: NonEmptyStr
+    status_map: StatusMap = Field(default_factory=StatusMap)
+    comment_on_runs: bool = True
 
 
 class TemplateInfo(_Strict):

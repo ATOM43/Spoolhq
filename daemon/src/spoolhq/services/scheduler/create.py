@@ -102,7 +102,7 @@ def _body(new: NewTicket) -> str:
 
 
 @contextmanager
-def _tickets_lock(workspace: Path) -> Iterator[None]:
+def tickets_lock(workspace: Path) -> Iterator[None]:
     """The OS lock ``spool tickets new`` and the daemon share; TicketLockedError after
     ``LOCK_WAIT_S``."""
     deadline = time.monotonic() + LOCK_WAIT_S
@@ -168,7 +168,7 @@ def _create(
 ) -> list[Ticket]:
     folder = tickets_dir(project, projects_dir=projects_dir)
     workspace = project_dir(project, projects_dir)
-    with edit_lock(workspace), _tickets_lock(workspace):
+    with edit_lock(workspace), tickets_lock(workspace):
         listing = list_tickets(project, projects_dir=projects_dir)
         plan = listing.tickets
         names = [t.file_name for t in plan] + [t.file_name for t in listing.invalid]

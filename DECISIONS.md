@@ -435,3 +435,14 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 429 · New dependencies are a merge-policy rule, read from manifests with the standard library · docs/decisions/runloop.md
 430 · The template names its coverage report in its contract · docs/decisions/projects-tickets.md
 431 · Model names may contain `@` · docs/decisions/agents.md
+432 · Sync finds changes by comparing tickets and runs with what it last queued, not by hooks in each writer · docs/decisions/tracker.md
+433 · The outbox is three tables in state.db (schema 9); only run comments and PR links are keyed · docs/decisions/tracker.md
+434 · One sync thread serves every project and starts once a project has a tracker block · docs/decisions/tracker.md
+435 · Crash recovery adopts a task by its name prefix; the list is read once per adapter · docs/decisions/tracker.md
+436 · A tracker.failed event goes on the ticket's latest run · docs/decisions/tracker.md
+437 · A rate limit pauses the project's sync and isn't a failure · docs/decisions/tracker.md
+438 · The dry run is local and asks no tracker · docs/decisions/tracker.md
+439 · ClickUp API v2 checked on 2026-11-21: `markdown_content`, `notify_all` required · docs/decisions/tracker.md
+440 · Run comments are built from the run log only · docs/decisions/tracker.md
+441 · `tracker.status_map` has one field per ticket status, each with its default · docs/decisions/projects-tickets.md
+442 · `GET …/tracker` reads `off` without a tracker block; push answers 409 · docs/decisions/api.md

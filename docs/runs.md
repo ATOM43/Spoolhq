@@ -37,7 +37,7 @@ An **attempt** is one implementer pass inside a run, together with its gates and
 
 - Every connection sets `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON` and `busy_timeout=5000`. A committed transaction survives a crash of the process; a power loss can drop the last few transactions.
 - One connection per `RunLog`, opened with `check_same_thread=False` and guarded by a lock, so a `RunLog` can be shared between threads. `isolation_level=None`: each method is one explicit `BEGIN IMMEDIATE` … `COMMIT`.
-- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 8.
+- **Migrations** are an ordered list of SQL scripts in `db.py`, tracked by `PRAGMA user_version`; opening a database runs the scripts it is missing, inside one transaction. This version of SpoolHQ ships schema version 9 (version 9 adds the [tracker outbox](tracker.md#the-outbox-and-failures): `tracker_outbox`, `tracker_tickets`, `tracker_sync`).
 - A database newer than the code is refused: `state.db: schema version 9 is newer than this SpoolHQ supports (8); upgrade SpoolHQ.`
 - A file that isn't a SQLite database is refused: `state.db: not a SpoolHQ database (file is not a database)`.
 - All SQL takes its values as parameters; ticket text and agent output never become SQL.
@@ -92,7 +92,7 @@ CREATE TABLE events (
 );
 ```
 
-Version 3 adds the integration journal, `integrations` ([integration.md](integration.md#the-journal-schema-version-3)); version 4 the cache-read tokens; version 5 the run's kind; version 6 the run's pull request ([GitHub delivery](github.md#pr-mode); `set_pull_request` and `open_pull_requests` in `services/runs/pulls.py`); version 7 the run's latest merge-policy decision ([merge policy](merge-policy.md#the-record); `record_policy` in `services/runs/policy.py` writes it and its event in one transaction); version 8 the run note's decisions (`record_run_note`).
+Version 3 adds the integration journal, `integrations` ([integration.md](integration.md#the-journal-schema-version-3)); version 4 the cache-read tokens; version 5 the run's kind; version 6 the run's pull request ([GitHub delivery](github.md#pr-mode); `set_pull_request` and `open_pull_requests` in `services/runs/pulls.py`); version 7 the run's latest merge-policy decision ([merge policy](merge-policy.md#the-record); `record_policy` in `services/runs/policy.py` writes it and its event in one transaction); version 8 the run note's decisions (`record_run_note`); version 9 the tracker outbox ([tracker sync](tracker.md#the-outbox-and-failures); `services/runs/outbox.py`).
 
 Triggers `BEFORE UPDATE` and `BEFORE DELETE` on `events` raise `events are append-only`, so not even a hand-written statement can change history. Indexes: `runs(ticket_id)`, `runs(status)`, `attempts(run_id)`, `events(run_id, id)`.
 
@@ -132,6 +132,7 @@ Every lifecycle change appends its event in the same transaction:
 | `run.phase` | the run loop | `{"phase", "text"}`: one per phase change; `text` is the line `spool run` prints |
 | `integrate` | integration | `{"commit", "tag"}`: the ticket's squash commit landed on the default branch |
 | `policy.decision` | `record_policy` (integration) | `{"mode", "rules"}`, plus `"approved_by_user": true` after `spool run approve`: the [merge policy](merge-policy.md)'s decision |
+| `tracker.failed` | the tracker sync | `{"action", "ticket_id", "error"}`: a [tracker action](tracker.md#the-outbox-and-failures) failed for the 5th time; recorded on the ticket's latest run (the run itself for a run comment) |
 | `attempt.started` | `start_attempt` | `{"number", "kind", "dir", "backend", "model"}` |
 | `attempt.finished` | `finish_attempt` | `{"number", "status"}` |
 | `agent.message`, `agent.tool_call`, `agent.file_edit`, `agent.usage`, `gate.result`, `review.verdict`, `log` | `append_event` (the run loop) | free-form |

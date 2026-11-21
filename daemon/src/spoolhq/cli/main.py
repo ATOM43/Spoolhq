@@ -28,6 +28,7 @@ from spoolhq.cli.run import run_app
 from spoolhq.cli.runs import runs_app
 from spoolhq.cli.templates import templates_app
 from spoolhq.cli.tickets import tickets_app
+from spoolhq.cli.tracker import tracker_app
 from spoolhq.cli.worktrees import worktrees_app
 from spoolhq.core.auth import load_or_create_token, token_path
 from spoolhq.core.config import Settings, ensure_home, home_dir
@@ -71,6 +72,7 @@ app.add_typer(run_app)
 app.add_typer(worktrees_app)
 app.add_typer(templates_app)
 app.add_typer(github_app)
+app.add_typer(tracker_app)
 app.add_typer(secrets_app)
 app.command("agents")(agents_command)
 app.command("review")(review_command)

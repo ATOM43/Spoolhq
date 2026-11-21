@@ -41,6 +41,9 @@ git:
 tracker:
   kind: clickup                               # optional
   list_id: "<list id>"
+  status_map:                                 # optional: SpoolHQ status → tracker status
+    done: complete
+  comment_on_runs: true                       # optional
 context:
   max_chars: 120000                           # optional: the prompt's size budget
   progress_entries: 3                         # optional: newest PROGRESS.md entries in the prompt
@@ -101,8 +104,11 @@ run:
 | `gates.coverage_report` | no | none | The coverage report the test command writes, repo-relative (Cobertura XML or a JSON summary with a total). Set: a ticket may not lower the total by more than 0.5 points ([coverage](gates.md#coverage)). |
 | `gates.secret_scan_allow` | no | `[]` | Repo-relative globs the [secret scan](gates.md#secret-scan) skips, such as test fixtures with fake keys. |
 | `run.integration` | no | `local` | `local` merges each approved ticket into the default branch as one commit ([integration](integration.md)); `hold` keeps every ticket in `awaiting_approval` until `spool run approve` (the merge policy's `hold_mode` rule). |
-| `tracker.kind` | no | `clickup` | Only `clickup` for now. |
+| `tracker` | no | none | One-way sync of tickets to an issue tracker ([tracker sync](tracker.md)). Without it nothing is synced. |
+| `tracker.kind` | no | `clickup` | The adapter; only `clickup` for now. |
 | `tracker.list_id` | when `tracker` is set | | Non-empty string; quote it (`"901"`) if it is all digits. |
+| `tracker.status_map.<status>` | no | `to do` for `draft` and `ready`, `in progress` for `running`, `awaiting_approval` and `blocked`, `complete` for `done` | The tracker status each ticket status shows as, compared case-insensitively; the list must have it ([status map](tracker.md#status-map)). |
+| `tracker.comment_on_runs` | no | `true` | Comment on the ticket's task when a run ends: outcome, attempts, usage and the PR or commit. |
 
 `spool init` and the app's New project write the commands you give, after running each once ([creation job](api.md#creating-a-project)); an empty repo may start with none. With `--template`, they default to the template's `spoolhq-template.yaml`, and the template's description is saved next to `project.yaml` as `TEMPLATE.md`, which the [planner](planner.md) reads.
 

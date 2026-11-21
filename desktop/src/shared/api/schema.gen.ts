@@ -761,6 +761,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/tracker": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Tracker */
+        get: operations["get_tracker_api_projects__name__tracker_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/tracker/push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Push */
+        post: operations["push_api_projects__name__tracker_push_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents": {
         parameters: {
             query?: never;
@@ -1935,6 +1969,27 @@ export interface components {
         TicketsSaved: {
             /** Tickets */
             tickets: components["schemas"]["TicketView"][];
+        };
+        /** TrackerPush */
+        TrackerPush: {
+            /** Queued */
+            queued: number;
+        };
+        /** TrackerView */
+        TrackerView: {
+            /** Kind */
+            kind: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "off" | "ok" | "syncing" | "failed";
+            /** Pending */
+            pending: number;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Synced At */
+            last_synced_at: string | null;
         };
         /**
          * UsageTotal
@@ -3741,6 +3796,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GitHubSync"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_tracker_api_projects__name__tracker_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackerView"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    push_api_projects__name__tracker_push_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackerPush"];
                 };
             };
             /** @description An error. */

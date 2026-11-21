@@ -43,6 +43,8 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/gates`, `/review`, `/diff` | an attempt's [reports](#attempt-reports) as typed JSON |
 | `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/transcript` | the attempt's raw agent streams (`transcript.jsonl`, NDJSON) as stored |
 | `POST /api/projects/{name}/github/sync` | check open pull requests now |
+| `GET /api/projects/{name}/tracker` | the [tracker sync](tracker.md) state: `kind`, `state` (`off`, `ok`, `syncing`, `failed`), `pending`, `last_error`, `last_synced_at` |
+| `POST /api/projects/{name}/tracker/push` | queue a push of every ticket: `{"queued": n}`; 409 without a `tracker` block |
 | `GET /api/templates` | the built-in templates: `name` (what `POST /api/projects` takes as `template`), `description`, `summary` (one line of at most 120 characters, for a card; null if the template has none) and `commands` (`install`, `lint`, `test` from its `spoolhq-template.yaml`, which the New project dialog pre-fills) |
 | `GET /api/agents` | what `spool agents` shows: each backend (installed, version, login, policy parts) and Graphify |
 | `GET /api/settings` | the daemon's settings, and for each secret (`anthropic`, `github`, `clickup`) only `{"set", "source": "keychain" \| "env" \| null}` |

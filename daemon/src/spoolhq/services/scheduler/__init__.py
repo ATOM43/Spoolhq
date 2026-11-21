@@ -15,6 +15,7 @@ from spoolhq.services.scheduler.create import (
     create_ticket,
     create_tickets,
     ticket_problems,
+    tickets_lock,
 )
 from spoolhq.services.scheduler.errors import (
     PlanError,
@@ -70,6 +71,7 @@ __all__ = [
     "check_transition",
     "critical_path",
     "create_ticket",
+    "tickets_lock",
     "create_tickets",
     "edit_ticket",
     "explain_idle",

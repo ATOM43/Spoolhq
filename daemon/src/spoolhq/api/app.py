@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
 
+import httpx
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
@@ -24,6 +25,7 @@ from spoolhq.api.routers import (
     runs,
     templates,
     tickets,
+    tracker,
     version,
 )
 from spoolhq.api.routers import settings as settings_router
@@ -42,6 +44,7 @@ from spoolhq.services.runloop import (
     RunLoop,
 )
 from spoolhq.services.runs import RunRegistry
+from spoolhq.services.tracker.sync import TrackerSync
 
 logger = logging.getLogger("spoolhq.daemon")
 
@@ -54,6 +57,7 @@ def create_app(
     agents: Agents | None = None,
     integrator: Integrator | None = None,
     fake_runner: str | None = None,
+    tracker_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     """Build the app. Without ``token``, the one in the home folder is used (or created).
 
@@ -66,7 +70,9 @@ def create_app(
     ``integrator`` (default: ``Delivery``, local or to ``git.remote``; ``run.integration:
     hold`` per project).
     Plan generation runs beside it (``app.state.plans``, with ``agents.planner``), and
-    so does the poller of open GitHub pull requests (``app.state.github``, every 60 s).
+    so does the poller of open GitHub pull requests (``app.state.github``, every 60 s),
+    and the tracker sync (``app.state.tracker``, its thread started once a project has a
+    ``tracker`` block; ``tracker_transport`` replaces its HTTP transport in tests).
     On shutdown the loop stops its agents and leaves their runs for the next startup's
     recovery. The caller must hold the daemon single-instance lock while it runs.
     ``fake_runner`` names the dev scenario ``agents`` replay, for ``GET /api/agents``.
@@ -102,6 +108,10 @@ def create_app(
             )
             app.state.github = GitHubPoller(app.state.runloop, registry)
             app.state.github.start()
+            app.state.tracker = TrackerSync(
+                registry, projects_dir=settings.projects_dir, transport=tracker_transport
+            )
+            app.state.tracker.start_if_needed()
             app.state.plans = PlanJobs(
                 registry,
                 projects_dir=settings.projects_dir,
@@ -129,6 +139,7 @@ def create_app(
                 app.state.drafts.close()
                 app.state.plans.close()
                 app.state.github.close()
+                app.state.tracker.close()
                 app.state.runloop.close()
         finally:
             registry.close()
@@ -155,6 +166,7 @@ def create_app(
         runs,
         plan,
         github,
+        tracker,
         agents_router,
         settings_router,
         templates,

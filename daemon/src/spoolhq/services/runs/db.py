@@ -121,7 +121,40 @@ _V8 = """
 ALTER TABLE runs ADD COLUMN decisions TEXT;
 """
 
-MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8)
+# Tracker sync (T24): the outbox of tracker actions, what was last queued per ticket,
+# and the project's sync state (one row).
+_V9 = """
+CREATE TABLE tracker_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    run_id INTEGER,
+    text TEXT,
+    once_key TEXT UNIQUE,
+    state TEXT NOT NULL,
+    failures INTEGER NOT NULL DEFAULT 0,
+    next_at TEXT NOT NULL,
+    last_error TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX tracker_outbox_state ON tracker_outbox (state, id);
+
+CREATE TABLE tracker_tickets (
+    ticket_id TEXT PRIMARY KEY,
+    fingerprint TEXT NOT NULL,
+    status TEXT NOT NULL
+);
+
+CREATE TABLE tracker_sync (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    baseline_run_id INTEGER NOT NULL,
+    last_error TEXT,
+    last_synced_at TEXT
+);
+"""
+
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9)
 """Migration ``n`` (1-based) takes the database from version ``n - 1`` to ``n``."""
 
 SCHEMA_VERSION = len(MIGRATIONS)

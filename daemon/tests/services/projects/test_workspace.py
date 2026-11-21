@@ -228,6 +228,13 @@ def test_missing_required_field_is_named(projects_dir: Path, git_repo: Path, fie
         ("merge_policy.max_diff_lines", 100_001, "must be at most 100000"),
         ("commands.test", "  ", "must not be empty"),
         ("tracker.kind", "jira", "must be one of 'clickup'"),
+        ("tracker.status_map.done", " ", "must not be empty"),
+        ("tracker.status_map.merged", "closed", "unknown key"),
+        (
+            "tracker.comment_on_runs",
+            "sometimes",
+            "input should be a valid boolean, unable to interpret input",
+        ),
         ("run.integration", "github", "must be one of 'local' or 'hold'"),
         ("context.max_chars", 10000, "must be at least 20000"),
         ("context.max_chars", 2_000_001, "must be at most 2000000"),
