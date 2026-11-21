@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **47 tickets in 6 phases, about 106.5 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **49 tickets in 6 phases, about 109 hours** for one developer.
 
 **What v1 includes**
 
@@ -84,10 +84,10 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
 | T21 | Tickets tab and plan review | 4 Desktop UI | T15, T36 | 2.5 |
 | T22 | Live run | 4 Desktop UI | T37 | 2 |
-| T23 | Packaging | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48 | 3 |
+| T23 | Bundled daemon | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48 | 2 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T40 | 3 |
-| T26 | Documentation and release | 5 Release | T23, T25 | 2.5 |
+| T26 | Documentation and release | 5 Release | T50, T25 | 2.5 |
 | T27 | Agent roles, custom endpoints and contract suite | 3 Planner and Git | T09, T14 | 2 |
 | T30 | Codex CLI backend | 3 Planner and Git | T27 | 2 |
 | T31 | Claude Agent SDK backend | 3 Planner and Git | T27 | 2 |
@@ -109,9 +109,11 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T46 | Notes layout in templates and old projects | 3 Planner and Git | T45 | 2 |
 | T47 | Project settings: agents | 4 Desktop UI | T32, T27 | 2 |
 | T48 | Quality gates for projects | 3 Planner and Git | T46 | 2 |
-|  | **Total** |  |  | **106.5** |
+| T49 | Background running and tray | 4 Desktop UI | T23 | 1.5 |
+| T50 | Installers | 4 Desktop UI | T49 | 2 |
+|  | **Total** |  |  | **109** |
 
-Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T26 (44 h).
+Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T49 → T50 → T26 (46.5 h).
 
 ## Phase 0 — Scaffolding
 
@@ -484,7 +486,7 @@ Done when:
 
 ## Phase 4 — Desktop UI (v0 screens)
 
-Nineteen tickets put a minimal face on the daemon and package it: two screens (Home and the project panel, with its Settings tab), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Twenty-one tickets put a minimal face on the daemon and package it: two screens (Home and the project panel, with its Settings tab), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -769,18 +771,44 @@ Done when:
 - [ ] An invalid base URL is refused next to its field
 - [ ] App Settings shows nothing per project
 
-### T23 · Packaging
+### T23 · Bundled daemon
 
-One installer that brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48 · 3 h*
+The app brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48 · 2 h*
 
-- The daemon is bundled with PyInstaller and shipped as a Tauri sidecar; the app starts it when it is not running.
-- Closing the window leaves the daemon and any run going, with a tray icon to quit.
-- CI builds installers for macOS, Windows and Linux.
+- The daemon is built with PyInstaller and shipped as a Tauri sidecar; the app starts it when none is running and connects to a running one otherwise.
+- `devtools/` and the fake runner are left out of the build, and the packaged daemon refuses `SPOOLHQ_DEV_FAKE_RUNNER`.
+- A smoke test of the built daemon (health, `spool init`) on each OS in CI.
 
 Done when:
 
+- [ ] The app starts the bundled daemon when none is running, and uses a running one otherwise
+- [ ] The packaged daemon contains no dev tools and refuses the fake runner
+- [ ] The built daemon passes its smoke test on Linux, macOS and Windows
+
+### T49 · Background running and tray
+
+Runs keep going when the window closes. *Depends on: T23 · 1.5 h*
+
+- Closing the window leaves the daemon and any run going.
+- A tray icon with Open and Quit.
+- Quit stops the daemon and any running agent cleanly, with the run marked as cancelled, not interrupted.
+
+Done when:
+
+- [ ] Closing the window leaves a run going, and reopening shows it live
+- [ ] Quitting from the tray stops the daemon and any running agent cleanly, with no leftover process
+
+### T50 · Installers
+
+One installer per OS, built by CI. *Depends on: T49 · 2 h*
+
+- CI builds installers for macOS, Windows and Linux on release tags only; normal pushes keep the fast check build.
+- Code signing comes later.
+
+Done when:
+
+- [ ] A release tag produces installers for all three OSes
 - [ ] A fresh machine with only the installer and git can create a project and run a ticket
-- [ ] Quitting from the tray stops the daemon and any running agent cleanly
 
 ## Phase 5 — Tracker, dogfood and release
 
@@ -816,7 +844,7 @@ Done when:
 
 ### T26 · Documentation and release
 
-What a stranger needs to install it and trust it. *Depends on: T23, T25 · 2.5 h*
+What a stranger needs to install it and trust it. *Depends on: T50, T25 · 2.5 h*
 
 - README: what it is, install, a first project in five minutes, screenshots.
 - `docs/`: architecture, ticket format, writing a template, writing a tracker adapter, security model.
@@ -874,7 +902,7 @@ Not estimated yet; each gets its own ticket plan after v0.1.0. The v1 interfaces
 | Planner tickets are too large or vague | The implementer fails repeatedly | Size rules in the planner prompt; the approval gate (T21); split tickets from the board |
 | The PyInstaller sidecar breaks on one OS | T23 overruns | Ship the daemon as a pip package with `orch serve` and let the app connect to it |
 | The Kontora spike shows Phase 2 already exists | Duplicate work | Build on Kontora; contribute the planner, templates, merge policy and UI |
-| Running short of time | The release slips | Cut in this order: past-runs list in the Run tab, tray icon, Windows build. Never cut gates, the reviewer, the merge policy or crash recovery |
+| Running short of time | The release slips | Cut in this order: past-runs list in the Run tab, the tray icon (T49; closing the window then quits the daemon), Windows build. Never cut gates, the reviewer, the merge policy or crash recovery |
 
 **Open questions**
 
