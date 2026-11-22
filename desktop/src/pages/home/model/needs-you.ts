@@ -1,7 +1,14 @@
 import type { ProjectSummary } from "@/entities/project";
+import { trackerLabel, type TrackerView } from "@/entities/tracker";
 
 export type NeedsYouKind =
-  "blocked" | "approval" | "plan" | "interrupted" | "usage_limit" | "cleanup";
+  | "blocked"
+  | "approval"
+  | "plan"
+  | "interrupted"
+  | "usage_limit"
+  | "cleanup"
+  | "tracker";
 
 export interface NeedsYouCard {
   key: string;
@@ -31,11 +38,12 @@ const time = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 /** Everything waiting for the user, across projects: blocked tickets, tickets awaiting
- * approval, draft plans, runs a stopped daemon interrupted, usage-limit pauses, and
- * creations whose rollback left paths behind. */
+ * approval, draft plans, runs a stopped daemon interrupted, usage-limit pauses, failed
+ * tracker syncs, and creations whose rollback left paths behind. */
 export function needsYouCards(
   projects: ProjectSummary[],
   tickets: Record<string, TicketLike[] | undefined>,
+  trackers: Record<string, TrackerView | undefined> = {},
 ): NeedsYouCard[] {
   const cards: NeedsYouCard[] = [];
   for (const project of projects) {
@@ -117,6 +125,18 @@ export function needsYouCards(
         title: null,
         reason: `Usage limit · resumes ${time(run.reset_at)}`,
         at: project.last_activity ?? null,
+      });
+    }
+    const tracker = trackers[project.name];
+    if (tracker?.kind && tracker.state === "failed") {
+      cards.push({
+        key: `${project.name}/tracker`,
+        kind: "tracker",
+        project: project.name,
+        ticket: null,
+        title: `${trackerLabel(tracker.kind)} sync failed`,
+        reason: tracker.last_error ?? "Sync failed",
+        at: tracker.failed_at ?? null,
       });
     }
   }

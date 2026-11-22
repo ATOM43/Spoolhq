@@ -6,8 +6,9 @@ import { SettingsDialog } from "@/features/settings";
 import { CopyButton } from "@/shared/ui";
 
 import { remoteHost } from "../model/remote";
+import { TrackerLine } from "./TrackerLine";
 
-/** V2 header, row 1: breadcrumb, repo path with copy, branch and remote; Settings at
+/** V2 header, row 1: breadcrumb, repo path with copy, branch, remote and tracker sync; Settings at
  * the right end, always enabled (also with an invalid project.yaml). */
 export function ProjectHeader({ project }: { project: ProjectDetail }) {
   return (
@@ -45,6 +46,7 @@ export function ProjectHeader({ project }: { project: ProjectDetail }) {
             : "Local git · no remote"}
         </span>
       ) : null}
+      <TrackerLine project={project.name} />
       <div className="ml-auto">
         <SettingsDialog icon />
       </div>

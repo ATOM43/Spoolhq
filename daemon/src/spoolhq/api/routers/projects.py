@@ -245,6 +245,8 @@ def put_settings(
             )
         except EditConflict as exc:
             raise _conflict(exc, SettingsFile(settings=_settings_data(name, request))) from exc
+    if project.tracker is not None:
+        request.app.state.tracker.start_if_needed()  # a new tracker block needs no restart
     return SettingsFile(settings=_settings_data(name, request))
 
 

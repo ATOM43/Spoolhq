@@ -3,6 +3,7 @@ import {
   CircleAlert,
   CircleDashed,
   CirclePause,
+  CloudAlert,
   Eye,
   FolderX,
   ListChecks,
@@ -18,6 +19,7 @@ import { Link } from "react-router";
 
 import type { ProjectSummary } from "@/entities/project";
 import { ticketsQuery } from "@/entities/ticket";
+import { trackerQuery, useTrackerAction } from "@/entities/tracker";
 import { cn, formatTime, timeAgo } from "@/shared/lib";
 import { Button, ConfirmDialog } from "@/shared/ui";
 
@@ -62,6 +64,11 @@ const CHIP: Record<
     label: "Cleanup failed",
     tone: "bg-danger/10 text-danger",
   },
+  tracker: {
+    icon: <CloudAlert aria-hidden />,
+    label: "Sync failed",
+    tone: "bg-danger/10 text-danger",
+  },
 };
 
 /** V1 "Needs you": one card per item, each with one action. Hidden when empty. */
@@ -78,7 +85,17 @@ export function NeedsYou({ projects }: { projects: ProjectSummary[] }) {
       tickets[index]?.data?.tickets,
     ]),
   );
-  const cards = needsYouCards(projects, byProject);
+  // Polled every 15 s while Home shows, only for projects with a tracker.
+  const synced = projects.filter(
+    (project) => !project.settings_error && project.run_state !== "creating",
+  );
+  const trackers = useQueries({
+    queries: synced.map((project) => trackerQuery(project.name)),
+  });
+  const byTracker = Object.fromEntries(
+    synced.map((project, index) => [project.name, trackers[index]?.data]),
+  );
+  const cards = needsYouCards(projects, byProject, byTracker);
   const loading = tickets.some((query) => query.isPending);
   const failed = tickets.filter((query) => query.isError).length;
   if (cards.length === 0 && !loading && failed === 0) {
@@ -204,7 +221,32 @@ function Action({ card }: { card: NeedsYouCard }) {
       return <ResumeOrDiscard project={card.project} ticket={ticket} />;
     case "cleanup":
       return <Dismiss job={card.job ?? ""} />;
+    case "tracker":
+      return <RetrySync project={card.project} />;
   }
+}
+
+function RetrySync({ project }: { project: string }) {
+  const retry = useTrackerAction(project);
+  return (
+    <div className="flex flex-col gap-1">
+      <Button
+        size="sm"
+        disabled={retry.isPending}
+        onClick={() => {
+          retry.mutate("retry");
+        }}
+      >
+        <RotateCcw aria-hidden />
+        Retry
+      </Button>
+      {retry.error ? (
+        <p role="alert" className="text-sm text-danger">
+          {retry.error.message}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function Dismiss({ job }: { job: string }) {

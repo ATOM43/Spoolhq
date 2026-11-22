@@ -82,6 +82,7 @@ const notRunning = () =>
 
 let projects: Project[] = [];
 let tickets: Record<string, unknown[]> = {};
+let trackers: Record<string, Partial<Schemas["TrackerView"]>> = {};
 
 function daemonUp() {
   vi.mocked(getDaemonInfo).mockResolvedValue({
@@ -127,6 +128,7 @@ describe("Home", () => {
     daemonUp();
     projects = [];
     tickets = {};
+    trackers = {};
     fakeRunner = null;
     GET.mockImplementation((path, init) => {
       if (path === "/api/projects") {
@@ -136,6 +138,19 @@ describe("Home", () => {
         const name = (init as { params: { path: { name: string } } }).params
           .path.name;
         return ok({ tickets: tickets[name] ?? [], invalid: [] });
+      }
+      if (path === "/api/projects/{name}/tracker") {
+        const name = (init as { params: { path: { name: string } } }).params
+          .path.name;
+        return ok({
+          kind: null,
+          state: "off",
+          pending: 0,
+          last_error: null,
+          last_synced_at: null,
+          failed_at: null,
+          ...trackers[name],
+        });
       }
       if (path === "/api/templates") {
         return ok([]);
@@ -440,6 +455,63 @@ describe("Home", () => {
     );
     expect(within(section).getAllByRole("article")).toHaveLength(5);
     expect(within(section).queryByText(/Done one/)).toBeNull();
+  });
+
+  it("shows a failed tracker sync as a card whose Retry clears it", async () => {
+    const failedAt = new Date(Date.now() - 5 * 60_000).toISOString();
+    projects = [project("alpha"), project("beta")];
+    trackers = {
+      alpha: {
+        kind: "clickup",
+        state: "failed",
+        last_error: "<b>ClickUp answered 500</b>",
+        failed_at: failedAt,
+      },
+      beta: { kind: "clickup", state: "ok" },
+    };
+    POST.mockImplementation(() => {
+      trackers = { ...trackers, alpha: { kind: "clickup", state: "ok" } };
+      return ok({ queued: 1 });
+    });
+    renderHome();
+    const card = await screen.findByRole("article", {
+      name: "Sync failed: alpha",
+    });
+    expect(card).toHaveTextContent("ClickUp sync failed");
+    expect(card).toHaveTextContent("<b>ClickUp answered 500</b>");
+    expect(within(card).getByText("5 min ago")).toHaveAttribute(
+      "dateTime",
+      failedAt,
+    );
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+
+    await userEvent.click(within(card).getByRole("button", { name: "Retry" }));
+    expect(POST).toHaveBeenCalledWith("/api/projects/{name}/tracker/retry", {
+      params: { path: { name: "alpha" } },
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: /Needs you/ })).toBeNull();
+    });
+  });
+
+  it("polls the sync state only of projects with a tracker, while Home shows", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    projects = [project("alpha"), project("beta")];
+    trackers = { alpha: { kind: "clickup", state: "ok" } };
+    const polled = (name: string) =>
+      GET.mock.calls.filter(
+        ([path, init]) =>
+          path === "/api/projects/{name}/tracker" &&
+          (init as { params: { path: { name: string } } }).params.path.name ===
+            name,
+      ).length;
+    renderHome();
+    await waitFor(() => {
+      expect(polled("alpha") + polled("beta")).toBe(2);
+    });
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(polled("alpha")).toBe(3);
+    expect(polled("beta")).toBe(1);
   });
 
   it("hides 'Needs you' when nothing needs the user", async () => {

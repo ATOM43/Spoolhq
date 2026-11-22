@@ -20,7 +20,7 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `POST /api/jobs/{job_id}/dismiss` | 204: forget a job that ended, so the list stops showing what its rollback [left behind](#rollback); a running job stays |
 | `POST /api/projects/{name}/commands/test` | `{"gate", "command"}`: run one stack command once in the project's repository, [as its gate would](#trying-a-stack-command) |
 | `GET /api/projects/{name}` | the summary plus `repo`, `default_branch`, `remote` (all three null while `settings_error` is set), `invalid_tickets`, and what can run: `next_ticket` (what `run/next` would start, else null) and `idle` (`{code, ticket_ids, message}` when nothing can: `all_done`, `running`, `awaiting_approval`, `blocked`, `waiting`, `plan_not_approved` or `invalid_plan`; null with no tickets) |
-| `GET`, `PUT /api/projects/{name}/settings` | `project.yaml` as `{"settings": {...}}`, validated by the project model (a 422's `field` is the first problem's dotted path, e.g. `agents.backends.codex-cli.base_url`); [ETag](#etags-and-edit-conflicts) |
+| `GET`, `PUT /api/projects/{name}/settings` | `project.yaml` as `{"settings": {...}}`, validated by the project model (a 422's `field` is the first problem's dotted path, e.g. `agents.backends.codex-cli.base_url`); [ETag](#etags-and-edit-conflicts); a save with a `tracker` block starts the sync thread |
 | `GET`, `PUT /api/projects/{name}/spec` | `CONTEXT.md` as `{"content": "..."}`; ETag |
 | `GET /api/projects/{name}/tickets?status=&phase=` | `{"tickets": [...], "invalid": [...]}`; each ticket is `id`, `file_name`, `meta` (the frontmatter), `body` and `activity` (null before its first run: `attempts`, `tokens` of attempts without a cost, `cost_micro_usd` summed over those with one, the latest run's `run_id` and `reason`) |
 | `GET /api/projects/{name}/tickets/{id}` | one ticket (`activity` null) with its ETag and [what the drawer shows](#ticket-detail): `run`, `attempts`, `git` |
@@ -43,8 +43,9 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/gates`, `/review`, `/diff` | an attempt's [reports](#attempt-reports) as typed JSON |
 | `GET /api/projects/{name}/runs/{run_id}/attempts/{n}/transcript` | the attempt's raw agent streams (`transcript.jsonl`, NDJSON) as stored |
 | `POST /api/projects/{name}/github/sync` | check open pull requests now |
-| `GET /api/projects/{name}/tracker` | the [tracker sync](tracker.md) state: `kind`, `state` (`off`, `ok`, `syncing`, `failed`), `pending`, `last_error`, `last_synced_at` |
+| `GET /api/projects/{name}/tracker` | the [tracker sync](tracker.md) state: `kind`, `state` (`off`, `ok`, `syncing`, `failed`), `pending`, `last_error` (a fixed message, never a response body), `last_synced_at`, `failed_at`; with a `tracker` block, also starts the sync thread if it isn't running |
 | `POST /api/projects/{name}/tracker/push` | queue a push of every ticket: `{"queued": n}`; 409 without a `tracker` block |
+| `POST /api/projects/{name}/tracker/retry` | re-queue every failed action (failures reset) and clear the `failed` state: `{"queued": n}`; 200 with `0` when nothing failed; 409 without a `tracker` block |
 | `GET /api/templates` | the built-in templates: `name` (what `POST /api/projects` takes as `template`), `description`, `summary` (one line of at most 120 characters, for a card; null if the template has none) and `commands` (`install`, `lint`, `test` from its `spoolhq-template.yaml`, which the New project dialog pre-fills) |
 | `GET /api/agents` | what `spool agents` shows: each backend (installed, version, login, policy parts) and Graphify |
 | `GET /api/settings` | the daemon's settings, and for each secret (`anthropic`, `github`, `clickup`) only `{"set", "source": "keychain" \| "env" \| null}` |

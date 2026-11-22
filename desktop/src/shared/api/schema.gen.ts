@@ -795,6 +795,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/tracker/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry
+         * @description Re-queue the failed actions; 200 with ``queued: 0`` when none failed.
+         */
+        post: operations["retry_api_projects__name__tracker_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents": {
         parameters: {
             query?: never;
@@ -1990,6 +2010,8 @@ export interface components {
             last_error: string | null;
             /** Last Synced At */
             last_synced_at: string | null;
+            /** Failed At */
+            failed_at: string | null;
         };
         /**
          * UsageTotal
@@ -3842,6 +3864,38 @@ export interface operations {
         };
     };
     push_api_projects__name__tracker_push_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project name. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackerPush"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    retry_api_projects__name__tracker_retry_post: {
         parameters: {
             query?: never;
             header?: never;

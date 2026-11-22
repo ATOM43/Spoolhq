@@ -20,6 +20,8 @@ export const queryKeys = {
   spec: (project: string) => ["spec", project] as const,
   // Not under ["projects"] either, so run events don't reset the Settings tab's form.
   projectSettings: (project: string) => ["project-settings", project] as const,
+  // Polled on its own (sync runs outside ticket runs), so not under ["projects"].
+  tracker: (project: string) => ["tracker", project] as const,
   templates: ["templates"] as const,
   job: (id: string) => ["jobs", id] as const,
   draftJob: (project: string, id: string) =>

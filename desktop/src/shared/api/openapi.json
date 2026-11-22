@@ -2715,6 +2715,54 @@
         }
       }
     },
+    "/api/projects/{name}/tracker/retry": {
+      "post": {
+        "summary": "Retry",
+        "description": "Re-queue the failed actions; 200 with ``queued: 0`` when none failed.",
+        "operationId": "retry_api_projects__name__tracker_retry_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+              "description": "Project name.",
+              "title": "Name"
+            },
+            "description": "Project name."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackerPush"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents": {
       "get": {
         "summary": "Agents",
@@ -6434,6 +6482,17 @@
               }
             ],
             "title": "Last Synced At"
+          },
+          "failed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed At"
           }
         },
         "type": "object",
@@ -6442,7 +6501,8 @@
           "state",
           "pending",
           "last_error",
-          "last_synced_at"
+          "last_synced_at",
+          "failed_at"
         ],
         "title": "TrackerView"
       },

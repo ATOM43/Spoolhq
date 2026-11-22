@@ -28,7 +28,7 @@ What the sync doesn't do:
      list_id: "901234567"
    ```
 
-5. Run `spool tracker push <project>` (or restart the daemon). The daemon starts its sync thread once a project has a `tracker` block, then keeps the list up to date by itself.
+5. Nothing else: the daemon starts its sync thread when a project's settings are saved with a `tracker` block (through the app or `PUT …/settings`), and for a block added to the file by hand at the next look at the project's sync state (the app does that within 15 s; so do `spool tracker status` and `spool tracker push`). It then keeps the list up to date by itself.
 
 `spool tracker push <project> --dry-run` prints what a push would do (create, update with the status it sets, comment), from the files and the run log alone: it needs no daemon, writes nothing and sends no request. Since it doesn't ask ClickUp, a task the crash recovery would adopt shows as a create.
 
@@ -39,7 +39,23 @@ What the sync doesn't do:
 | `off` | No `tracker` block. Nothing is queued and the sync thread doesn't start for it. |
 | `ok` | Nothing waiting. |
 | `syncing` | Actions are waiting to be sent. |
-| `failed` | An action failed 5 times (`last_error` says why). Later actions still try; the first success clears it. |
+| `failed` | An action failed 5 times (`last_error` says why, `failed_at` when). Later actions still try; the first success, or a retry, clears it. |
+
+## In the app
+
+Only for a project with a `tracker` block, the project header shows a sync line next to the remote, as icon + label:
+
+| Line | Means |
+| --- | --- |
+| ClickUp · synced 2 min ago | `ok`; the absolute time on hover ("up to date" before the first send) |
+| ClickUp · syncing · 3 pending | `syncing` |
+| ClickUp · sync failed (red) | `failed`; the error in the tooltip (as plain text), and **Retry** |
+
+**Push now** beside it queues every ticket again (`POST …/tracker/push`); it is disabled, with the reason on hover, while a sync is going.
+
+A failed sync is also a **Needs you** card on Home: "ClickUp sync failed", the project, the error, how long ago it failed, and **Retry**. It goes away once the sync is `ok` again.
+
+Sync runs outside ticket runs, so the run event stream doesn't carry it: the app asks `GET …/tracker` every 15 s, only for projects with a tracker that are on screen (Home, or that project's panel), and right after Push now or Retry.
 
 ## Status map
 
@@ -81,7 +97,9 @@ It then sends the due actions one at a time, oldest first. Repeated changes coal
 | No token | A failure with "No clickup token; set it in Settings or SPOOLHQ_CLICKUP_TOKEN". |
 | The ticket was deleted | The action is dropped. |
 
-A failed action stays failed; `spool tracker push` queues every ticket again.
+A failed action stays failed until **Retry** in the app (or `POST …/tracker/retry`) puts every failed action back in the queue with its failures reset and clears the `failed` state; with nothing failed it does nothing. `spool tracker push` queues every ticket again.
+
+`last_error` is always one of the fixed messages above, built by SpoolHQ ("ClickUp answered 500", "ClickUp timed out", …): never a response body, a header or the token.
 
 ### Idempotency and crash recovery
 

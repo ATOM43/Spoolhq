@@ -34,6 +34,7 @@ class SyncState:
     pending: int
     last_error: str | None
     last_synced_at: str | None
+    failed_at: str | None
 
 
 def baseline_run_id(run_log: RunLog) -> int:
@@ -145,7 +146,8 @@ def mark_sent(run_log: RunLog, action_id: int, now: datetime) -> None:
     with run_log.transaction() as tx:
         tx.conn.execute("UPDATE tracker_outbox SET state = 'done' WHERE id = ?", (action_id,))
         tx.conn.execute(
-            "UPDATE tracker_sync SET last_error = NULL, last_synced_at = ? WHERE id = 1",
+            "UPDATE tracker_sync SET last_error = NULL, failed_at = NULL, last_synced_at = ? "
+            "WHERE id = 1",
             (format_ts(now),),
         )
 
@@ -165,8 +167,38 @@ def mark_failure(
         if row is None or row[0] < MAX_FAILURES:
             return False
         conn.execute("UPDATE tracker_outbox SET state = 'failed' WHERE id = ?", (action_id,))
-        conn.execute("UPDATE tracker_sync SET last_error = ? WHERE id = 1", (error,))
+        conn.execute(
+            "UPDATE tracker_sync SET last_error = ?, failed_at = ? WHERE id = 1",
+            (error, format_ts(now)),
+        )
         return True
+
+
+def retry_failed(run_log: RunLog, now: datetime) -> int:
+    """Put every failed action back in the queue with no failures counted, and clear the
+    project's failed state; returns how many were re-queued. As when queuing, a ticket
+    keeps at most one pending push and one status update, and a pending push covers a
+    status update."""
+    with run_log.transaction() as tx:
+        conn = tx.conn
+        conn.execute(
+            "DELETE FROM tracker_outbox WHERE state = 'failed' AND action IN ('push', 'status') "
+            "AND EXISTS (SELECT 1 FROM tracker_outbox AS p WHERE p.state = 'pending' "
+            "AND p.ticket_id = tracker_outbox.ticket_id "
+            "AND (p.action = 'push' OR p.action = tracker_outbox.action))"
+        )
+        cursor = conn.execute(
+            "UPDATE tracker_outbox SET state = 'pending', failures = 0, last_error = NULL, "
+            "next_at = ? WHERE state = 'failed'",
+            (format_ts(now),),
+        )
+        conn.execute(
+            "DELETE FROM tracker_outbox WHERE state = 'pending' AND action = 'status' "
+            "AND EXISTS (SELECT 1 FROM tracker_outbox AS p WHERE p.state = 'pending' "
+            "AND p.ticket_id = tracker_outbox.ticket_id AND p.action = 'push')"
+        )
+        conn.execute("UPDATE tracker_sync SET last_error = NULL, failed_at = NULL WHERE id = 1")
+        return cursor.rowcount
 
 
 def defer(run_log: RunLog, action_id: int, until: datetime) -> None:
@@ -183,9 +215,9 @@ def sync_state(run_log: RunLog) -> SyncState:
             "SELECT COUNT(*) FROM tracker_outbox WHERE state = 'pending'"
         ).fetchone()[0]
         row = conn.execute(
-            "SELECT last_error, last_synced_at FROM tracker_sync WHERE id = 1"
+            "SELECT last_error, last_synced_at, failed_at FROM tracker_sync WHERE id = 1"
         ).fetchone()
-    return SyncState(int(pending), *(row or (None, None)))
+    return SyncState(int(pending), *(row or (None, None, None)))
 
 
 def queued_keys(run_log: RunLog) -> set[str]:

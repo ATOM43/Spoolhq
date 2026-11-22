@@ -1,5 +1,6 @@
-"""Tracker endpoints: a project's sync state, and queuing a push of every ticket. Thin:
-the work is ``services.tracker.TrackerSync``'s, whose thread sends the queued actions."""
+"""Tracker endpoints: a project's sync state, queuing a push of every ticket, and retrying
+what failed. Thin: the work is ``services.tracker.TrackerSync``'s, whose thread sends the
+queued actions."""
 
 from dataclasses import asdict
 
@@ -26,3 +27,11 @@ def push(name: ProjectName, request: Request) -> TrackerPush:
     sync: TrackerSync = request.app.state.tracker
     with service_errors():
         return TrackerPush(queued=sync.push_all(name))
+
+
+@router.post("/retry")
+def retry(name: ProjectName, request: Request) -> TrackerPush:
+    """Re-queue the failed actions; 200 with ``queued: 0`` when none failed."""
+    sync: TrackerSync = request.app.state.tracker
+    with service_errors():
+        return TrackerPush(queued=sync.retry(name))

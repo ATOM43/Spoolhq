@@ -57,6 +57,7 @@ class TrackerStatus:
     pending: int
     last_error: str | None
     last_synced_at: str | None
+    failed_at: str | None
 
 
 def fingerprint(ticket: Ticket) -> str:
@@ -201,16 +202,33 @@ class TrackerSync:
         self.start_if_needed()
         return queued
 
+    def retry(self, project: str) -> int:
+        """Re-queue the failed actions and clear the failed state; returns how many were
+        re-queued (0: nothing failed, nothing changed). ProjectError without a ``tracker``
+        block."""
+        tracker = load_project(project, projects_dir=self.projects_dir).tracker
+        if tracker is None:
+            raise ProjectError(f"'{project}' has no tracker block in project.yaml")
+        queued = outbox.retry_failed(self._run_log(project), self.clock())
+        self.start_if_needed()
+        return queued
+
     def status(self, project: str) -> TrackerStatus:
         tracker = load_project(project, projects_dir=self.projects_dir).tracker
         if tracker is None:
-            return TrackerStatus(None, "off", 0, None, None)
+            return TrackerStatus(None, "off", 0, None, None, None)
+        self.start_if_needed()  # a tracker block added by hand starts sync on the next look
         found = outbox.sync_state(self._run_log(project))
         state: SyncStateName = (
             "failed" if found.last_error else "syncing" if found.pending else "ok"
         )
         return TrackerStatus(
-            tracker.kind, state, found.pending, found.last_error, found.last_synced_at
+            tracker.kind,
+            state,
+            found.pending,
+            found.last_error,
+            found.last_synced_at,
+            found.failed_at,
         )
 
     def drain(self, project: str, tracker: Tracker) -> int:

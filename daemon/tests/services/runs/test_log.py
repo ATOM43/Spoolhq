@@ -50,7 +50,7 @@ def test_fresh_database_has_version_9_and_all_tables(workspace: Path) -> None:
 
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 9
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 10
         tables = {
             name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
@@ -78,7 +78,7 @@ def test_opening_twice_is_idempotent(workspace: Path) -> None:
         assert [run.ticket_id for run in log.list_runs()] == ["T04"]
     conn = raw(workspace)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 10
     finally:
         conn.close()
 
@@ -87,15 +87,15 @@ def test_newer_schema_is_refused(workspace: Path) -> None:
     with RunLog(workspace, daemon_instance="A"):
         pass
     conn = raw(workspace)
-    conn.execute("PRAGMA user_version = 10")
+    conn.execute("PRAGMA user_version = 11")
     conn.close()
 
     with pytest.raises(RunLogError) as info:
         RunLog(workspace, daemon_instance="A")
     assert str(info.value) == (
-        "state.db: schema version 10 is newer than this SpoolHQ supports (9); upgrade SpoolHQ."
+        "state.db: schema version 11 is newer than this SpoolHQ supports (10); upgrade SpoolHQ."
     )
-    with pytest.raises(RunLogError, match="schema version 10 is newer"):
+    with pytest.raises(RunLogError, match="schema version 11 is newer"):
         RunLog.open_read_only(workspace)
 
 

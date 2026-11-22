@@ -16,7 +16,7 @@ from spoolhq.services.runloop import Agents
 from tests.api.test_runs import auth, follow
 from tests.conftest import AGENT_FIXTURES, REVIEW_FIXTURES, run_git
 from tests.services.tracker.fakes import TOKEN, FakeClickUp
-from tests.services.tracker.test_sync import set_tracker
+from tests.services.tracker.test_sync import ManualClock, fail_for_good, set_tracker
 
 
 @pytest.fixture
@@ -25,15 +25,18 @@ def server() -> FakeClickUp:
 
 
 @pytest.fixture
-def tracker_client(
-    run_project: Path,
-    projects_dir: Path,
-    token: str,
-    server: FakeClickUp,
-    monkeypatch: pytest.MonkeyPatch,
-) -> Iterator[TestClient]:
-    monkeypatch.setenv("SPOOLHQ_CLICKUP_TOKEN", TOKEN)
+def tracker_client(projects_dir: Path, untracked_client: TestClient) -> TestClient:
     set_tracker(projects_dir)
+    untracked_client.app.state.tracker.start_if_needed()  # type: ignore[attr-defined]
+    return untracked_client
+
+
+@pytest.fixture
+def untracked_client(
+    run_project: Path, token: str, server: FakeClickUp, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[TestClient]:
+    """A daemon on the fake ClickUp whose project has no tracker block yet."""
+    monkeypatch.setenv("SPOOLHQ_CLICKUP_TOKEN", TOKEN)
     settings = load_settings()
     app = create_app(
         settings,
@@ -51,6 +54,7 @@ def tracker_client(
 def test_routes_need_the_token_and_a_project(client: TestClient, token: str) -> None:
     assert client.get("/api/projects/demo/tracker").status_code == 401
     assert client.post("/api/projects/demo/tracker/push").status_code == 401
+    assert client.post("/api/projects/demo/tracker/retry").status_code == 401
     assert client.get("/api/projects/nope/tracker", headers=auth(token)).status_code == 404
 
 
@@ -62,11 +66,14 @@ def test_without_a_tracker_block(run_client: TestClient, token: str) -> None:
         "pending": 0,
         "last_error": None,
         "last_synced_at": None,
+        "failed_at": None,
     }
     assert run_client.app.state.tracker._thread is None  # type: ignore[attr-defined]
     push = run_client.post("/api/projects/demo/tracker/push", headers=auth(token))
     assert push.status_code == 409
     assert push.json()["error"]["message"] == "'demo' has no tracker block in project.yaml"
+    retry = run_client.post("/api/projects/demo/tracker/retry", headers=auth(token))
+    assert retry.status_code == 409
 
 
 def test_push_then_status(tracker_client: TestClient, token: str, server: FakeClickUp) -> None:
@@ -80,6 +87,47 @@ def test_push_then_status(tracker_client: TestClient, token: str, server: FakeCl
     sync.tick("demo")
     view = tracker_client.get("/api/projects/demo/tracker", headers=auth(token)).json()
     assert (view["state"], view["pending"], view["last_error"]) == ("ok", 0, None)
+    assert [t.name for t in server.tasks.values()] == ["T07 · Parse slugs"]
+
+
+def test_retry_requeues_what_failed(
+    tracker_client: TestClient, token: str, server: FakeClickUp
+) -> None:
+    sync = tracker_client.app.state.tracker  # type: ignore[attr-defined]
+    nothing = tracker_client.post("/api/projects/demo/tracker/retry", headers=auth(token))
+    assert (nothing.status_code, nothing.json()) == (200, {"queued": 0})
+
+    server.fail = 500
+    sync.clock = ManualClock()
+    fail_for_good(sync, sync.clock)
+    view = tracker_client.get("/api/projects/demo/tracker", headers=auth(token)).json()
+    assert (view["state"], view["last_error"]) == ("failed", "ClickUp answered 500")
+
+    server.fail = None
+    retried = tracker_client.post("/api/projects/demo/tracker/retry", headers=auth(token))
+    assert retried.json() == {"queued": 1}
+    view = tracker_client.get("/api/projects/demo/tracker", headers=auth(token)).json()
+    assert (view["state"], view["pending"], view["last_error"]) == ("syncing", 1, None)
+    sync.tick("demo")
+    assert [t.name for t in server.tasks.values()] == ["T07 · Parse slugs"]
+
+
+def test_saving_a_tracker_block_starts_sync(
+    untracked_client: TestClient, token: str, server: FakeClickUp
+) -> None:
+    sync = untracked_client.app.state.tracker  # type: ignore[attr-defined]
+    assert sync._thread is None
+    got = untracked_client.get("/api/projects/demo/settings", headers=auth(token))
+    settings = {**got.json()["settings"], "tracker": {"kind": "clickup", "list_id": "123"}}
+    saved = untracked_client.put(
+        "/api/projects/demo/settings",
+        json={"settings": settings},
+        headers={**auth(token), "If-Match": got.headers["ETag"]},
+    )
+    assert saved.status_code == 200
+    assert sync._thread is not None and sync._thread.is_alive()
+
+    sync.tick("demo")  # the thread's next look, without waiting for it
     assert [t.name for t in server.tasks.values()] == ["T07 · Parse slugs"]
 
 

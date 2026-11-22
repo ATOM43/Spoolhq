@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
 
+import httpx
 import pytest
 
 from spoolhq.services.projects import load_project, save_project
@@ -339,6 +340,11 @@ def test_without_a_tracker_block_nothing_is_queued(
         assert sync.tick("demo") == 0
         assert sync.status("demo").state == "off"
         assert sync.status("demo").pending == 0
+        sync.interval_s = 3600
+        set_tracker(projects_dir)  # added to project.yaml by hand
+        assert sync.status("demo").state == "ok"
+        assert sync._thread is not None  # started by the next look, no restart
+        sync.close()
     finally:
         registry.close()
     assert server.requests == []
@@ -408,3 +414,55 @@ def test_the_token_never_leaves_the_request_header(
         for path in root.rglob("*"):
             if path.is_file():
                 assert TOKEN.encode() not in path.read_bytes(), path
+
+
+def fail_for_good(sync: TrackerSync, clock: ManualClock) -> None:
+    for failures in range(1, 6):
+        sync.tick("demo")
+        clock.advance(retry_delay(failures).total_seconds())
+
+
+def test_retry_requeues_failed_actions_and_clears_the_state(
+    sync: TrackerSync, server: FakeClickUp, clock: ManualClock, demo: Path
+) -> None:
+    server.fail = 500
+    fail_for_good(sync, clock)
+    write_ticket(demo, "T01", status="done")  # changes T01 while its push has failed
+    sync.scan("demo", sync.settings("demo"))  # type: ignore[arg-type]
+    assert sync.status("demo").state == "failed"
+    assert sync.status("demo").failed_at is not None
+
+    server.fail = None
+    assert sync.retry("demo") == 2  # both pushes; T01's covers its status update
+    status = sync.status("demo")
+    assert (status.state, status.pending, status.last_error, status.failed_at) == (
+        "syncing",
+        2,
+        None,
+        None,
+    )
+    assert sync.tick("demo") == 2
+    assert {t.name: t.status for t in server.tasks.values()} == {
+        "T01 · Thing T01": "complete",
+        "T02 · Thing T02": "to do",
+    }
+    assert sync.status("demo").state == "ok"
+
+
+def test_retry_with_nothing_failed_does_nothing(sync: TrackerSync, server: FakeClickUp) -> None:
+    sync.tick("demo")
+    before = sync.status("demo")
+    assert sync.retry("demo") == 0
+    assert sync.status("demo") == before
+    assert sync.tick("demo") == 0
+
+
+def test_last_error_holds_neither_the_body_nor_the_token(
+    sync: TrackerSync, server: FakeClickUp, clock: ManualClock
+) -> None:
+    body = f"<img src=x onerror=alert(1)> {TOKEN}"
+    sync.transport = httpx.MockTransport(lambda request: httpx.Response(502, text=body))
+    fail_for_good(sync, clock)
+    error = sync.status("demo").last_error
+    assert error == "ClickUp answered 502"
+    assert TOKEN not in str(error) and "onerror" not in str(error)

@@ -449,3 +449,7 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 443 · Stored run data is redacted with the secret scan's patterns, on write · docs/decisions/runloop.md
 444 · A value only the high-entropy rule flags is redacted from its attempt after the scan, the one exception to append-only events · docs/decisions/runloop.md
 445 · A missing coverage report fails the test guard once main has a total · docs/decisions/runloop.md
+446 · Retry re-queues the failed actions with their failures reset; nothing failed is a no-op · docs/decisions/tracker.md
+447 · The sync thread also starts on a settings save or a state read with a tracker block · docs/decisions/tracker.md
+448 · When the sync failed is a column of `tracker_sync` (schema 10) · docs/decisions/tracker.md
+449 · Tracker sync state is polled every 15 s, the one polling exception · docs/decisions/desktop.md

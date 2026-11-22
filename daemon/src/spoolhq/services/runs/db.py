@@ -154,7 +154,12 @@ CREATE TABLE tracker_sync (
 );
 """
 
-MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9)
+# Tracker sync in the app (T51): when the project's sync failed, for the age shown on Home.
+_V10 = """
+ALTER TABLE tracker_sync ADD COLUMN failed_at TEXT;
+"""
+
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10)
 """Migration ``n`` (1-based) takes the database from version ``n - 1`` to ``n``."""
 
 SCHEMA_VERSION = len(MIGRATIONS)

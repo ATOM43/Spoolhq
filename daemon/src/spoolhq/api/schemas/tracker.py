@@ -13,7 +13,10 @@ class TrackerView(BaseModel):
     succeeded since; ``syncing``: actions are waiting; ``ok``: nothing waiting."""
     pending: int
     last_error: str | None
+    """A fixed message built by SpoolHQ, never a tracker's response body or the token."""
     last_synced_at: str | None
+    failed_at: str | None
+    """When the sync last went ``failed``; null unless ``state`` is ``failed``."""
 
 
 class TrackerPush(BaseModel):
