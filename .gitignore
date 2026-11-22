@@ -46,3 +46,6 @@ desktop.ini
 
 # Graphify code graph: build output, not committed (DECISIONS 397)
 graphify-out/
+
+# The daemon sidecar built by `just build-daemon` (docs/packaging.md)
+desktop/src-tauri/binaries/

@@ -1,5 +1,7 @@
 """`spool agents`: which agent backends are installed and usable."""
 
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -30,6 +32,12 @@ from tests.conftest import (
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def restore_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`spool agents` extends this process's PATH; put it back after each test."""
+    monkeypatch.setenv("PATH", os.environ.get("PATH", ""))
+
+
 def use(monkeypatch: pytest.MonkeyPatch, agent: AgentRunner) -> None:
     monkeypatch.setattr(agents_cli, "available_runners", lambda: [agent])
 
@@ -43,6 +51,7 @@ def test_lists_the_installed_backend(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert result.output == (
         "claude-code-cli\n"
         "  installed  yes (2.1.302)\n"
+        f"  path       {sys.executable}\n"
         "  login      yes (claude.ai, subscription)\n"
         "  policy     yes (enforceable)\n"
         "\n"
@@ -83,13 +92,14 @@ def test_codex_shows_what_it_enforces_per_role(
     result = runner.invoke(app, ["agents"])
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
-    assert lines[:3] == [
+    assert lines[:4] == [
         "codex-cli",
         "  installed  yes (0.166.0)",
+        f"  path       {sys.executable}",
         "  login      yes (chatgpt, subscription)",
     ]
-    assert lines[3].startswith("  policy     no: Codex's deny rules for credential files")
-    assert lines[4:8] == [
+    assert lines[4].startswith("  policy     no: Codex's deny rules for credential files")
+    assert lines[5:9] == [
         "  planner      read-only yes, approvals never asked yes, network off yes, "
         "denied reads no, the shell allowlist no",
         "  implementer  writes confined to the worktree yes, approvals never asked yes, "
@@ -99,7 +109,7 @@ def test_codex_shows_what_it_enforces_per_role(
         "  warning    as reviewer or planner it can run read-only shell commands",
     ]
     # The test home is under pytest's temp folder.
-    assert lines[8].startswith(
+    assert lines[9].startswith(
         "  worktrees  no: backend 'codex-cli' can't run in a worktree under "
     )
 
@@ -119,13 +129,14 @@ def test_the_agent_sdk_shows_its_versions_the_key_and_the_parts(
     cmd = fake_sdk_cmd(AGENT_FIXTURES / "success_writes_file.jsonl", tmp_path / "rec.json")
     use(monkeypatch, AgentSdkRunner(cli_cmd=cmd, platform="linux", which=sandbox_which))
     lines = runner.invoke(app, ["agents"]).output.splitlines()
-    assert lines[:4] == [
+    assert lines[:5] == [
         "claude-agent-sdk",
         "  installed  yes (0.2.176, PATH Claude Code 2.1.316)",
+        f"  path       {sys.executable}",
         "  login      no (run: spool secrets set anthropic)",
         "  policy     yes (enforceable)",
     ]
-    assert lines[5].startswith("  implementer  writes confined to the worktree yes")
+    assert lines[6].startswith("  implementer  writes confined to the worktree yes")
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", TEST_API_KEY)
     output = runner.invoke(app, ["agents"]).output
@@ -226,3 +237,23 @@ def test_unknown_project_fails() -> None:
     result = runner.invoke(app, ["agents", "--project", "nope"])
     assert result.exit_code == 1
     assert "nope" in result.output
+
+
+def test_agents_finds_a_cli_in_the_added_folders(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`spool agents` adds the daemon's folders to PATH and shows where a CLI was found."""
+    bin_dir = tmp_path / "agent-bin"
+    bin_dir.mkdir()
+    home.mkdir()
+    (home / "config.toml").write_text(f"extra_path = [{str(bin_dir)!r}]\n", "utf-8")
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    seen: list[str] = []
+
+    def which(name: str) -> str | None:
+        seen.append(os.environ["PATH"])
+        return None
+
+    use(monkeypatch, ClaudeCliRunner(which=which))
+    assert runner.invoke(app, ["agents"]).exit_code == 0
+    assert seen and seen[0].split(os.pathsep)[-1] == str(bin_dir)

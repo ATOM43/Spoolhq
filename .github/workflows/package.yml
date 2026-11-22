@@ -1,0 +1,56 @@
+name: Package
+
+# Builds the daemon sidecar with PyInstaller and smoke-tests the binary
+# (docs/packaging.md). Installers come with T50.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - daemon/**
+      - scripts/build_sidecar.py
+      - scripts/smoke_sidecar.py
+      - .github/workflows/package.yml
+  pull_request:
+    paths:
+      - daemon/**
+      - scripts/build_sidecar.py
+      - scripts/smoke_sidecar.py
+      - .github/workflows/package.yml
+
+permissions:
+  contents: read
+
+# One group per workflow and branch: a newer push cancels the older run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sidecar:
+    name: sidecar (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Also installs just: the rust-just wheel on PyPI, pinned and kept in the uv cache.
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.1"
+          enable-cache: true
+          cache-dependency-glob: |
+            daemon/uv.lock
+            .github/workflows/package.yml
+          cache-suffix: package
+      - run: uv tool install rust-just==1.59.0
+      # Builds, then fails if spoolhq.devtools is in the binary; prints its size.
+      - run: just build-daemon
+      - name: Smoke test
+        shell: bash
+        run: uv run --directory daemon --locked python ../scripts/smoke_sidecar.py ../desktop/src-tauri/binaries/spoolhq-*

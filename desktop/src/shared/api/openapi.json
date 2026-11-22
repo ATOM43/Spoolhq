@@ -4199,6 +4199,12 @@
             "const": "ok",
             "title": "Status",
             "default": "ok"
+          },
+          "service": {
+            "type": "string",
+            "const": "spoolhq",
+            "title": "Service",
+            "default": "spoolhq"
           }
         },
         "type": "object",

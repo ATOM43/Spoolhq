@@ -238,6 +238,7 @@ class ClaudeCliRunner:
             billing=billing_for(method) if logged_in else "unknown",
             policy_enforceable=enforceable,
             reason=reason,
+            path=cmd[0],
         )
 
     def _token(self) -> str | None:

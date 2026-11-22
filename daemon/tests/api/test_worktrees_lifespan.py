@@ -48,7 +48,7 @@ def test_startup_recovers_worktrees_and_skips_a_broken_project(
     app = create_app(settings, token=token)
     caplog.set_level(logging.INFO)
     with TestClient(app, base_url=f"http://127.0.0.1:{settings.port}") as client:
-        assert client.get("/api/health").json() == {"status": "ok"}
+        assert client.get("/api/health").json() == {"status": "ok", "service": "spoolhq"}
         reports: dict[str, RecoveryReport] = app.state.worktree_recovery
         assert sorted(reports) == ["alpha"]
         assert reports["alpha"].removed == ["T04"]

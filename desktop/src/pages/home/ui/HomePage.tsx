@@ -1,9 +1,5 @@
 import { useDaemonStatus } from "@/features/daemon-status";
-import {
-  DaemonConnectingPanel,
-  DaemonDownPanel,
-  DaemonErrorPanel,
-} from "@/widgets/daemon-down-panel";
+import { DaemonStatusPanel } from "@/widgets/daemon-down-panel";
 import { TopBar } from "@/widgets/top-bar";
 
 import { ProjectsSection } from "./ProjectsSection";
@@ -22,21 +18,11 @@ export function HomePage() {
         </div>
       ) : (
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-16">
-          {status.state === "down" ? (
-            <DaemonDownPanel
-              port={status.port}
-              onRetry={retry}
-              checking={checking}
-            />
-          ) : status.state === "error" ? (
-            <DaemonErrorPanel
-              error={status.error}
-              onRetry={retry}
-              checking={checking}
-            />
-          ) : (
-            <DaemonConnectingPanel />
-          )}
+          <DaemonStatusPanel
+            status={status}
+            onRetry={retry}
+            checking={checking}
+          />
         </div>
       )}
     </div>

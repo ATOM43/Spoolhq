@@ -29,6 +29,18 @@ function describe(status: DaemonStatus) {
         label: `Daemon ok · v${status.version}`,
         tone: "text-success",
       };
+    case "starting":
+      return {
+        icon: <LoaderCircle aria-hidden className="size-4 animate-spin" />,
+        label: "Starting SpoolHQ…",
+        tone: "text-warning",
+      };
+    case "port_in_use":
+      return {
+        icon: <CircleAlert aria-hidden className="size-4" />,
+        label: `Port ${String(status.port)} in use`,
+        tone: "text-danger",
+      };
     case "reconnecting":
       return {
         icon: <LoaderCircle aria-hidden className="size-4 animate-spin" />,

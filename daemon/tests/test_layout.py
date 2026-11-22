@@ -146,3 +146,46 @@ def test_six_recent_progress_entries_fail(tmp_path: Path) -> None:
     assert _check_decisions().progress_problems(_progress(tmp_path, 6)) == [
         "PROGRESS.md has 6 recent entries; move the oldest to docs/progress-archive.md"
     ]
+
+
+# The sidecar build (scripts/build_sidecar.py, docs/packaging.md).
+
+
+def _build_sidecar() -> Any:
+    return _script("build_sidecar")
+
+
+def test_pyinstaller_leaves_out_devtools_and_takes_the_package_data() -> None:
+    args = _build_sidecar().pyinstaller_args("spoolhq-x86_64-unknown-linux-gnu")
+    assert "--exclude-module=spoolhq.devtools" in args
+    assert "--onefile" in args
+    data = [arg for arg in args if arg.startswith("--add-data=")]
+    assert len(data) == 2
+    assert any(arg.endswith("spoolhq/templates") for arg in data)
+    assert any(arg.endswith("spoolhq/services/context/prompts") for arg in data)
+    assert not any("devtools" in arg for arg in data)
+    assert not any(arg.startswith("--collect-submodules=spoolhq") for arg in args)
+
+
+def test_forbidden_entries_find_devtools_modules_and_scenarios() -> None:
+    listing = "\n".join(
+        [
+            " spoolhq.cli.main",
+            " spoolhq.devtools.fake_runner",
+            " spoolhq/devtools/scenarios/happy.json",
+            " spoolhq/templates/fastapi-react/copier.yml",
+        ]
+    )
+    assert _build_sidecar().forbidden_entries(listing) == [
+        "spoolhq.devtools.fake_runner",
+        "spoolhq/devtools/scenarios/happy.json",
+    ]
+    assert _build_sidecar().forbidden_entries(" spoolhq.cli.main\n") == []
+
+
+def test_binary_names_follow_the_sidecar_convention() -> None:
+    linux = _build_sidecar().binary_path("x86_64-unknown-linux-gnu")
+    windows = _build_sidecar().binary_path("x86_64-pc-windows-msvc")
+    assert linux.name == "spoolhq-x86_64-unknown-linux-gnu"
+    assert windows.name == "spoolhq-x86_64-pc-windows-msvc.exe"
+    assert linux.parent.parts[-3:] == ("desktop", "src-tauri", "binaries")

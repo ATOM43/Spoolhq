@@ -1313,6 +1313,12 @@ export interface components {
              * @constant
              */
             status: "ok";
+            /**
+             * Service
+             * @default spoolhq
+             * @constant
+             */
+            service: "spoolhq";
         };
         /**
          * IdleView

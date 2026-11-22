@@ -338,6 +338,7 @@ class AgentSdkRunner:
             policy_enforceable=enforceable,
             reason=reason,
             policy_parts=policy_parts(enforceable),
+            path=cli[0],
         )
 
     def run(

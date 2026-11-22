@@ -86,6 +86,8 @@ class Settings(BaseSettings):
     worktrees_dir: Path = Field(default_factory=default_worktrees_dir)
     allowed_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_ORIGINS))
     """Browser origins the event WebSocket accepts: the desktop app's, and Vite's dev server."""
+    extra_path: list[Path] = Field(default_factory=list)
+    """Folders appended to ``PATH`` at start so agent CLIs are found (core/search_path.py)."""
 
     @field_validator("host")
     @classmethod
@@ -105,6 +107,11 @@ class Settings(BaseSettings):
     @classmethod
     def _expand_dir(cls, value: Path) -> Path:
         return value.expanduser()
+
+    @field_validator("extra_path")
+    @classmethod
+    def _expand_dirs(cls, value: list[Path]) -> list[Path]:
+        return [folder.expanduser() for folder in value]
 
     @classmethod
     def settings_customise_sources(

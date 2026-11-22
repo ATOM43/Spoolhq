@@ -20,11 +20,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/shared/ui";
-import {
-  DaemonConnectingPanel,
-  DaemonDownPanel,
-  DaemonErrorPanel,
-} from "@/widgets/daemon-down-panel";
+import { DaemonStatusPanel } from "@/widgets/daemon-down-panel";
 import { ProjectSettings } from "@/widgets/project-settings";
 import { SpecEditor } from "@/widgets/spec-editor";
 import { NewTicketDrawer, TicketDrawer } from "@/widgets/ticket-drawer";
@@ -49,21 +45,11 @@ export function ProjectPage() {
         <Panel name={id} />
       ) : (
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-16">
-          {status.state === "down" ? (
-            <DaemonDownPanel
-              port={status.port}
-              onRetry={retry}
-              checking={checking}
-            />
-          ) : status.state === "error" ? (
-            <DaemonErrorPanel
-              error={status.error}
-              onRetry={retry}
-              checking={checking}
-            />
-          ) : (
-            <DaemonConnectingPanel />
-          )}
+          <DaemonStatusPanel
+            status={status}
+            onRetry={retry}
+            checking={checking}
+          />
         </div>
       )}
     </div>

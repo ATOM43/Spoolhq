@@ -9,10 +9,17 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { DaemonError } from "./errors";
 
+/** What the app did about the daemon at launch (Rust `sidecar.rs`). */
+export type LaunchState =
+  | { state: "checking" | "external" | "starting" | "started" }
+  | { state: "port_in_use"; port: number; configPath: string }
+  | { state: "failed"; logDir: string; message: string };
+
 export interface DaemonInfo {
   port: number;
   tokenPresent: boolean;
   tokenPath: string;
+  launch: LaunchState;
 }
 
 export interface Health {
@@ -23,10 +30,27 @@ export interface Version {
   version: string;
 }
 
+type RawLaunchState =
+  | { state: "checking" | "external" | "starting" | "started" }
+  | { state: "port_in_use"; port: number; config_path: string }
+  | { state: "failed"; log_dir: string; message: string };
+
 interface RawDaemonInfo {
   port: number;
   token_present: boolean;
   token_path: string;
+  launch: RawLaunchState;
+}
+
+function toLaunchState(raw: RawLaunchState): LaunchState {
+  switch (raw.state) {
+    case "port_in_use":
+      return { state: raw.state, port: raw.port, configPath: raw.config_path };
+    case "failed":
+      return { state: raw.state, logDir: raw.log_dir, message: raw.message };
+    default:
+      return { state: raw.state };
+  }
 }
 
 export interface DaemonReply {
@@ -43,6 +67,7 @@ export async function getDaemonInfo(): Promise<DaemonInfo> {
     port: raw.port,
     tokenPresent: raw.token_present,
     tokenPath: raw.token_path,
+    launch: toLaunchState(raw.launch),
   };
 }
 

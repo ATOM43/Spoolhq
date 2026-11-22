@@ -89,6 +89,7 @@ function daemonUp() {
     port: 8765,
     tokenPresent: true,
     tokenPath: "/t",
+    launch: { state: "external" },
   });
   vi.mocked(getHealth).mockResolvedValue({ status: "ok" });
   vi.mocked(getVersion).mockResolvedValue({ version: "0.0.0" });

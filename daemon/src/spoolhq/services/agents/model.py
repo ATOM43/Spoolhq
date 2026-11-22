@@ -324,6 +324,8 @@ class BackendInfo:
     policy_parts: Mapping[str, Mapping[str, bool]] = field(default_factory=dict)
     """Role -> policy part -> whether the backend enforces it here; empty when it
     enforces the whole policy or nothing (Claude Code)."""
+    path: str | None = None
+    """The full path of the CLI that was found, when installed."""
 
     @property
     def usable(self) -> bool:

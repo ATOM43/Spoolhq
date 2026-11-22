@@ -6,6 +6,7 @@
 
 mod daemon;
 mod events;
+mod sidecar;
 
 use tauri::Manager;
 
@@ -15,6 +16,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(daemon::Http::default())
         .manage(events::Streams::default())
+        .manage(sidecar::Launcher::default())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let http = handle.state::<daemon::Http>();
+                handle.state::<sidecar::Launcher>().start(&http).await;
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             daemon::daemon_info,
             daemon::daemon_get,
@@ -27,6 +37,11 @@ pub fn run() {
                 window.state::<events::Streams>().stop_all();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running the SpoolHQ desktop app");
+        .build(tauri::generate_context!())
+        .expect("error while building the SpoolHQ desktop app")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<sidecar::Launcher>().stop();
+            }
+        });
 }

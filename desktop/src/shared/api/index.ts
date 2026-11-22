@@ -5,6 +5,7 @@ export {
   getVersion,
   type DaemonInfo,
   type Health,
+  type LaunchState,
   type Version,
 } from "./client";
 export {

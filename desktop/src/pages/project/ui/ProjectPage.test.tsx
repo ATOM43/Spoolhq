@@ -148,6 +148,7 @@ describe("project panel", () => {
       port: 8765,
       tokenPresent: true,
       tokenPath: "/t",
+      launch: { state: "external" },
     });
     vi.mocked(getHealth).mockResolvedValue({ status: "ok" });
     vi.mocked(getVersion).mockResolvedValue({ version: "0.0.0" });
@@ -203,6 +204,16 @@ describe("project panel", () => {
               phases: [],
             });
       }
+      if (path === "/api/projects/{name}/tracker") {
+        return ok({
+          kind: null,
+          state: "off",
+          pending: 0,
+          last_error: null,
+          last_synced_at: null,
+          failed_at: null,
+        });
+      }
       throw new Error(`unexpected GET ${path}`);
     });
   });
@@ -222,6 +233,11 @@ describe("project panel", () => {
       screen.getByRole("button", { name: "Copy repository path" }),
     ).toBeInTheDocument();
     expect(screen.getByText("main")).toBeInTheDocument();
+    // The header's tracker line asks for the sync state (answered, not thrown).
+    expect(GET).toHaveBeenCalledWith(
+      "/api/projects/{name}/tracker",
+      expect.anything(),
+    );
     expect(screen.getByText("Local git · no remote")).toBeInTheDocument();
     expect(
       screen.getByText("No plan yet · write the spec, then generate a plan"),

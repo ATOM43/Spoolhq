@@ -1,6 +1,7 @@
 import { CircleAlert, CircleX, LoaderCircle, RotateCw } from "lucide-react";
 import type { ReactNode } from "react";
 
+import type { DaemonStatus } from "@/entities/daemon";
 import type { DaemonError } from "@/shared/api";
 import { DAEMON_HOST, DAEMON_START_COMMAND } from "@/shared/config";
 import {
@@ -17,18 +18,64 @@ interface RetryProps {
   checking: boolean;
 }
 
-/** Shown on Home when nothing answers on the daemon's port. */
-export function DaemonDownPanel({
-  port,
+/** The panel for any status but "ok": Home and the project page show it instead. */
+export function DaemonStatusPanel({
+  status,
   onRetry,
   checking,
-}: RetryProps & { port: number | null }) {
+}: RetryProps & { status: Exclude<DaemonStatus, { state: "ok" }> }) {
+  switch (status.state) {
+    case "down":
+      return (
+        <DaemonDownPanel
+          port={status.port}
+          logDir={status.logDir}
+          onRetry={onRetry}
+          checking={checking}
+        />
+      );
+    case "error":
+      return (
+        <DaemonErrorPanel
+          error={status.error}
+          onRetry={onRetry}
+          checking={checking}
+        />
+      );
+    case "port_in_use":
+      return (
+        <PortInUsePanel
+          port={status.port}
+          configPath={status.configPath}
+          onRetry={onRetry}
+          checking={checking}
+        />
+      );
+    case "starting":
+      return <BusyPanel title="Starting SpoolHQ…" />;
+    case "reconnecting":
+      return <BusyPanel title="Looking for the daemon…" />;
+  }
+}
+
+/** Shown on Home when nothing answers on the daemon's port. `logDir` is set when the
+ * app started its own daemon and it did not answer. */
+export function DaemonDownPanel({
+  port,
+  logDir = null,
+  onRetry,
+  checking,
+}: RetryProps & { port: number | null; logDir?: string | null }) {
   const where = port === null ? "" : ` on ${DAEMON_HOST}:${String(port)}`;
+  const started =
+    logDir === null
+      ? ""
+      : ` The app started its daemon, but it did not answer; its logs are in ${logDir}.`;
   return (
     <PanelCard
       icon={<CircleX aria-hidden className="size-5 text-danger" />}
       title="The daemon isn't running"
-      description={`SpoolHQ needs its daemon${where}. Your projects appear here once it is running; the app checks again every 3 seconds.`}
+      description={`SpoolHQ needs its daemon${where}.${started} Your projects appear here once it is running; the app checks again every 3 seconds.`}
       onRetry={onRetry}
       checking={checking}
     >
@@ -57,14 +104,35 @@ export function DaemonErrorPanel({
   );
 }
 
-/** Shown on Home while the first check is in flight, so the window is never blank. */
-export function DaemonConnectingPanel() {
+/** Shown when another program answers on the daemon's port, so the app started none. */
+export function PortInUsePanel({
+  port,
+  configPath,
+  onRetry,
+  checking,
+}: RetryProps & { port: number; configPath: string }) {
+  return (
+    <PanelCard
+      icon={<CircleAlert aria-hidden className="size-5 text-danger" />}
+      title={`Port ${String(port)} is used by another program`}
+      description={`SpoolHQ did not start its daemon because another program answers on ${DAEMON_HOST}:${String(port)}. Stop that program, or pick a free port: set port = ${String(port + 1)} in ${configPath} (or the SPOOLHQ_PORT environment variable), then restart SpoolHQ.`}
+      onRetry={onRetry}
+      checking={checking}
+    >
+      {null}
+    </PanelCard>
+  );
+}
+
+/** Shown while the first check is in flight or the app's own daemon is starting, so
+ * the window is never blank. */
+function BusyPanel({ title }: { title: string }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <LoaderCircle aria-hidden className="size-5 animate-spin" />
-          Looking for the daemon…
+          {title}
         </CardTitle>
       </CardHeader>
     </Card>

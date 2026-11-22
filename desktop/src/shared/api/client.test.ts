@@ -115,11 +115,21 @@ describe("daemon client", () => {
       port: 9001,
       token_present: true,
       token_path: "/x/token",
+      launch: {
+        state: "port_in_use",
+        port: 9001,
+        config_path: "/x/config.toml",
+      },
     });
     await expect(getDaemonInfo()).resolves.toEqual({
       port: 9001,
       tokenPresent: true,
       tokenPath: "/x/token",
+      launch: {
+        state: "port_in_use",
+        port: 9001,
+        configPath: "/x/config.toml",
+      },
     });
     expect(invokeMock).toHaveBeenCalledWith("daemon_info", undefined);
   });

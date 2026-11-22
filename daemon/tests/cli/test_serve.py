@@ -27,7 +27,7 @@ def wait_for_health(base_url: str, process: subprocess.Popen[bytes]) -> None:
         except httpx.TransportError:
             time.sleep(0.2)
             continue
-        assert response.json() == {"status": "ok"}
+        assert response.json() == {"status": "ok", "service": "spoolhq"}
         return
     pytest.fail("daemon did not answer /api/health in time")
 

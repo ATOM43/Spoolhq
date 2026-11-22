@@ -12,7 +12,7 @@ from spoolhq.core.config import load_settings
 def test_health_needs_no_token(client: TestClient) -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "service": "spoolhq"}
 
 
 def test_version_without_token_is_401(client: TestClient) -> None:

@@ -34,6 +34,7 @@ from spoolhq.core.auth import load_or_create_token, token_path
 from spoolhq.core.config import Settings, ensure_home, home_dir
 from spoolhq.core.daemon_lock import DaemonAlreadyRunning, acquire_daemon_lock
 from spoolhq.core.logs import configure_logging
+from spoolhq.core.search_path import extend_process_path
 from spoolhq.services.creation import (
     CreateProject,
     CreationError,
@@ -85,6 +86,7 @@ def serve() -> None:
     """Start the daemon on 127.0.0.1 (the port comes from SPOOLHQ_PORT or config.toml)."""
     settings = _settings()
     fake = _dev_fake_runner()
+    extend_process_path(settings.extra_path, sys.platform)
     home = ensure_home()
     try:
         # Held until the daemon exits: startup recovery must never run while another

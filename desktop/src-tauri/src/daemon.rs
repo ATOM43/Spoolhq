@@ -4,12 +4,15 @@
 //! home folder is `SPOOLHQ_HOME` or `~/.spoolhq`, the port comes from `SPOOLHQ_PORT`,
 //! then `config.toml`, then 8765, and the token is the `token` file in the home folder.
 //! Both are re-read on every call, so starting the daemon after the app just works.
+//! Starting the bundled daemon is [`crate::sidecar`]'s job.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde::Serialize;
+
+use crate::sidecar::{LaunchState, Launcher};
 
 pub const HOME_ENV_VAR: &str = "SPOOLHQ_HOME";
 pub const PORT_ENV_VAR: &str = "SPOOLHQ_PORT";
@@ -23,6 +26,8 @@ pub struct DaemonInfo {
     pub port: u16,
     pub token_present: bool,
     pub token_path: String,
+    /// Whether the app found a running daemon or started its own.
+    pub launch: LaunchState,
 }
 
 /// The daemon's answer, passed through for the TypeScript client to interpret.
@@ -123,11 +128,16 @@ fn invalid_port(source: &str) -> DaemonError {
     }
 }
 
-pub fn info(home: &Path, env_port: Option<OsString>) -> Result<DaemonInfo, DaemonError> {
+pub fn info(
+    home: &Path,
+    env_port: Option<OsString>,
+    launch: LaunchState,
+) -> Result<DaemonInfo, DaemonError> {
     Ok(DaemonInfo {
         port: read_port(home, env_port)?,
         token_present: read_token(home)?.is_some(),
         token_path: token_path(home).display().to_string(),
+        launch,
     })
 }
 
@@ -168,14 +178,33 @@ impl Default for Http {
     }
 }
 
+impl Http {
+    /// `GET /api/health` with the token if there is one: the status and body, or an
+    /// error when nothing answers.
+    pub async fn health(&self, port: u16, token: Option<&str>) -> Result<(u16, String), ()> {
+        let url = api_url(port, "/api/health").map_err(|_| ())?;
+        let mut request = self.0.get(url);
+        if let Some(token) = token {
+            request = request.bearer_auth(token);
+        }
+        let response = request.send().await.map_err(|_| ())?;
+        let status = response.status().as_u16();
+        Ok((status, response.text().await.unwrap_or_default()))
+    }
+}
+
 pub(crate) fn current_home() -> Result<PathBuf, DaemonError> {
     home_dir(std::env::var_os(HOME_ENV_VAR))
 }
 
 /// The daemon's port and whether a token exists. Never returns the token.
 #[tauri::command]
-pub fn daemon_info() -> Result<DaemonInfo, DaemonError> {
-    info(&current_home()?, std::env::var_os(PORT_ENV_VAR))
+pub fn daemon_info(launcher: tauri::State<'_, Launcher>) -> Result<DaemonInfo, DaemonError> {
+    info(
+        &current_home()?,
+        std::env::var_os(PORT_ENV_VAR),
+        launcher.state(),
+    )
 }
 
 /// `GET http://127.0.0.1:<port><path>`, adding the token when `authenticated` is set.
@@ -366,7 +395,7 @@ mod tests {
         let home = temp_home();
         std::fs::write(home.path().join("config.toml"), "port = 9002\n").unwrap();
 
-        let missing = info(home.path(), None).unwrap();
+        let missing = info(home.path(), None, LaunchState::Checking).unwrap();
         assert_eq!(missing.port, 9002);
         assert!(!missing.token_present);
         assert_eq!(
@@ -375,7 +404,7 @@ mod tests {
         );
 
         std::fs::write(token_path(home.path()), "secret-token").unwrap();
-        let present = info(home.path(), None).unwrap();
+        let present = info(home.path(), None, LaunchState::Checking).unwrap();
         assert!(present.token_present);
         let json = serde_json::to_string(&present).unwrap();
         assert!(!json.contains("secret-token"), "{json}");

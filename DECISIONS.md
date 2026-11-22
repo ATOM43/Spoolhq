@@ -453,3 +453,10 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 447 · The sync thread also starts on a settings save or a state read with a tracker block · docs/decisions/tracker.md
 448 · When the sync failed is a column of `tracker_sync` (schema 10) · docs/decisions/tracker.md
 449 · Tracker sync state is polled every 15 s, the one polling exception · docs/decisions/desktop.md
+450 · The daemon is packaged with PyInstaller as one file named `spoolhq-<target triple>` · docs/decisions/core.md
+451 · The dev-tools check reads the built binary · docs/decisions/core.md
+452 · The Rust job builds against an empty sidecar placeholder · docs/decisions/core.md
+453 · The app starts its daemon with `std::process`, not the shell plugin · docs/decisions/desktop.md
+454 · `/api/health` says `"service": "spoolhq"`; any other answer means the port is taken · docs/decisions/desktop.md
+455 · A daemon the app started gets SIGTERM, then a kill after 5 s, when the app exits · docs/decisions/desktop.md
+456 · The daemon appends known install folders to `PATH`; it never runs the user's shell · docs/decisions/agents.md

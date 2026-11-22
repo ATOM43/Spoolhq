@@ -190,7 +190,7 @@ Inside a slice, code is grouped by segment: `ui/` for components, `model/` for s
 | A constant or helper used everywhere | `shared/config/` or `shared/lib/` |
 | A provider or global setup | `app/` |
 
-The Rust side of the desktop app (`desktop/src-tauri/`) is small and not layered: `daemon.rs` holds the only HTTP the app does (`daemon_get` for the health check, `daemon_request` for every API call, both adding the token), and `events.rs` the only WebSocket.
+The Rust side of the desktop app (`desktop/src-tauri/`) is small and not layered: `daemon.rs` holds the only HTTP the app does (`daemon_get` for the health check, `daemon_request` for every API call, both adding the token), `events.rs` the only WebSocket, and `sidecar.rs` finds a running daemon or starts the bundled one at launch and stops it on exit ([packaging.md](packaging.md)).
 
 ### Data and live events
 
@@ -220,13 +220,14 @@ Spec, ticket and agent text is untrusted. Markdown goes through `shared/ui` `Mar
 
 ## CI
 
-Four GitHub Actions workflows in `.github/workflows/` run side by side on every push and pull request (DECISIONS 395–397):
+Five GitHub Actions workflows in `.github/workflows/` run side by side on every push and pull request (DECISIONS 395–397):
 
 | Workflow | Runs on | Steps | Runs when these change |
 | --- | --- | --- | --- |
 | `lint.yml` | Linux | `just lint-daemon lint-desktop` | anything |
 | `daemon.yml` | Linux, macOS, Windows | `just test-daemon` (pytest with xdist and coverage) | `daemon/**`, `templates/**` |
 | `frontend.yml` | Linux | `just test-desktop` (Vitest) | `desktop/**` except `desktop/src-tauri/**` |
-| `rust.yml` | Linux, macOS, Windows | `just lint-rust test-rust`, then a debug `cargo build` | `desktop/src-tauri/**`, `rust-toolchain.toml` |
+| `rust.yml` | Linux, macOS, Windows | `just sidecar-placeholder`, `just lint-rust test-rust`, then a debug `cargo build` | `desktop/src-tauri/**`, `rust-toolchain.toml` |
+| `package.yml` | Linux, macOS, Windows | `just build-daemon` (the PyInstaller sidecar), then `scripts/smoke_sidecar.py` on it ([packaging.md](packaging.md)) | `daemon/**`, the two sidecar scripts, the workflow; `v*` tags |
 
-`justfile`, `.github/workflows/**`, `scripts/**` and the three lockfiles run every workflow, so a docs-only push runs lint alone. Each workflow has a `concurrency` group per branch: a newer push cancels the older run. Caches: uv through `astral-sh/setup-uv`, the pnpm store through `actions/setup-node` (`cache: pnpm`), Rust's `target/` through `Swatinem/rust-cache`. `just` itself is the pinned `rust-just` wheel installed with `uv tool install`. Every action is pinned to a commit SHA with its version in a comment.
+`justfile`, `.github/workflows/**`, `scripts/**` and the three lockfiles run every workflow except `package.yml`, so a docs-only push runs lint alone. Each workflow has a `concurrency` group per branch: a newer push cancels the older run. Caches: uv through `astral-sh/setup-uv`, the pnpm store through `actions/setup-node` (`cache: pnpm`), Rust's `target/` through `Swatinem/rust-cache`. `just` itself is the pinned `rust-just` wheel installed with `uv tool install`. Every action is pinned to a commit SHA with its version in a comment.

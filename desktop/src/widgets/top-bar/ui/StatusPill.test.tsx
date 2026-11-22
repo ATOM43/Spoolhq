@@ -19,7 +19,7 @@ describe("StatusPill", () => {
   });
 
   it("shows not running", () => {
-    render(<StatusPill status={{ state: "down", port: 8765 }} />);
+    render(<StatusPill status={{ state: "down", port: 8765, logDir: null }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Daemon not running");
   });
 
@@ -31,7 +31,7 @@ describe("StatusPill", () => {
 
   it("always pairs the label with an icon", () => {
     const { container } = render(
-      <StatusPill status={{ state: "down", port: null }} />,
+      <StatusPill status={{ state: "down", port: null, logDir: null }} />,
     );
     expect(container.querySelector("svg")).not.toBeNull();
   });

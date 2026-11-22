@@ -82,3 +82,11 @@ daemon:
 # Start only the desktop app (Vite dev server + Tauri window).
 desktop:
     pnpm --dir desktop tauri dev
+
+# Build the `spool` CLI as the desktop app's sidecar binary (docs/packaging.md).
+build-daemon:
+    uv run --directory daemon --locked --group build python ../scripts/build_sidecar.py
+
+# An empty sidecar file, if none exists: Tauri's build needs the file (docs/packaging.md).
+sidecar-placeholder:
+    uv run --no-project python scripts/build_sidecar.py --placeholder

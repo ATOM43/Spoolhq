@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DaemonError } from "@/shared/api";
+import { DaemonError, type LaunchState } from "@/shared/api";
 
 import { deriveStatus, type DaemonCheck } from "./status";
 
@@ -10,8 +10,12 @@ const notRunning = new DaemonError({
   message: "connection refused",
 });
 
-function failed(failures: number, everConnected: boolean): DaemonCheck {
-  return { ok: false, error: notRunning, failures, everConnected };
+function failed(
+  failures: number,
+  everConnected: boolean,
+  launch: LaunchState | null = { state: "external" },
+): DaemonCheck {
+  return { ok: false, error: notRunning, failures, everConnected, launch };
 }
 
 describe("deriveStatus", () => {
@@ -31,6 +35,43 @@ describe("deriveStatus", () => {
     expect(deriveStatus(failed(1, false))).toEqual({
       state: "down",
       port: 8765,
+      logDir: null,
+    });
+  });
+
+  it("is starting while the app checks the port or starts its daemon", () => {
+    expect(deriveStatus(failed(1, false, { state: "checking" }))).toEqual({
+      state: "starting",
+    });
+    expect(deriveStatus(failed(4, false, { state: "starting" }))).toEqual({
+      state: "starting",
+    });
+  });
+
+  it("reports another program on the port, whatever it answers", () => {
+    const port = { state: "port_in_use", port: 8765, configPath: "/h/c.toml" };
+    const error = new DaemonError({ kind: "http", status: 404 });
+    expect(
+      deriveStatus({
+        ok: false,
+        error,
+        failures: 1,
+        everConnected: false,
+        launch: port as LaunchState,
+      }),
+    ).toEqual(port);
+  });
+
+  it("is down with the log folder when the app's daemon did not answer", () => {
+    const launch: LaunchState = {
+      state: "failed",
+      logDir: "/h/logs",
+      message: "no answer within 15 s",
+    };
+    expect(deriveStatus(failed(1, false, launch))).toEqual({
+      state: "down",
+      port: 8765,
+      logDir: "/h/logs",
     });
   });
 
@@ -43,7 +84,13 @@ describe("deriveStatus", () => {
   it("reports other failures as errors", () => {
     const error = new DaemonError({ kind: "unauthorized" });
     expect(
-      deriveStatus({ ok: false, error, failures: 1, everConnected: true }),
+      deriveStatus({
+        ok: false,
+        error,
+        failures: 1,
+        everConnected: true,
+        launch: null,
+      }),
     ).toEqual({ state: "error", error });
   });
 });

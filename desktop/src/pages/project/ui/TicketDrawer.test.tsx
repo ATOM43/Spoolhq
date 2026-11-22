@@ -199,6 +199,7 @@ describe("ticket drawer", () => {
       port: 8765,
       tokenPresent: true,
       tokenPath: "/t",
+      launch: { state: "external" },
     });
     vi.mocked(getHealth).mockResolvedValue({ status: "ok" });
     vi.mocked(getVersion).mockResolvedValue({ version: "0.0.0" });
@@ -281,6 +282,16 @@ describe("ticket drawer", () => {
           return ok({ backends: [], graphify: { installed: false } });
         case "/api/settings":
           return ok({ secrets: {} });
+      }
+      if (path === "/api/projects/{name}/tracker") {
+        return ok({
+          kind: null,
+          state: "off",
+          pending: 0,
+          last_error: null,
+          last_synced_at: null,
+          failed_at: null,
+        });
       }
       throw new Error(`unexpected GET ${path}`);
     });

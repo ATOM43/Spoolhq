@@ -47,7 +47,7 @@ def test_startup_recovers_and_skips_a_corrupt_database(
     app = create_app(settings, token=token)
     caplog.set_level(logging.INFO)
     with TestClient(app, base_url=f"http://127.0.0.1:{settings.port}") as client:
-        assert client.get("/api/health").json() == {"status": "ok"}
+        assert client.get("/api/health").json() == {"status": "ok", "service": "spoolhq"}
         registry: RunRegistry = app.state.runs
         assert registry.projects == ["alpha"]
         assert registry.daemon_instance == app.state.daemon_instance

@@ -6,12 +6,14 @@ Exits 0 even when nothing is installed; the output says what to do instead. With
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from spoolhq.cli.common import fail, settings
+from spoolhq.core.search_path import extend_process_path
 from spoolhq.services.agents import (
     READ_ONLY_SHELL,
     BackendInfo,
@@ -35,6 +37,8 @@ def describe(info: BackendInfo) -> list[str]:
         lines.append(f"  {info.reason}")
         return lines
     lines.append(f"  installed  yes ({info.version or NONE})")
+    if info.path:
+        lines.append(f"  path       {info.path}")
     if info.logged_in:
         lines.append(f"  login      yes ({info.auth_method or NONE}, {info.billing})")
     else:
@@ -98,6 +102,8 @@ def agents_command(
         for line in agents.shell_warnings():
             typer.echo(line, err=True)
         return
+    # The folders the daemon adds at start, so this shows what it would find.
+    extend_process_path(settings().extra_path, sys.platform)
     for index, runner in enumerate(available_runners()):
         if index:
             typer.echo("")

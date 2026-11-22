@@ -224,6 +224,7 @@ class CodexCliRunner:
             policy_enforceable=enforceable,
             reason=reason,
             policy_parts=parts,
+            path=cmd[0],
         )
 
     def _token(self) -> str | None:

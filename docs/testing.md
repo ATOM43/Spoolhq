@@ -105,4 +105,4 @@ Four tests use the real `claude` CLI and a real model, all marked `real_agent`: 
 
 The transcripts are in `daemon/src/spoolhq/devtools/scenarios/`. Implementers write `backend/tests/test_spoolhq_fake.py` (the built-in `fastapi-react` layout) through the fake runner's worktree check, so the project's real gates run on a real change; on another stack the test gate won't fail as `gate-retry` and `blocked` expect. The reviewer's verdict gets one item per "Done when" item from its prompt. Each role's transcripts cycle across tickets for as long as the daemon runs.
 
-The daemon refuses to start, with `SPOOLHQ_DEV_FAKE_RUNNER is for development only`, in a packaged build (`sys.frozen`) or for an unknown scenario.
+The daemon refuses to start, with `SPOOLHQ_DEV_FAKE_RUNNER is for development only`, in a packaged build (`sys.frozen`) or for an unknown scenario. The packaged build leaves `spoolhq.devtools` out and its build fails if it gets in ([packaging.md](packaging.md)).

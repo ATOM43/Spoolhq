@@ -108,6 +108,7 @@ function daemonRunning() {
         port: 8765,
         token_present: true,
         token_path: "/t",
+        launch: { state: "external" },
       });
     }
     const path = (args as { path: string }).path;
@@ -123,6 +124,7 @@ function daemonStopped() {
         port: 8765,
         token_present: true,
         token_path: "/t",
+        launch: { state: "external" },
       });
     }
     // Tauri rejects with the serialised Rust error, a plain object, not an Error.
