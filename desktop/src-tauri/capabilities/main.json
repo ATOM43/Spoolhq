@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "The main window may only ask for daemon info and call daemon API paths, subscribe to project events and pick a folder.",
+  "description": "The main window may only ask for daemon info and call daemon API paths, subscribe to project events, pick a folder and start the tray's quit.",
   "windows": ["main"],
   "permissions": [
     "allow-daemon-info",
@@ -9,6 +9,7 @@
     "allow-daemon-request",
     "allow-events-subscribe",
     "allow-events-unsubscribe",
+    "allow-app-quit",
     "dialog:allow-open"
   ]
 }

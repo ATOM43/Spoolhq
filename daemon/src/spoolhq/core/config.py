@@ -13,7 +13,7 @@ import tomllib
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -76,6 +76,15 @@ def ensure_home() -> Path:
     return home
 
 
+class DesktopSettings(BaseModel):
+    """``[desktop]`` in ``config.toml``: read by the desktop app, saved through the API."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    keep_running: bool = True
+    """Closing the window hides it; the app, the daemon and any run keep going."""
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix=ENV_PREFIX, extra="forbid")
 
@@ -88,6 +97,7 @@ class Settings(BaseSettings):
     """Browser origins the event WebSocket accepts: the desktop app's, and Vite's dev server."""
     extra_path: list[Path] = Field(default_factory=list)
     """Folders appended to ``PATH`` at start so agent CLIs are found (core/search_path.py)."""
+    desktop: DesktopSettings = Field(default_factory=DesktopSettings)
 
     @field_validator("host")
     @classmethod

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAgents } from "@/entities/agent";
 
@@ -13,6 +13,24 @@ export function useDaemonSettings() {
     queryKey: queryKeys.settings,
     queryFn: () => body(api.GET("/api/settings")),
     retry: false,
+  });
+}
+
+/** Save `desktop.keep_running` to `~/.spoolhq/config.toml`, where the app reads it on close. */
+export function useSaveKeepRunning() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (keepRunning: boolean) =>
+      body(
+        api.PUT("/api/settings/desktop", {
+          body: { keep_running: keepRunning },
+        }),
+      ),
+    onSuccess: (desktop) => {
+      queryClient.setQueryData<DaemonSettings>(queryKeys.settings, (old) =>
+        old ? { ...old, desktop } : old,
+      );
+    },
   });
 }
 

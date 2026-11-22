@@ -55,6 +55,7 @@ from spoolhq.services.runloop.policy import (
 )
 from spoolhq.services.runloop.polling import GitHubPoller
 from spoolhq.services.runloop.resume import RESUME_DELAY, ResumeTimer
+from spoolhq.services.runloop.shutdown import cancel_all
 
 __all__ = [
     "AgentNotReadyError",
@@ -94,6 +95,7 @@ __all__ = [
     "RunLoopError",
     "RuleHit",
     "approve",
+    "cancel_all",
     "delivery_mode",
     "describe",
     "drive",

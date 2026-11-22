@@ -101,3 +101,29 @@ def test_serve_accepts_the_event_websocket(home: Path, free_port: int, tmp_path:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
+
+
+def test_serve_exits_on_post_shutdown(home: Path, free_port: int) -> None:
+    base_url = f"http://127.0.0.1:{free_port}"
+    process = subprocess.Popen(  # noqa: S603 - fixed argument list, no shell
+        [sys.executable, "-m", "spoolhq", "serve"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env={**os.environ, "SPOOLHQ_PORT": str(free_port)},
+    )
+    try:
+        wait_for_health(base_url, process)
+        token = read_token(home)
+        response = httpx.post(
+            f"{base_url}/api/shutdown",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10.0,
+            trust_env=False,
+        )
+        assert response.status_code == 200
+        assert response.json() == {"cancelled": []}
+        assert process.wait(timeout=15) == 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()

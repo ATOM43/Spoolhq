@@ -195,3 +195,8 @@ class RunList(BaseModel):
             for run in page.runs
         ]
         return cls(items=items, next_cursor=page.next_cursor)
+
+
+class Shutdown(BaseModel):
+    cancelled: list[RunView]
+    """The runs the shutdown cancelled, as they ended."""

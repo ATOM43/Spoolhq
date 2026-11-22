@@ -3,6 +3,7 @@ export {
   getDaemonInfo,
   getHealth,
   getVersion,
+  quitApp,
   type DaemonInfo,
   type Health,
   type LaunchState,

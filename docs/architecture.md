@@ -190,7 +190,7 @@ Inside a slice, code is grouped by segment: `ui/` for components, `model/` for s
 | A constant or helper used everywhere | `shared/config/` or `shared/lib/` |
 | A provider or global setup | `app/` |
 
-The Rust side of the desktop app (`desktop/src-tauri/`) is small and not layered: `daemon.rs` holds the only HTTP the app does (`daemon_get` for the health check, `daemon_request` for every API call, both adding the token), `events.rs` the only WebSocket, and `sidecar.rs` finds a running daemon or starts the bundled one at launch and stops it on exit ([packaging.md](packaging.md)).
+The Rust side of the desktop app (`desktop/src-tauri/`) is small and not layered: `daemon.rs` holds the only HTTP the app does (`daemon_get` for the health check, `daemon_request` for every API call, both adding the token), `events.rs` the only WebSocket, `sidecar.rs` finds a running daemon or starts the bundled one at launch, `process.rs` keeps that daemon with its children (process group or Job Object), `quit.rs` holds the close, reopen and quit decisions as plain logic, and `tray.rs` wires them to the tray, the window and the native quit confirm ([packaging.md](packaging.md#closing-quitting-and-the-tray)).
 
 ### Data and live events
 

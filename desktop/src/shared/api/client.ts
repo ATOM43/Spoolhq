@@ -71,6 +71,14 @@ export async function getDaemonInfo(): Promise<DaemonInfo> {
   };
 }
 
+/**
+ * Quit the app as the tray's Quit does (Rust `tray.rs`): a daemon the app started is
+ * shut down, after a native confirm if a run is going. For desktops without a tray.
+ */
+export async function quitApp(): Promise<void> {
+  await invoke("app_quit");
+}
+
 /** `GET /api/health`: needs no token, so it tells whether the daemon is up. */
 export async function getHealth(): Promise<Health> {
   const body = await get("/api/health", false);

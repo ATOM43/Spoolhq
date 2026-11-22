@@ -243,7 +243,7 @@ pub fn api_method(method: &str) -> Result<reqwest::Method, DaemonError> {
     }
 }
 
-async fn send(
+pub(crate) async fn send(
     http: &Http,
     method: &str,
     path: &str,

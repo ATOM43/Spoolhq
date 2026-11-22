@@ -23,6 +23,7 @@ from spoolhq.api.routers import (
     projects,
     repos,
     runs,
+    shutdown,
     templates,
     tickets,
     tracker,
@@ -154,6 +155,8 @@ def create_app(
     app.state.token = token
     app.state.fake_runner = fake_runner
     app.state.streams = events.EventStreams()
+    # Set by `spool serve` to stop uvicorn; POST /api/shutdown calls it.
+    app.state.request_exit = None
     errors.install(app)
     for module in (
         health,
@@ -169,6 +172,7 @@ def create_app(
         tracker,
         agents_router,
         settings_router,
+        shutdown,
         templates,
         events,
     ):

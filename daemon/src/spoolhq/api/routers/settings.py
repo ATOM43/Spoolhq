@@ -8,6 +8,8 @@ from spoolhq.api.errors import ApiError
 from spoolhq.api.params import settings
 from spoolhq.api.schemas.settings import DaemonSettings, SecretTest, SecretValue, SecretView
 from spoolhq.api.security import bearer_scheme
+from spoolhq.core.config import ConfigError, DesktopSettings, config_path, ensure_home
+from spoolhq.core.config_file import set_bool
 from spoolhq.services.secrets import (
     SECRETS,
     SecretName,
@@ -35,7 +37,20 @@ def get_settings(request: Request) -> DaemonSettings:
         worktrees_dir=str(current.worktrees_dir),
         allowed_origins=current.allowed_origins,
         secrets=secrets,
+        desktop=current.desktop,
     )
+
+
+@router.put("/desktop")
+def put_desktop(request: Request, body: DesktopSettings) -> DesktopSettings:
+    """Save ``[desktop]`` to ``config.toml``; the desktop app reads it from there."""
+    ensure_home()
+    try:
+        set_bool(config_path(), "desktop", "keep_running", body.keep_running)
+    except (ConfigError, OSError) as exc:
+        raise ApiError(409, "config_not_saved", str(exc)) from None
+    request.app.state.settings = settings(request).model_copy(update={"desktop": body})
+    return body
 
 
 def _keychain_error(exc: Exception) -> ApiError:

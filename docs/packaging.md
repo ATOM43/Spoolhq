@@ -1,6 +1,6 @@
 # Packaging the daemon
 
-The desktop app ships its own daemon: the whole `spool` CLI, `serve` included, built with PyInstaller as one file and declared as a Tauri sidecar. Closing the window and the tray come with T49; installers and release builds with T50.
+The desktop app ships its own daemon: the whole `spool` CLI, `serve` included, built with PyInstaller as one file and declared as a Tauri sidecar. Closing the window hides it, a tray icon brings it back or quits ([below](#closing-quitting-and-the-tray)); installers and release builds come with T50.
 
 ## Building the binary
 
@@ -44,7 +44,7 @@ uv run --directory daemon python ../scripts/smoke_sidecar.py ../desktop/src-taur
 
 `.github/workflows/package.yml` runs `just build-daemon` and the smoke test on Linux, macOS and Windows, on pushes to `daemon/**`, the two scripts and the workflow itself, and on `v*` tags (GitHub doesn't apply path filters to tag pushes).
 
-`tauri-build` fails when an `externalBin` file is missing, even for `cargo clippy` or `cargo test`. The Rust workflow therefore runs `just sidecar-placeholder` first, which creates an empty `binaries/spoolhq-<triple>` if none exists and never overwrites a real binary. Run it, or `just build-daemon`, once on a fresh clone before `just lint-rust`. An app built with the placeholder can't start a daemon: Home shows the daemon-missing state.
+`tauri-build` fails when an `externalBin` file is missing, even for `cargo clippy` or `cargo test`. The Rust workflow therefore runs `just sidecar-placeholder` first, which creates an empty `binaries/spoolhq-<triple>` if none exists and never overwrites a real binary. `just install` runs it too, so `just lint-rust` works right after cloning. An app built with the placeholder can't start a daemon: Home shows the daemon-missing state.
 
 ## How the app finds or starts the daemon
 
@@ -58,7 +58,39 @@ uv run --directory daemon python ../scripts/smoke_sidecar.py ../desktop/src-taur
 
 The state goes to the webview through `daemon_info` (`launch`); the token stays in Rust and the CSP is unchanged. The app spawns the binary with `std::process`, so no shell plugin is needed and the webview can't start processes.
 
-A daemon the app started is stopped when the app exits: SIGTERM, then a kill after 5 s (on Windows, a kill; whether the launcher's child goes with it is unchecked there). SIGTERM matters because the one-file binary is a launcher with the daemon as its child: SIGKILL would leave the child running, while SIGTERM is passed on. A daemon the app found running is left alone. T49 changes this.
+The one-file binary is a launcher with the daemon as its child, and the daemon starts agents. So the app starts the launcher on its own, never one process at a time:
+
+- **Linux and macOS**: in its own process group (`process_group(0)`). Stopping it sends SIGTERM, and later SIGKILL, to the whole group with `kill -- -<pgid>` (an argument list; no shell, no `libc` dependency).
+- **Windows**: inside a Job Object with kill-on-close (`windows-sys`). Ending the job ends every process in it, and so does the app exiting or crashing, since the app holds the job's only handle. No `taskkill`.
+
+## Closing, quitting and the tray
+
+**Closing the window hides it** while `keep_running` is on (the default). The app, the daemon (its own or an external one) and any run keep going, and the webview stays loaded, so the event bridge stays connected; reopening shows the current state with no gap (a dropped stream still resumes from the last `seq`). The setting is **Keep running when the window is closed** in Settings → General, saved through the daemon (`PUT /api/settings/desktop`) to `~/.spoolhq/config.toml`, which the app reads on every close:
+
+```toml
+[desktop]
+keep_running = true
+```
+
+With it off, closing the window quits.
+
+**The tray icon** has a menu:
+
+- a status line, not clickable: "Running T05 · Implement", "Paused · usage limit", "Paused", "Idle" or "Daemon stopped", refreshed every 3 s; with an external daemon it adds "external daemon, keeps running after Quit";
+- **Open SpoolHQ**, which shows and focuses the window (a left click on the icon does too on Windows and macOS; Linux tray hosts only open the menu);
+- **Quit**.
+
+**GNOME** shows tray icons only with an AppIndicator extension, such as *AppIndicator and KStatusNotifierItem Support* (`gnome-shell-extension-appindicator` on Fedora and Ubuntu). Without one there is no icon: start SpoolHQ again to show the hidden window (a second launch only focuses the first, through Tauri's single-instance plugin), and quit with **Quit SpoolHQ** in Settings → General or by turning Keep running off and closing the window. On macOS, clicking the Dock icon also shows the window.
+
+**Quitting** (the tray's Quit, Settings → General, the app menu or Cmd+Q, or closing with Keep running off):
+
+| Daemon | What happens |
+| --- | --- |
+| Started by the app, a run going | A confirm: "A run is going (T05). Quit stops it; the ticket goes back to Ready." (**Quit** · **Keep running**; closing the dialog keeps running). Then as below. |
+| Started by the app, idle | `POST /api/shutdown` ([API](api.md#shutdown)): the daemon cancels each run like Cancel (marked `cancelled`, worktree removed), closes the event streams and exits. The app waits up to 15 s for the launcher to end, then kills the group or job; it kills the group or job in any case afterwards, so no stray child is left. If the request fails, it sends SIGTERM to the group first (Unix). |
+| External (`spool serve`) | The app quits; the daemon and any run keep going. No confirm. |
+
+If the app exits any other way while it still owns a daemon, it stops the group (SIGTERM, a kill after 5 s); on Windows the Job Object ends it regardless.
 
 ## Agent CLIs from a desktop launch
 

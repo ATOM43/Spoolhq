@@ -10,7 +10,9 @@ default:
     @just --list
 
 # Install all dependencies exactly as locked.
-install: install-daemon install-desktop
+# Also creates the empty sidecar placeholder when no binary exists, so `just lint-rust`
+# works right after cloning (it never overwrites a real binary).
+install: install-daemon install-desktop sidecar-placeholder
 
 install-daemon:
     uv sync --directory daemon --locked

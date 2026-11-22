@@ -48,10 +48,12 @@ The OpenAPI schema is at `/openapi.json` and `/docs` while the daemon runs. The 
 | `POST /api/projects/{name}/tracker/retry` | re-queue every failed action (failures reset) and clear the `failed` state: `{"queued": n}`; 200 with `0` when nothing failed; 409 without a `tracker` block |
 | `GET /api/templates` | the built-in templates: `name` (what `POST /api/projects` takes as `template`), `description`, `summary` (one line of at most 120 characters, for a card; null if the template has none) and `commands` (`install`, `lint`, `test` from its `spoolhq-template.yaml`, which the New project dialog pre-fills) |
 | `GET /api/agents` | what `spool agents` shows: each backend (installed, version, login, policy parts) and Graphify |
-| `GET /api/settings` | the daemon's settings, and for each secret (`anthropic`, `github`, `clickup`) only `{"set", "source": "keychain" \| "env" \| null}` |
+| `GET /api/settings` | the daemon's settings, `desktop` (`{"keep_running"}`, from `[desktop]` in `config.toml`), and for each secret (`anthropic`, `github`, `clickup`) only `{"set", "source": "keychain" \| "env" \| null}` |
+| `PUT /api/settings/desktop` | save `{"keep_running": bool}` to `[desktop]` in `config.toml`, keeping the file's other lines; 409 `config_not_saved` when the file sets it in a way that can't be edited safely (an inline table, a dotted key) |
 | `PUT`, `DELETE /api/settings/secrets/{name}` | store `{"value"}` in the OS keychain, or remove it (204) |
 | `POST /api/settings/secrets/{name}/test` | [try the stored secret](#testing-a-secret) against its provider: `{"ok", "message"}` |
 | `WS /api/projects/{name}/events?since=` | [live events](#event-websocket) |
+| `POST /api/shutdown` | [stop the daemon](#shutdown): cancel every active run, then exit; `{"cancelled": [run, …]}` |
 
 An attempt's file is read from the attempt folder the run log names, by a fixed file name; the folder must resolve inside the workspace's `runs/`, and the file must not be a symlink and must resolve inside the folder. An unknown run or attempt is 404 `not_found`; a file the attempt's step hasn't written yet (or never will: no review after failed gates) is 404 `not_ready`.
 
@@ -148,6 +150,10 @@ The URLs are fixed in the code (`services/secrets/check.py`); redirects are not 
 | `commands` | `install`, `lint`, `test` and the `source` file, from the first of: a `justfile` with matching recipes (`just install`…), a `Makefile` with matching targets (`make install`…), `package.json` (`<pm> install`, `<pm> run lint` and `<pm> test` when those scripts exist; `pm` is pnpm with `pnpm-lock.yaml`, yarn with `yarn.lock`, else npm), `pyproject.toml` with `uv.lock` (`uv sync`, `uv run ruff check .` when ruff is configured, `uv run pytest` when pytest is a dependency). Anything not detected is null |
 | `agent_settings` | the repo's own agent settings files ([repo safety](agents.md#repo-safety)), which runs ignore |
 | `notes_missing` | which of `PROGRESS.md` and `DECISIONS.md` don't exist; the first merge creates them |
+
+## Shutdown
+
+`POST /api/shutdown` (token required) is how the desktop app quits a daemon it started ([packaging](packaging.md#closing-quitting-and-the-tray)). Each project's active run, running or paused, is cancelled the way `run/cancel` does it: the agent is stopped, the worktree and branch removed, the ticket goes back to `ready` and the run is marked `cancelled` ("cancelled by the user"), not `interrupted`; each run's worker gets 10 s. Then the event streams close (1001) and `spool serve` exits with code 0 once the answer is sent. The answer lists the cancelled runs as they ended; an idle daemon answers `{"cancelled": []}`.
 
 ## Trying a stack command
 

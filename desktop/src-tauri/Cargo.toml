@@ -24,13 +24,20 @@ futures-util = { version = "=0.3.34", default-features = false, features = ["sin
 reqwest = { version = "=0.13.5", default-features = false }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
-tauri = { version = "=2.12.4", features = [] }
+tauri = { version = "=2.12.4", features = ["tray-icon"] }
 # The New project dialog's folder picker; the capability allows only `open`.
 tauri-plugin-dialog = "=2.8.3"
+# A second launch shows the running app's window instead (no tray on some desktops).
+tauri-plugin-single-instance = "=2.5.5"
 tokio = { version = "=1.53.3", features = ["macros", "sync", "time"] }
 # The daemon's event WebSocket, plain ws:// to 127.0.0.1 only: no TLS features.
 tokio-tungstenite = { version = "=0.30.0", default-features = false, features = ["connect"] }
 toml = "=1.1.8"
+
+[target.'cfg(windows)'.dependencies]
+# The Job Object that takes the daemon's child process down with the app (already in
+# the tree through Tauri; pinned to the locked version).
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

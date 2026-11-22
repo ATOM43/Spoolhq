@@ -460,3 +460,9 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 454 · `/api/health` says `"service": "spoolhq"`; any other answer means the port is taken · docs/decisions/desktop.md
 455 · A daemon the app started gets SIGTERM, then a kill after 5 s, when the app exits · docs/decisions/desktop.md
 456 · The daemon appends known install folders to `PATH`; it never runs the user's shell · docs/decisions/agents.md
+457 · Closing the window hides it while `desktop.keep_running` is on · docs/decisions/desktop.md
+458 · Quit shuts an app-started daemon down over `POST /api/shutdown`, with a kill after 15 s · docs/decisions/desktop.md
+459 · The launcher runs in its own process group (Unix) or a kill-on-close Job Object (Windows) · docs/decisions/desktop.md
+460 · The quit confirm and the tray status are native and come from Rust · docs/decisions/desktop.md
+461 · Settings → General has Quit SpoolHQ, the one new webview permission · docs/decisions/desktop.md
+462 · `config.toml` is edited line by line, and refused when that isn't safe · docs/decisions/core.md

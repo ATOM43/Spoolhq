@@ -7,6 +7,7 @@ fn main() {
         "daemon_request",
         "events_subscribe",
         "events_unsubscribe",
+        "app_quit",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))
         .expect("failed to run the Tauri build script");

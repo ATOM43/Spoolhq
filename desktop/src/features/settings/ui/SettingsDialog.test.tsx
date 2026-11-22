@@ -3,7 +3,13 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api, DaemonError, getVersion, type Schemas } from "@/shared/api";
+import {
+  api,
+  DaemonError,
+  getVersion,
+  quitApp,
+  type Schemas,
+} from "@/shared/api";
 
 import { SET_UP_FIRST, SettingsDialog } from "./SettingsDialog";
 
@@ -13,6 +19,7 @@ vi.mock("@/shared/api", async (importOriginal) => {
     ...actual,
     api: { GET: vi.fn(), PUT: vi.fn(), POST: vi.fn(), DELETE: vi.fn() },
     getVersion: vi.fn(),
+    quitApp: vi.fn(),
   };
 });
 
@@ -58,6 +65,7 @@ function settings() {
     worktrees_dir: "/home/me/.spoolhq/worktrees",
     allowed_origins: [],
     secrets,
+    desktop: { keep_running: true },
   };
 }
 
@@ -269,6 +277,64 @@ describe("Settings", () => {
     expect(
       within(dialog).getByText(/Running on 127.0.0.1:8765/),
     ).toBeInTheDocument();
+  });
+
+  it("saves Keep running when the window is closed through the daemon", async () => {
+    PUT.mockImplementation(() => ok({ keep_running: false }));
+    renderDialog();
+    const dialog = await openSettings();
+    await userEvent.click(within(dialog).getByRole("tab", { name: "General" }));
+    const toggle = await within(dialog).findByRole("checkbox", {
+      name: "Keep running when the window is closed",
+    });
+    expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+    expect(PUT).toHaveBeenCalledWith("/api/settings/desktop", {
+      body: { keep_running: false },
+    });
+    await waitFor(() => {
+      expect(toggle).not.toBeChecked();
+    });
+    expect(toggle).toBeEnabled();
+  });
+
+  it("shows why Keep running wasn't saved, and keeps the old value", async () => {
+    PUT.mockImplementation(() =>
+      Promise.reject(
+        new DaemonError({
+          kind: "api",
+          status: 409,
+          code: "config_not_saved",
+          message: "cannot set desktop.keep_running",
+          field: null,
+          etag: null,
+          current: null,
+        }),
+      ),
+    );
+    renderDialog();
+    const dialog = await openSettings();
+    await userEvent.click(within(dialog).getByRole("tab", { name: "General" }));
+    const toggle = await within(dialog).findByRole("checkbox", {
+      name: "Keep running when the window is closed",
+    });
+    await userEvent.click(toggle);
+    expect(
+      await within(dialog).findByText(
+        /Couldn't save: cannot set desktop.keep_running/,
+      ),
+    ).toBeInTheDocument();
+    expect(toggle).toBeChecked();
+  });
+
+  it("quits through the app's own quit from General, for desktops without a tray", async () => {
+    renderDialog();
+    const dialog = await openSettings();
+    await userEvent.click(within(dialog).getByRole("tab", { name: "General" }));
+    await userEvent.click(
+      await within(dialog).findByRole("button", { name: "Quit SpoolHQ" }),
+    );
+    expect(quitApp).toHaveBeenCalledOnce();
   });
 
   it("has underlined tabs, a ✕ and a footer with Done", async () => {

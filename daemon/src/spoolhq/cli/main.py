@@ -147,7 +147,9 @@ def _serve(settings: Settings, home: Path, fake: tuple[str, Agents] | None = Non
         proxy_headers=False,
         server_header=False,
     )
-    _Server(config, app.state.streams.close_all).run()
+    server = _Server(config, app.state.streams.close_all)
+    app.state.request_exit = server.request_exit
+    server.run()
 
 
 class _Server(uvicorn.Server):
@@ -161,6 +163,12 @@ class _Server(uvicorn.Server):
     def handle_exit(self, sig: int, frame: FrameType | None) -> None:
         self._close_streams()
         super().handle_exit(sig, frame)
+
+    def request_exit(self) -> None:
+        """Stop as on SIGTERM, but exit 0: ``handle_exit`` would record the signal and
+        uvicorn re-raises recorded signals once stopped. The answer in flight is sent."""
+        self._close_streams()
+        self.should_exit = True
 
 
 @app.command()

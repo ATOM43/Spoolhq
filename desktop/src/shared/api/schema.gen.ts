@@ -849,6 +849,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/desktop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Desktop
+         * @description Save ``[desktop]`` to ``config.toml``; the desktop app reads it from there.
+         */
+        put: operations["put_desktop_api_settings_desktop_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/secrets/{secret}": {
         parameters: {
             query?: never;
@@ -881,6 +901,27 @@ export interface paths {
          * @description One read-only call to the provider with the stored secret; the value stays here.
          */
         post: operations["check_secret_route_api_settings_secrets__secret__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/shutdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shutdown
+         * @description Cancel each active run like Cancel does (``cancelled``, worktree removed, ticket
+         *     back to Ready), then close the event streams and exit once this answer is sent.
+         */
+        post: operations["shutdown_api_shutdown_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1069,6 +1110,18 @@ export interface components {
             secrets: {
                 [key: string]: components["schemas"]["SecretView"];
             };
+            desktop: components["schemas"]["DesktopSettings"];
+        };
+        /**
+         * DesktopSettings
+         * @description ``[desktop]`` in ``config.toml``: read by the desktop app, saved through the API.
+         */
+        DesktopSettings: {
+            /**
+             * Keep Running
+             * @default true
+             */
+            keep_running: boolean;
         };
         /** DetectedCommandsView */
         DetectedCommandsView: {
@@ -1794,6 +1847,11 @@ export interface components {
             field: string | null;
             /** Message */
             message: string;
+        };
+        /** Shutdown */
+        Shutdown: {
+            /** Cancelled */
+            cancelled: components["schemas"]["RunView"][];
         };
         /** SpecFile */
         SpecFile: {
@@ -3991,6 +4049,39 @@ export interface operations {
             };
         };
     };
+    put_desktop_api_settings_desktop_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopSettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesktopSettings"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     put_secret_api_settings_secrets__secret__put: {
         parameters: {
             query?: never;
@@ -4071,6 +4162,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SecretTest"];
+                };
+            };
+            /** @description An error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    shutdown_api_shutdown_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shutdown"];
                 };
             };
             /** @description An error. */

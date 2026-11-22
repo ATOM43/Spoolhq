@@ -2829,6 +2829,50 @@
         ]
       }
     },
+    "/api/settings/desktop": {
+      "put": {
+        "summary": "Put Desktop",
+        "description": "Save ``[desktop]`` to ``config.toml``; the desktop app reads it from there.",
+        "operationId": "put_desktop_api_settings_desktop_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopSettings"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/settings/secrets/{secret}": {
       "put": {
         "summary": "Put Secret",
@@ -2969,6 +3013,40 @@
             }
           }
         }
+      }
+    },
+    "/api/shutdown": {
+      "post": {
+        "summary": "Shutdown",
+        "description": "Cancel each active run like Cancel does (``cancelled``, worktree removed, ticket\nback to Ready), then close the event streams and exit once this answer is sent.",
+        "operationId": "shutdown_api_shutdown_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shutdown"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/templates": {
@@ -3490,6 +3568,9 @@
             },
             "type": "object",
             "title": "Secrets"
+          },
+          "desktop": {
+            "$ref": "#/components/schemas/DesktopSettings"
           }
         },
         "type": "object",
@@ -3500,9 +3581,23 @@
           "projects_dir",
           "worktrees_dir",
           "allowed_origins",
-          "secrets"
+          "secrets",
+          "desktop"
         ],
         "title": "DaemonSettings"
+      },
+      "DesktopSettings": {
+        "properties": {
+          "keep_running": {
+            "type": "boolean",
+            "title": "Keep Running",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DesktopSettings",
+        "description": "``[desktop]`` in ``config.toml``: read by the desktop app, saved through the API."
       },
       "DetectedCommandsView": {
         "properties": {
@@ -5684,6 +5779,22 @@
         ],
         "title": "SettingsProblem",
         "description": "The first problem of a ``project.yaml`` that doesn't load."
+      },
+      "Shutdown": {
+        "properties": {
+          "cancelled": {
+            "items": {
+              "$ref": "#/components/schemas/RunView"
+            },
+            "type": "array",
+            "title": "Cancelled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cancelled"
+        ],
+        "title": "Shutdown"
       },
       "SpecFile": {
         "properties": {

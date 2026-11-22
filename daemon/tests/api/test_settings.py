@@ -134,3 +134,38 @@ def test_testing_a_secret_needs_the_token_and_a_known_name(client: TestClient, t
     assert client.post("/api/settings/secrets/github/test").status_code == 401
     unknown = client.post("/api/settings/secrets/aws/test", headers=auth(token))
     assert (unknown.status_code, unknown.json()["error"]["field"]) == (422, "secret")
+
+
+def test_keep_running_defaults_on_and_is_saved_to_config_toml(
+    client: TestClient, token: str, home: Path
+) -> None:
+    assert client.get("/api/settings", headers=auth(token)).json()["desktop"] == {
+        "keep_running": True
+    }
+    (home / "config.toml").write_text('# mine\nlog_level = "info"\n', encoding="utf-8")
+
+    put = client.put("/api/settings/desktop", json={"keep_running": False}, headers=auth(token))
+
+    assert put.status_code == 200
+    assert put.json() == {"keep_running": False}
+    assert (home / "config.toml").read_text(encoding="utf-8") == (
+        '# mine\nlog_level = "info"\n\n[desktop]\nkeep_running = false\n'
+    )
+    body = client.get("/api/settings", headers=auth(token)).json()
+    assert body["desktop"] == {"keep_running": False}
+
+
+def test_keep_running_needs_the_token_and_a_bool(client: TestClient, token: str) -> None:
+    url = "/api/settings/desktop"
+    assert client.put(url, json={"keep_running": False}).status_code == 401
+    assert client.put(url, json={"keep_running": "maybe"}, headers=auth(token)).status_code == 422
+
+
+def test_a_config_toml_that_cannot_be_edited_is_left_alone(
+    client: TestClient, token: str, home: Path
+) -> None:
+    (home / "config.toml").write_text("desktop.keep_running = true\n", encoding="utf-8")
+    put = client.put("/api/settings/desktop", json={"keep_running": False}, headers=auth(token))
+    assert put.status_code == 409
+    assert put.json()["error"]["code"] == "config_not_saved"
+    assert (home / "config.toml").read_text(encoding="utf-8") == "desktop.keep_running = true\n"

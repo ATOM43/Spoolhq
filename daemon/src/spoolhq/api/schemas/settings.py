@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, Field
 
+from spoolhq.core.config import DesktopSettings
 from spoolhq.services.secrets import SecretSource
 
 
@@ -21,6 +22,8 @@ class DaemonSettings(BaseModel):
     allowed_origins: list[str]
     secrets: dict[str, SecretView]
     """``anthropic``, ``github`` and ``clickup``."""
+    desktop: DesktopSettings
+    """``[desktop]`` in ``config.toml``, read by the desktop app."""
 
 
 class SecretValue(BaseModel):

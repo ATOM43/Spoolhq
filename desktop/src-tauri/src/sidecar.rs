@@ -4,17 +4,19 @@
 //! SpoolHQ answer means a daemon is already running and nothing is started; silence
 //! means the bundled `spoolhq` binary is started with `serve` and given 15 s to answer;
 //! any other answer means another program holds the port and nothing is started. A
-//! daemon the app started is stopped when the app exits.
+//! daemon the app started is shut down when the app quits (`quit.rs`).
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
 
 use crate::daemon::{self, Http};
+use crate::process::DaemonProcess;
+use crate::quit::{self, SHUTDOWN_TIMEOUT};
 
 /// How long a started daemon gets to answer `/api/health`.
 pub const START_TIMEOUT: Duration = Duration::from_secs(15);
@@ -52,9 +54,9 @@ pub trait Process {
     fn exited(&mut self) -> bool;
 }
 
-impl Process for Child {
+impl Process for DaemonProcess {
     fn exited(&mut self) -> bool {
-        !matches!(self.try_wait(), Ok(None))
+        Self::exited(self)
     }
 }
 
@@ -153,7 +155,7 @@ fn sidecar_path() -> Result<PathBuf, String> {
     Ok(exe.with_file_name(name))
 }
 
-fn spawn_sidecar(path: &Path) -> Result<Child, String> {
+fn spawn_sidecar(path: &Path) -> Result<DaemonProcess, String> {
     let mut command = Command::new(path);
     command
         .arg("serve")
@@ -166,15 +168,13 @@ fn spawn_sidecar(path: &Path) -> Result<Child, String> {
         // CREATE_NO_WINDOW: no console window for the daemon.
         command.creation_flags(0x0800_0000);
     }
-    command
-        .spawn()
-        .map_err(|err| format!("cannot start {}: {err}", path.display()))
+    DaemonProcess::spawn(command).map_err(|err| format!("cannot start {}: {err}", path.display()))
 }
 
 /// The launch state and the daemon process the app started, if any.
 pub struct Launcher {
     state: Mutex<LaunchState>,
-    child: Mutex<Option<Child>>,
+    child: Mutex<Option<DaemonProcess>>,
 }
 
 impl Default for Launcher {
@@ -219,34 +219,28 @@ impl Launcher {
         self.set_state(result.state);
     }
 
-    /// Stop the daemon this app started, if any (T49 keeps it running instead).
-    pub fn stop(&self) {
-        if let Some(mut child) = self.child.lock().expect("daemon process lock").take() {
-            terminate(&mut child);
-            let _ = child.wait();
-        }
+    /// Whether the daemon is one this app started (and hasn't shut down yet).
+    pub fn owns_daemon(&self) -> bool {
+        self.child.lock().expect("daemon process lock").is_some()
     }
-}
 
-/// Ask the daemon to stop, then kill it after 5 s. On Unix the one-file binary is a
-/// launcher with the daemon as its child: SIGKILL would orphan the child, while SIGTERM
-/// is passed on to it. On Windows it is a plain kill (unchecked there; T49 revisits).
-fn terminate(child: &mut Child) {
-    #[cfg(unix)]
-    {
-        let sent = Command::new("kill")
-            .args(["-TERM", &child.id().to_string()])
-            .status()
-            .is_ok_and(|status| status.success());
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
-        while sent && std::time::Instant::now() < deadline {
-            if child.exited() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(100));
+    /// Shut down the daemon this app started: `ask` sends `POST /api/shutdown`, then the
+    /// process gets [`SHUTDOWN_TIMEOUT`] to end before it is killed. A daemon the app
+    /// didn't start is left alone and `ask` isn't called.
+    pub async fn shut_down<F: Future<Output = bool>>(&self, ask: impl FnOnce() -> F) {
+        let taken = self.child.lock().expect("daemon process lock").take();
+        if let Some(mut process) = taken {
+            quit::shut_down(&mut process, ask(), SHUTDOWN_TIMEOUT).await;
         }
     }
-    let _ = child.kill();
+
+    /// The last resort when the app exits without a clean quit: stop the group, kill
+    /// what is left after 5 s. (On Windows the Job Object also ends it on exit.)
+    pub fn stop(&self) {
+        if let Some(mut process) = self.child.lock().expect("daemon process lock").take() {
+            process.stop(Duration::from_secs(5));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -366,17 +360,20 @@ mod tests {
         assert_eq!(message, "cannot start x");
     }
 
-    #[cfg(unix)]
     #[test]
-    fn terminate_stops_a_process_with_sigterm() {
-        let mut child = Command::new("sleep").arg("30").spawn().unwrap();
-        let started = std::time::Instant::now();
-        terminate(&mut child);
-        let status = child.wait().unwrap();
-        assert!(started.elapsed() < Duration::from_secs(4));
-        // Ended by the signal, not by the fallback kill.
-        use std::os::unix::process::ExitStatusExt;
-        assert_eq!(status.signal(), Some(15));
+    fn an_external_daemon_is_never_asked_to_shut_down() {
+        let launcher = Launcher::default();
+        assert!(!launcher.owns_daemon());
+        let asked = std::cell::Cell::new(false);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        runtime.block_on(launcher.shut_down(|| {
+            asked.set(true);
+            std::future::ready(true)
+        }));
+        assert!(!asked.get());
     }
 
     #[test]
