@@ -53,4 +53,5 @@ jobs:
       - run: just build-daemon
       - name: Smoke test
         shell: bash
-        run: uv run --directory daemon --locked python ../scripts/smoke_sidecar.py ../desktop/src-tauri/binaries/spoolhq-*
+        # The glob expands in the repo root, before uv changes into daemon/.
+        run: uv run --directory daemon --locked python ../scripts/smoke_sidecar.py "$PWD"/desktop/src-tauri/binaries/spoolhq-*

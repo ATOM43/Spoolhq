@@ -28,9 +28,9 @@ Sizes (PyInstaller 6.22.3, Python 3.12):
 
 | OS | Size |
 | --- | --- |
-| Linux x86_64 | 35.1 MB |
-| macOS arm64 | see the `package.yml` run log |
-| Windows x86_64 | see the `package.yml` run log |
+| Linux x86_64 | 35.1 MB (35.2 MB on CI) |
+| macOS arm64 | 29.7 MB |
+| Windows x86_64 | 31.5 MB |
 
 ### Smoke test
 
