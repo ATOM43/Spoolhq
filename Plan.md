@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **49 tickets in 6 phases, about 109 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **50 tickets in 6 phases, about 110.5 hours** for one developer.
 
 **What v1 includes**
 
@@ -84,7 +84,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T20 | Event bridge, Home and New project | 4 Desktop UI | T03, T19 | 2 |
 | T21 | Tickets tab and plan review | 4 Desktop UI | T15, T36 | 2.5 |
 | T22 | Live run | 4 Desktop UI | T37 | 2 |
-| T23 | Bundled daemon | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48 | 2 |
+| T23 | Bundled daemon | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48, T51 | 2 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T40 | 3 |
 | T26 | Documentation and release | 5 Release | T50, T25 | 2.5 |
@@ -111,7 +111,8 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T48 | Quality gates for projects | 3 Planner and Git | T46 | 2 |
 | T49 | Background running and tray | 4 Desktop UI | T23 | 1.5 |
 | T50 | Installers | 4 Desktop UI | T49 | 2 |
-|  | **Total** |  |  | **109** |
+| T51 | Tracker sync in the app | 4 Desktop UI | T24, T33 | 1.5 |
+|  | **Total** |  |  | **110.5** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T49 → T50 → T26 (46.5 h).
 
@@ -486,7 +487,7 @@ Done when:
 
 ## Phase 4 — Desktop UI (v0 screens)
 
-Twenty-one tickets put a minimal face on the daemon and package it: two screens (Home and the project panel, with its Settings tab), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Twenty-two tickets put a minimal face on the daemon and package it: two screens (Home and the project panel, with its Settings tab), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -771,9 +772,26 @@ Done when:
 - [ ] An invalid base URL is refused next to its field
 - [ ] App Settings shows nothing per project
 
+### T51 · Tracker sync in the app
+
+Show tracker sync in the app, so a failed sync is never silent. *Depends on: T24, T33 · 1.5 h*
+
+- Daemon: `POST …/tracker/retry` re-queues the project's failed actions and clears the failed state (200 and nothing done when none failed); the sync worker also starts when a project's settings are saved with a `tracker` block, so adding a tracker needs no restart; `last_error` is a fixed message built by code, never a response body or the token.
+- Project header: only with a tracker, a sync line next to the remote, as icon + label: "ClickUp · synced 2 min ago" (absolute time on hover), "ClickUp · syncing · 3 pending", or "ClickUp · sync failed" in red with the error in the tooltip and **Retry**; a small **Push now**, disabled with a reason while syncing.
+- Home: a failed sync is a Needs-you card ("ClickUp sync failed", the project, the error, the age, **Retry**) that goes away once sync is ok.
+- Sync runs outside ticket runs, so the app refetches the tracker state every 15 s, only for on-screen projects with a tracker, and right after Push now or Retry.
+
+Done when:
+
+- [ ] Plan.md lists T51, with consistent table, totals and critical path
+- [ ] The project header shows the sync state, and a failed sync shows its error with Retry
+- [ ] A failed sync appears as a Needs-you card on Home
+- [ ] Adding a tracker to a project's settings starts sync without a restart
+- [ ] Lint and tests pass, and CI is green on Linux, macOS and Windows
+
 ### T23 · Bundled daemon
 
-The app brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48 · 2 h*
+The app brings its own daemon. *Depends on: T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48, T51 · 2 h*
 
 - The daemon is built with PyInstaller and shipped as a Tauri sidecar; the app starts it when none is running and connects to a running one otherwise.
 - `devtools/` and the fake runner are left out of the build, and the packaged daemon refuses `SPOOLHQ_DEV_FAKE_RUNNER`.
