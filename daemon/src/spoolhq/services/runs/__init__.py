@@ -63,6 +63,7 @@ from spoolhq.services.runs.notes import record_run_note
 from spoolhq.services.runs.policy import record_policy
 from spoolhq.services.runs.pulls import open_pull_requests, set_pull_request
 from spoolhq.services.runs.recovery import INTERRUPTED_REASON, recover_interrupted
+from spoolhq.services.runs.redaction import redact_attempt
 from spoolhq.services.runs.registry import RunRegistry, WorkspaceRuns
 from spoolhq.services.runs.rows import MAX_PAYLOAD_BYTES
 from spoolhq.services.runs.totals import (
@@ -123,6 +124,7 @@ __all__ = [
     "open_pull_requests",
     "pull_request_integration",
     "record_policy",
+    "redact_attempt",
     "record_run_note",
     "recover_interrupted",
     "set_pull_request",

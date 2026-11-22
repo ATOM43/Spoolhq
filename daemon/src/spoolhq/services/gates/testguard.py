@@ -38,11 +38,13 @@ _JS_TEST = re.compile(r"""\b(?:it|test)(?:\.\w+)*\s*\(\s*(["'`])(.+?)\1""")
 
 @dataclass(frozen=True)
 class Coverage:
-    """The ticket's total, main's stored one, and why the comparison is skipped."""
+    """The ticket's total, main's stored one, why the comparison is skipped, and a
+    problem that fails the guard (a missing report once main has a total)."""
 
     total: float | None = None
     stored: float | None = None
     note: str = ""
+    problem: str = ""
 
 
 def _tests(path: str, text: str) -> list[tuple[int, str]]:
@@ -121,6 +123,8 @@ def check_tests(
         for change in changes
         for problem in _file_problems(worktree, change, test_paths, done_when)
     ]
+    if coverage.problem:
+        problems.append(coverage.problem)
     notes = [coverage.note] if coverage.note else []
     if coverage.total is not None and coverage.stored is not None:
         if round(coverage.stored - coverage.total, 6) > COVERAGE_DROP:

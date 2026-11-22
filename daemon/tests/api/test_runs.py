@@ -416,3 +416,21 @@ def test_run_all_through_the_api(run_client: TestClient, token: str) -> None:
     assert follow(run_client, token)["run"]["status"] == "done"
     again = run_client.post("/api/projects/demo/run/all", headers=auth(token))
     assert again.status_code == 409
+
+
+def test_attempt_artifacts_come_back_redacted(
+    client: TestClient, token: str, workspace: Path
+) -> None:
+    key = "sk-ant-" + "api03-Zx9Yw8Vu7Ts6Rq5Po4Nm3Lk2"
+    log = _log(client, workspace)
+    run = log.start_run("T01")
+    attempt = log.start_attempt(run.id, AttemptKind.INITIAL)
+    patch = f'diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-a\n+K = "{key}"\n'
+    write_artifact(attempt, "diff.patch", patch)
+    write_artifact(attempt, "transcript.jsonl", json.dumps({"text": key}) + "\n")
+    base = f"/api/projects/demo/runs/{run.id}/attempts/1"
+    diff = client.get(f"{base}/diff", headers=auth(token))
+    transcript = client.get(f"{base}/transcript", headers=auth(token))
+    assert diff.json()["files"][0]["patch"].endswith('+K = "[redacted: Anthropic key]"')
+    assert key not in diff.text + transcript.text
+    assert json.loads(transcript.text) == {"text": "[redacted: Anthropic key]"}

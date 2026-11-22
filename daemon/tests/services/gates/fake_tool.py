@@ -1,7 +1,7 @@
 """A stand-in lint/test tool for the gate tests: ``python fake_tool.py <mode> [arg]``.
 
 Modes: pass, fail-test, lint-error, sleep, sleep-with-child <pid file>, flood,
-print-env, ansi, marker <file>. Standard library only.
+print-env, ansi, marker <file>, echo-fail <text>. Standard library only.
 """
 
 import os
@@ -73,6 +73,9 @@ def main() -> int:
         sys.stdout.buffer.write(
             b"\x1b[31mFAILED tests/a.py::test_red\x1b[0m - boom\r\nbad \xff byte\r\ndone\r\n"
         )
+        return 1
+    if mode == "echo-fail":
+        print(f"FAILED tests/test_env.py::test_key - got {sys.argv[2]}")
         return 1
     if mode == "marker":
         Path(sys.argv[2]).write_text("ran", encoding="utf-8")

@@ -22,6 +22,7 @@ from spoolhq.services.gates.model import (
 )
 from spoolhq.services.gates.output import build_excerpt, clean, failing_tests
 from spoolhq.services.gates.process import OUTPUT_CAP_BYTES, run_process
+from spoolhq.services.gates.secrets import redact_file
 
 # Seconds; project.yaml's gates.timeouts defaults.
 DEFAULT_TIMEOUTS: dict[GateName, int] = {"install": 600, "lint": 300, "test": 900}
@@ -142,6 +143,7 @@ def _run_gate(
         message = f"gate '{name}': couldn't start '{argv[0]}': {exc.strerror or exc}"
         return _not_run(name, command, GateStatus.ERROR, message)
     duration = time.monotonic() - start
+    redact_file(log_path)  # the log is stored and shown; the excerpt is read from it
 
     if result.timed_out:
         status = GateStatus.TIMED_OUT

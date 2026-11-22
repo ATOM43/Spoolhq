@@ -13,6 +13,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from spoolhq.services.gates import redact, redact_data
 from spoolhq.services.runs.log import RUNS_DIR
 from spoolhq.services.runs.model import Attempt
 
@@ -49,8 +50,11 @@ def attempt_dir(workspace: Path, attempt: Attempt) -> Path:
 
 def write_artifact(attempt: Attempt, name: str, data: str | bytes) -> Path:
     """Write one of the allowed files atomically: a temp file in the same folder, then
-    ``os.replace``. Text is written as UTF-8 without newline translation."""
+    ``os.replace``. Text is redacted (JSON value by value) and written as UTF-8 without
+    newline translation."""
     file_name = _artifact_name(name)
+    if isinstance(data, str):
+        data = _redacted(file_name, data)
     folder = attempt_dir(attempt.workspace, attempt)
     target = folder / file_name
     content = data.encode("utf-8") if isinstance(data, str) else data
@@ -68,10 +72,24 @@ def write_artifact(attempt: Attempt, name: str, data: str | bytes) -> Path:
     return target
 
 
+def _redacted(file_name: str, text: str) -> str:
+    if not file_name.endswith(".json"):
+        return redact(text)
+    # Redacted before encoding, so an escape like \n never hides a match; unchanged
+    # data keeps its formatting.
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return redact(text)
+    clean = redact_data(data)
+    return text if clean == data else json.dumps(clean, indent=2)
+
+
 def append_transcript(attempt: Attempt, record: dict[str, Any]) -> Path:
-    """Append one JSON line to ``transcript.jsonl``, flushed and fsynced."""
+    """Append one JSON line to ``transcript.jsonl``, redacted, flushed and fsynced."""
     if not isinstance(record, dict):
         raise ValueError(f"transcript record must be a dict, got {type(record).__name__}")
+    record = redact_data(record)
     try:
         line = json.dumps(record, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
     except (TypeError, ValueError) as exc:

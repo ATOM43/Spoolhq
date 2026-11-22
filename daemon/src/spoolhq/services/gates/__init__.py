@@ -34,7 +34,16 @@ from spoolhq.services.gates.runner import (
     run_gates,
     try_command,
 )
-from spoolhq.services.gates.secrets import SECRET_SCAN, scan_secrets
+from spoolhq.services.gates.secrets import (
+    HIGH_ENTROPY,
+    SECRET_SCAN,
+    high_entropy_values,
+    marker,
+    redact,
+    redact_data,
+    redact_file,
+    scan_secrets,
+)
 from spoolhq.services.gates.size import (
     DEFAULT_EXEMPT,
     DEFAULT_MAX_FILE_LINES,
@@ -58,6 +67,12 @@ __all__ = [
     "check_tests",
     "read_total",
     "scan_secrets",
+    "HIGH_ENTROPY",
+    "high_entropy_values",
+    "marker",
+    "redact",
+    "redact_data",
+    "redact_file",
     "store_total",
     "stored_total",
     "DEFAULT_EXEMPT",

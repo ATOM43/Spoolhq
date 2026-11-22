@@ -10,6 +10,7 @@ from spoolhq.services.gates import (
     GateStatus,
     check_file_sizes,
     check_tests,
+    high_entropy_values,
     read_total,
     scan_secrets,
     store_total,
@@ -28,9 +29,12 @@ def _coverage(ctx: RunContext, commands: GateRun) -> Coverage:
     if test is None or test.status is not GateStatus.PASSED:
         return Coverage(note="Coverage not compared: the test gate didn't pass")
     total = read_total(ctx.worktree.path, report)
+    stored = stored_total(ctx.workspace)
+    if total is None and stored is not None:
+        problem = f"Coverage report {report} wasn't written; the test command must write it"
+        return Coverage(stored=stored, problem=problem)
     if total is None:
         return Coverage(note=f"Coverage not compared: {report} is missing or unreadable")
-    stored = stored_total(ctx.workspace)
     if stored is None:
         return Coverage(total, None, f"Coverage {total:.1f}% recorded; main has none stored yet")
     return Coverage(total, stored)
@@ -38,8 +42,9 @@ def _coverage(ctx: RunContext, commands: GateRun) -> Coverage:
 
 def builtin_gates(
     ctx: RunContext, commands: GateRun
-) -> tuple[tuple[GateResult, ...], float | None]:
-    """The built-in gates' results on the ticket's diff, and its coverage total."""
+) -> tuple[tuple[GateResult, ...], float | None, set[str]]:
+    """The built-in gates' results on the ticket's diff, its coverage total, and the
+    high-entropy values the secret scan found (to redact from the attempt's records)."""
     settings = ctx.project.gates
     changes = ticket_changes(ctx)
     sizes = check_file_sizes(
@@ -52,7 +57,10 @@ def builtin_gates(
     done_when = [item.text for item in ctx.ticket.done_when]
     guard = check_tests(ctx.worktree.path, changes, settings.test_paths, done_when, coverage)
     secrets = scan_secrets(changes, settings.secret_scan_allow)
-    return (sizes, guard, secrets), coverage.total
+    found = set()
+    if secrets.status is GateStatus.FAILED:
+        found = high_entropy_values(changes, settings.secret_scan_allow)
+    return (sizes, guard, secrets), coverage.total, found
 
 
 def record_main_coverage(run_log: RunLog, run_id: int, ticket_id: str) -> None:

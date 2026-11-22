@@ -1,10 +1,11 @@
 """The implementer's live transcript: its normalised ``AgentEvent``s as run-log events.
 
 Each event becomes one ``agent.*`` event of the attempt, so the Run tab can show it live
-and load it again later. Text is untrusted and cut to fit the run log's 64 KiB payloads;
-the full stream stays in the attempt's ``transcript.jsonl``.
+and load it again later. Text is untrusted, redacted (``docs/runs.md#redaction``) and
+cut to fit the run log's 64 KiB payloads; the full stream stays in ``transcript.jsonl``.
 """
 
+import dataclasses
 import logging
 from typing import Any
 
@@ -19,6 +20,7 @@ from spoolhq.services.agents import (
     ToolResult,
     Usage,
 )
+from spoolhq.services.gates import redact
 from spoolhq.services.runs import Attempt, EventKind, RunLog
 
 logger = logging.getLogger(__name__)
@@ -35,7 +37,15 @@ def _result(event: ToolResult) -> dict[str, Any]:
 
 
 def event_payload(event: AgentEvent) -> tuple[EventKind, dict[str, Any]] | None:
-    """The run-log kind and payload of ``event``; None for those not shown (``Started``)."""
+    """The run-log kind and payload of ``event``, its text redacted (before any cut);
+    None for those not shown (``Started``)."""
+    texts = {
+        field.name: redact(value)
+        for field in dataclasses.fields(event)
+        if field.init
+        if isinstance(value := getattr(event, field.name), str)
+    }
+    event = dataclasses.replace(event, **texts)  # type: ignore[arg-type]
     match event:
         case Message():
             return EventKind.AGENT_MESSAGE, {"text": event.text[:TEXT_LIMIT]}

@@ -133,3 +133,9 @@ def test_coverage_within_half_a_point_passes(tmp_path: Path) -> None:
 def test_a_skipped_coverage_check_says_why(tmp_path: Path) -> None:
     note = "Coverage not compared: no gates.coverage_report in project.yaml"
     assert guard(tmp_path, [], coverage=Coverage(note=note)) == (GateStatus.PASSED, note)
+
+
+def test_a_coverage_problem_fails_the_guard(tmp_path: Path) -> None:
+    problem = "Coverage report coverage.xml wasn't written; the test command must write it"
+    coverage = Coverage(stored=91.2, problem=problem)
+    assert guard(tmp_path, [], coverage=coverage) == (GateStatus.FAILED, problem)

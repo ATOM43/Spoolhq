@@ -2,6 +2,7 @@
 duplicates, a slow client that never slows the run, and shutdown."""
 
 import asyncio
+import json
 import threading
 import time
 from collections.abc import Iterator
@@ -15,7 +16,9 @@ from starlette.testclient import WebSocketTestSession
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from spoolhq.api.routers import events
-from spoolhq.services.runs import EventKind, RunLog
+from spoolhq.services.agents import Message, ToolCall, ToolResult
+from spoolhq.services.runloop.transcript import Recorder
+from spoolhq.services.runs import AttemptKind, EventKind, RunLog
 from tests.api.test_runs import auth, follow
 
 URL = "/api/projects/demo/events"
@@ -235,3 +238,20 @@ def test_heartbeat_and_cleanup(
             break
         time.sleep(0.01)
     assert bus.subscriber_count == 0
+
+
+def test_a_client_receives_agent_events_redacted(
+    client: TestClient, token: str, workspace: Path
+) -> None:
+    key = "sk-ant-" + "api03-Zx9Yw8Vu7Ts6Rq5Po4Nm3Lk2"
+    log = run_log(client, workspace)
+    run = log.start_run("T01")
+    attempt = log.start_attempt(run.id, AttemptKind.INITIAL)
+    record = Recorder(log, attempt)
+    with connect(client, token, since=log.last_event_id()) as ws:
+        record(Message(f"Set API to {key}"))
+        record(ToolResult("t1", f"API={key}\n", is_error=False))
+        record(ToolCall("t2", "Write", json.dumps({"content": f"KEY\n{key}"})))
+        received = receive(ws, 3)
+    assert key not in json.dumps(received)
+    assert "[redacted: Anthropic key]" in json.dumps(received)

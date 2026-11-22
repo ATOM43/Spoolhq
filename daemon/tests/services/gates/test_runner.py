@@ -264,3 +264,12 @@ def test_try_command_stops_when_cancelled(tmp_path: Path) -> None:
     result = try_command("test", fake_tool_cmd("sleep"), tmp_path, 60, cancel)
     assert result.status is GateStatus.TIMED_OUT
     assert time.monotonic() - started < 20
+
+
+def test_a_secret_in_gate_output_is_redacted(tmp_path: Path) -> None:
+    key = "sk-ant-" + "api03-Zx9Yw8Vu7Ts6Rq5Po4Nm3Lk2"
+    result = gates(tmp_path, test=fake_tool_cmd("echo-fail", key)).results[2]
+    assert result.status is GateStatus.FAILED
+    assert "[redacted: Anthropic key]" in result.excerpt
+    assert key not in result.excerpt
+    assert key not in (tmp_path / "logs" / "test.log").read_text(encoding="utf-8")

@@ -49,6 +49,7 @@ from spoolhq.services.runs import (
     append_transcript,
     attempt_dir,
     record_run_note,
+    redact_attempt,
     write_artifact,
 )
 
@@ -271,7 +272,7 @@ def run_gates(ctx: RunContext, attempt: Attempt, label: str) -> GateRun:
         attempt_dir(ctx.workspace, attempt),
         on_gate=started,
     )
-    built_in, coverage = builtin_gates(ctx, gate_run)
+    built_in, coverage, found = builtin_gates(ctx, gate_run)
     gate_run = GateRun((*gate_run.results, *built_in))
     tests = [name for result in gate_run.results for name in result.failing_tests]
     data = {
@@ -281,6 +282,7 @@ def run_gates(ctx: RunContext, attempt: Attempt, label: str) -> GateRun:
         "coverage": coverage,
     }
     write_artifact(attempt, ArtifactName.GATES, json.dumps(data, indent=2, default=str))
+    redact_attempt(ctx.run_log, attempt, found)  # under the run lock this worker holds
     first = gate_run.first_failure
     if first is None:
         text = "✓ passed"

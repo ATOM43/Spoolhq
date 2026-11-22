@@ -140,6 +140,14 @@ Every lifecycle change appends its event in the same transaction:
 - Ids increase across the whole workspace, so `events_since(after_id, run_id=None, limit=1000)` is a cursor.
 - A payload must be a JSON-serialisable `dict` (no sets, no `NaN`). Its compact UTF-8 encoding is capped at **64 KiB** (65 536 bytes); a larger one raises `ValueError` naming its size. Large content (transcripts, diffs, gate output) belongs in the attempt's files.
 
+## Redaction
+
+Secrets the agent writes are redacted before they are stored or streamed, by one redactor next to the secret scan (`redact` in `services/gates/secrets.py`; patterns in [gates](gates.md#secret-scan)). A match becomes `[redacted: <pattern name>]`.
+
+- **On write:** `write_artifact` redacts `diff.patch` as text and a JSON file value by value (unchanged data keeps its formatting); `append_transcript` redacts each record before encoding it; the transcript `Recorder` redacts an agent event's text before cutting it to 20,000 characters, so the stored event and the WebSocket message are the same redacted payload; each gate log is redacted when its command ends, before the excerpt is read from it.
+- **After a scan hit:** a value only the `high-entropy string` rule flags isn't known until the scan runs, so `redact_attempt` (`services/runs/redaction.py`) replaces it, raw and JSON-escaped, in every file of that attempt's folder and in its event rows. That is the **one exception to append-only events**: inside one transaction, under the run lock the worker holds, the `events_no_update` trigger is dropped, the rows updated and the trigger recreated, so nothing else ever sees the table without it. `secure_delete` and a `TRUNCATE` checkpoint keep the old bytes out of free pages and the WAL (best effort: a concurrent reader can hold the checkpoint back). Events already streamed to an open app before the scan aren't recalled; reloading the run shows the redacted rows.
+- **Not redacted:** the worktree and the ticket branch keep the original file, so the retry (or you) can fix it; **Discard** removes them. Runs stored before this change are not rewritten. A secret split across two lines, or one no pattern knows, isn't caught.
+
 ## The event bus
 
 `EventBus` is an in-process, synchronous, thread-safe fan-out with no database access; the daemon keeps one per workspace. `RunLog` publishes each operation's events **after its transaction commits**, in id order; a transaction that fails publishes nothing. `publish` never blocks and never raises.

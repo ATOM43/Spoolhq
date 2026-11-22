@@ -65,13 +65,13 @@ Coverage fell from 91.2% to 88.4%
 
 With `gates.coverage_report` set (a repo-relative path the test command writes), the guard reads the ticket's total after the test gate passes: Cobertura XML (the root tag's `line-rate`, read with a regex, never an XML parser), coverage.py's JSON (`totals.percent_covered`) or Istanbul's `coverage-summary.json` (`total.lines.pct`). A path that leaves the worktree counts as missing. The total goes into the attempt's `gates.json` as `coverage`.
 
-Main's total lives in `<workspace>/coverage.json`. At each merge (a local or direct one, at the integration's finish, and a merged pull request, when the poller sees it), the total in the `gates.json` that landed becomes main's: the integration's gate rerun when main had moved, else the approved attempt's. The gate fails when the ticket's total is more than 0.5 points below main's. Otherwise the gate output says what happened and the gate passes:
+Main's total lives in `<workspace>/coverage.json`. Once it has one, a configured report that is missing or unreadable **fails** the guard with `Coverage report backend/coverage.xml wasn't written; the test command must write it`: a ticket can't skip the comparison by no longer writing the file. While main has no total yet, it is skipped with a note (below). At each merge (a local or direct one, at the integration's finish, and a merged pull request, when the poller sees it), the total in the `gates.json` that landed becomes main's: the integration's gate rerun when main had moved, else the approved attempt's. The gate fails when the ticket's total is more than 0.5 points below main's. Otherwise the gate output says what happened and the gate passes:
 
 - `Coverage 90.9% (main 91.2%)`
 - `Coverage 91.2% recorded; main has none stored yet` (the first merge stores it)
 - `Coverage not compared: no gates.coverage_report in project.yaml`
 - `Coverage not compared: the test gate didn't pass`
-- `Coverage not compared: backend/coverage.xml is missing or unreadable`
+- `Coverage not compared: backend/coverage.xml is missing or unreadable` (only while main has no total)
 
 ## Secret scan
 
@@ -88,7 +88,9 @@ The sixth gate, `secret_scan` ("Secret scan"), checks every **added** line of th
 | `secret assignment` | a name containing `key`, `secret`, `token` or `password` (any case) assigned (`=`, `:`, `:=`) a quoted value of 16+ characters without spaces; a value starting with `/`, `~` or `.`, or holding `$ { } < >` (a path or a template), doesn't count |
 | `high-entropy string` | a quoted string of 32+ characters without spaces whose Shannon entropy is above 4.5 bits per character, outside lockfiles (`**/*.lock`, `**/*-lock.*`) |
 
-A hit reads `Possible secret in config.py:3 (Anthropic key)`, one per line (at most 50, then `… and N more`). **The value itself is never printed**: not in the gate result, `gates.json`, the retry prompt, events, logs or the app. Every pattern runs in linear time (fixed prefixes, possessive quantifiers), since the agent controls the input. What the agent itself wrote stays in its own transcript and the attempt's diff, as any of its work does.
+A hit reads `Possible secret in config.py:3 (Anthropic key)`, one per line (at most 50, then `… and N more`). **The value itself is never printed**: not in the gate result, `gates.json`, the retry prompt, events, logs or the app. Every pattern runs in linear time (fixed prefixes, possessive quantifiers), since the agent controls the input.
+
+**Redaction.** The same patterns (all but `high-entropy string`) are redacted in what SpoolHQ stores, as it is written: a match becomes `[redacted: <name>]` (for a private key, each line of its body) in agent events, `transcript.jsonl`, `diff.patch`, `gates.json` and gate logs, so the Run tab, the artifact API and the event stream never show it ([runs](runs.md#redaction)). A high-entropy value is redacted only once this gate flags it, in that attempt's files and events. The worktree and the ticket branch keep the original file, so the implementer's retry (or you) can fix it; **Discard** removes both.
 
 **Allowed:** files matching `gates.secret_scan_allow` (globs, default `[]`, for fixtures with fake keys), and any line carrying the comment `spoolhq:allow-secret`.
 
