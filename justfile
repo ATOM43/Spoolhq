@@ -92,3 +92,9 @@ build-daemon:
 # An empty sidecar file, if none exists: Tauri's build needs the file (docs/packaging.md).
 sidecar-placeholder:
     uv run --no-project python scripts/build_sidecar.py --placeholder
+
+# Set the app version in the daemon package, desktop/package.json and tauri.conf.json,
+# then relock the daemon (docs/packaging.md): `just set-version 0.1.0`.
+set-version version:
+    uv run --no-project python scripts/release.py set-version {{ version }}
+    uv lock --directory daemon

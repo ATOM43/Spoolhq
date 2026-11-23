@@ -466,3 +466,9 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 460 · The quit confirm and the tray status are native and come from Rust · docs/decisions/desktop.md
 461 · Settings → General has Quit SpoolHQ, the one new webview permission · docs/decisions/desktop.md
 462 · `config.toml` is edited line by line, and refused when that isn't safe · docs/decisions/core.md
+463 · Installers: AppImage, `.deb` and `.rpm`; NSIS; a `.dmg` for macOS arm64 and x86_64 · docs/decisions/desktop.md
+464 · The updater plugin is registered in Rust only, with `requireSignedVersion` on · docs/decisions/desktop.md
+465 · The macOS app is ad-hoc signed · docs/decisions/desktop.md
+466 · Linux updates go through the AppImage only · docs/decisions/desktop.md
+467 · One app version in three files, set by `just set-version` · docs/decisions/core.md
+468 · `latest.json` is built by `scripts/release.py`, not `tauri-action` · docs/decisions/core.md

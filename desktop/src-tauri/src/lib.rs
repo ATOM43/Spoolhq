@@ -22,6 +22,7 @@ pub fn run() {
             tray::show_main(app);
         }))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(daemon::Http::default())
         .manage(events::Streams::default())
         .manage(sidecar::Launcher::default())

@@ -29,6 +29,9 @@ tauri = { version = "=2.12.4", features = ["tray-icon"] }
 tauri-plugin-dialog = "=2.8.3"
 # A second launch shows the running app's window instead (no tray on some desktops).
 tauri-plugin-single-instance = "=2.5.5"
+# The signed update feed (docs/packaging.md). Rust only: the webview has no updater
+# permission; T52 adds the commands that check and install.
+tauri-plugin-updater = "=2.14.1"
 tokio = { version = "=1.53.3", features = ["macros", "sync", "time"] }
 # The daemon's event WebSocket, plain ws:// to 127.0.0.1 only: no TLS features.
 tokio-tungstenite = { version = "=0.30.0", default-features = false, features = ["connect"] }

@@ -1,6 +1,6 @@
 # Packaging the daemon
 
-The desktop app ships its own daemon: the whole `spool` CLI, `serve` included, built with PyInstaller as one file and declared as a Tauri sidecar. Closing the window hides it, a tray icon brings it back or quits ([below](#closing-quitting-and-the-tray)); installers and release builds come with T50.
+The desktop app ships its own daemon: the whole `spool` CLI, `serve` included, built with PyInstaller as one file and declared as a Tauri sidecar. Closing the window hides it, a tray icon brings it back or quits ([below](#closing-quitting-and-the-tray)). Release tags build installers for every OS and a signed update feed ([Installers and updates](#installers-and-updates)).
 
 ## Building the binary
 
@@ -107,6 +107,100 @@ extra_path = ["~/tools/bin", "/opt/agents/bin"]
 
 The user's shell is never run to read its `PATH`. Agents inherit the extended `PATH` through the environment allowlist. `spool agents` prints the full path each CLI was found at (`path       /home/me/.local/bin/claude`).
 
-## macOS: unsigned builds
+## Installers and updates
 
-The binary and the app aren't signed or notarized yet; signing comes later, after T50. On macOS, Gatekeeper may block an unsigned binary that was downloaded: allow it under System Settings → Privacy & Security, or remove the quarantine attribute with `xattr -d com.apple.quarantine <file>`. Binaries built locally aren't quarantined.
+### One version
+
+The daemon package (`daemon/pyproject.toml`), `desktop/package.json` and `desktop/src-tauri/tauri.conf.json` carry the same version. Change it with:
+
+```sh
+just set-version 0.1.0
+```
+
+which writes all three (`scripts/release.py set-version`) and relocks the daemon (`uv lock`). The release fails with "Tag v0.1.0 doesn't match the app version 0.0.9" when the tag isn't `v<version>`, and with "The app versions differ: …" when the files disagree.
+
+### Making a release
+
+1. `just set-version 0.1.0`, commit and push.
+2. Tag with the release notes as the message and push the tag: `git tag -a v0.1.0 -m "First release" && git push origin v0.1.0`.
+3. `.github/workflows/release.yml` builds every installer and `latest.json` and creates a **draft** GitHub Release with them. Check it, then publish it on GitHub. Until then, the feed's `latest/download/latest.json` still points at the previous published release.
+
+A **dry run** (Actions → Release → Run workflow, `dry_run` ticked, the default) builds and checks everything on any branch and uploads the installers and `latest.json` as workflow artifacts only; it makes no release and doesn't check the tag.
+
+The signing secrets are needed for a dry run too. Before your public key is in `tauri.conf.json`, `tauri build` refuses to sign, so give the dry run the public key that matches the secrets in its `pubkey` input (`gh workflow run release.yml -f dry_run=true -f pubkey="$(cat key.pub)"`); the input is ignored outside dry runs.
+
+### What gets built
+
+| OS | Runner | Installers | Update artifact |
+| --- | --- | --- | --- |
+| Linux x86_64 | `ubuntu-latest` | AppImage, `.deb`, `.rpm` | the AppImage |
+| Windows x86_64 | `windows-latest` | NSIS `SpoolHQ_<v>_x64-setup.exe` | the setup `.exe` |
+| macOS arm64 | `macos-26` | `SpoolHQ_<v>_aarch64.dmg` | `SpoolHQ_<v>_aarch64.app.tar.gz` |
+| macOS x86_64 | `macos-26-intel` | `SpoolHQ_<v>_x64.dmg` | `SpoolHQ_<v>_x86_64.app.tar.gz` |
+
+Each job first builds the real sidecar for its OS (`just build-daemon`, with the dev-tools check), then the Tauri bundle (`tauri build --bundles …`), so no installer can hold the placeholder. Then it checks its bundles: the sidecar is in the `.deb` and `.rpm` file lists; the AppImage is extracted, the `.dmg` mounted and the Windows installer run silently (`/S /D=<temp>`), and the T23 smoke test runs against the `spoolhq` binary inside; and its `latest-<platform>.json` lists the platform with a URL and a signature. A last job merges the four into `latest.json`, checks all four platforms again and publishes (or, for a dry run, uploads).
+
+The Linux build runs on Ubuntu 24.04, so the AppImage needs glibc 2.39 or newer.
+
+### The update feed
+
+The app carries Tauri's updater plugin (`tauri-plugin-updater`, pinned 2.14.1), registered in Rust only: the webview has no updater permission. T52 adds the update check and the Install and restart button. `tauri.conf.json` holds the feed and the public key:
+
+```json
+"plugins": {
+  "updater": {
+    "pubkey": "<the public key>",
+    "endpoints": ["https://github.com/ATOM43/Spoolhq/releases/latest/download/latest.json"]
+  }
+}
+```
+
+`bundle.createUpdaterArtifacts` makes `tauri build` sign each update artifact with `TAURI_SIGNING_PRIVATE_KEY` (a `.sig` file next to it). `latest.json`, built by `scripts/release.py`:
+
+```json
+{
+  "version": "0.1.0",
+  "notes": "First release",
+  "pub_date": "2026-11-23T10:00:00Z",
+  "minimum_version": "",
+  "platforms": {
+    "linux-x86_64": { "url": "https://github.com/ATOM43/Spoolhq/releases/download/v0.1.0/SpoolHQ_0.1.0_amd64.AppImage", "signature": "<the .sig file>" },
+    "windows-x86_64": { "url": "…/SpoolHQ_0.1.0_x64-setup.exe", "signature": "…" },
+    "darwin-aarch64": { "url": "…/SpoolHQ_0.1.0_aarch64.app.tar.gz", "signature": "…" },
+    "darwin-x86_64": { "url": "…/SpoolHQ_0.1.0_x86_64.app.tar.gz", "signature": "…" }
+  }
+}
+```
+
+`minimum_version` is empty for now; T52 reads it but v0.1.0 doesn't enforce it. The notes are the tag's message (`SpoolHQ v0.1.0` for a tag without one). The workflow also checks that each signature was made by the key whose public half is in `tauri.conf.json` (the minisign key ids match), so a release signed with the wrong key fails instead of shipping updates no install accepts.
+
+**Linux updates go through the AppImage only.** The updater replaces the running AppImage. Someone who installed the `.deb` or `.rpm` installs the new package from the release page (or their package manager) instead; T52's notice tells them so.
+
+### The signing key
+
+The update signing key is yours: CI only reads it from GitHub secrets, and it is never committed, printed or logged. Set it up once:
+
+1. Generate the key pair locally, with a password, outside the repository:
+
+   ```sh
+   pnpm --dir desktop exec tauri signer generate -w ~/.tauri/spoolhq.key
+   ```
+
+   This writes the private key to `~/.tauri/spoolhq.key` and the public key to `~/.tauri/spoolhq.key.pub`.
+2. Add two repository secrets (Settings → Secrets and variables → Actions, or `gh secret set`): `TAURI_SIGNING_PRIVATE_KEY` with the contents of `spoolhq.key`, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` with its password. `gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/spoolhq.key` reads the file without it showing in your shell history.
+3. Put the contents of `spoolhq.key.pub` (one base64 line) in `plugins.updater.pubkey` in `tauri.conf.json` and commit it. A tag fails with "Put the update public key in tauri.conf.json; see docs/packaging.md" while it is empty.
+4. Back the private key and its password up outside GitHub (a password manager, an offline copy). GitHub secrets can't be read back.
+
+> **Losing the private key or its password means installed copies can't trust any new update.** Each install only accepts updates signed by the key it shipped with; a new key reaches users only through a manual reinstall.
+
+Without the secrets the workflow stops at once with "Set the TAURI_SIGNING_PRIVATE_KEY secret; see docs/packaging.md" (or the same for `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`). A local `pnpm --dir desktop tauri build` needs the same two variables, since update artifacts are always signed.
+
+### Unsigned builds
+
+Neither the apps nor the installers are code signed or notarized yet; that comes later. The macOS app is only ad-hoc signed (`bundle.macOS.signingIdentity: "-"`), which Apple Silicon needs to run it at all.
+
+- **macOS**: opening a downloaded unsigned app shows "SpoolHQ can't be opened" or "is damaged". Drag it to Applications, then either right-click → Open → Open, allow it under System Settings → Privacy & Security → **Open Anyway**, or remove the quarantine attribute: `xattr -dr com.apple.quarantine /Applications/SpoolHQ.app`.
+- **Windows**: SmartScreen shows "Windows protected your PC". Click **More info** → **Run anyway**. The installer installs for the current user (no admin prompt).
+- **Linux**: make the AppImage executable (`chmod +x SpoolHQ_*.AppImage`); the `.deb` and `.rpm` install as usual.
+
+Binaries built locally aren't quarantined.

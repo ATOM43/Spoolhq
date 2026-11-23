@@ -1,9 +1,14 @@
 """Keep ``tests/`` mirroring ``src/spoolhq/`` (see "Layout" in docs/testing.md), and the
 decisions index matching ``docs/decisions/``."""
 
+import base64
 import importlib.util
+import json
+import shutil
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from tests.conftest import FIXTURES_DIR, TESTS_DIR
 
@@ -189,3 +194,170 @@ def test_binary_names_follow_the_sidecar_convention() -> None:
     assert linux.name == "spoolhq-x86_64-unknown-linux-gnu"
     assert windows.name == "spoolhq-x86_64-pc-windows-msvc.exe"
     assert linux.parent.parts[-3:] == ("desktop", "src-tauri", "binaries")
+
+
+# The release helpers (scripts/release.py, docs/packaging.md).
+
+REPO = TESTS_DIR.parents[1]
+
+
+# Loaded once, so ReleaseError is one class across the tests.
+release = _script("release")
+VERSIONED = ("daemon/pyproject.toml", "desktop/package.json", "desktop/src-tauri/tauri.conf.json")
+
+
+@pytest.fixture
+def root(tmp_path: Path) -> Path:
+    """A copy of the three versioned files."""
+    for path in VERSIONED:
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REPO / path, tmp_path / path)
+    return tmp_path
+
+
+def _minisign(key_id: bytes, extra: bytes) -> str:
+    """A Tauri-style base64 public key or signature with the given key id."""
+    line = base64.b64encode(b"Ed" + key_id + extra).decode()
+    return base64.b64encode(f"untrusted comment: x\n{line}\n".encode()).decode()
+
+
+def test_set_version_updates_all_three_files(root: Path) -> None:
+    release.set_version(root, "0.1.0")
+    assert set(release.versions(root).values()) == {"0.1.0"}
+    assert json.loads((root / "desktop/package.json").read_text("utf-8"))["version"] == "0.1.0"
+    conf = json.loads((root / "desktop/src-tauri/tauri.conf.json").read_text("utf-8"))
+    assert conf["version"] == "0.1.0"
+    # Only the package's own version changes, not a dependency's or the tool versions.
+    pyproject = (root / "daemon/pyproject.toml").read_text("utf-8")
+    assert pyproject.count('version = "0.1.0"') == 1
+    assert release.app_version(root) == "0.1.0"
+
+
+def test_set_version_refuses_a_non_semver(root: Path) -> None:
+    with pytest.raises(release.ReleaseError, match="isn't x.y.z"):
+        release.set_version(root, "v0.1")
+
+
+def test_a_tag_that_doesnt_match_the_app_version_fails(root: Path) -> None:
+    release.set_version(root, "0.0.9")
+    with pytest.raises(
+        release.ReleaseError, match="^Tag v0.1.0 doesn't match the app version 0.0.9$"
+    ):
+        release.check_tag(root, "v0.1.0")
+
+
+def test_versions_that_differ_fail(root: Path) -> None:
+    release.set_version(root, "0.1.0")
+    package = root / "desktop/package.json"
+    package.write_text(package.read_text("utf-8").replace('"0.1.0"', '"0.0.9"', 1), "utf-8")
+    with pytest.raises(release.ReleaseError, match="The app versions differ"):
+        release.check_tag(root, "v0.1.0")
+
+
+def test_a_matching_tag_needs_the_public_key(root: Path) -> None:
+    conf_path = root / "desktop/src-tauri/tauri.conf.json"
+    conf = json.loads(conf_path.read_text("utf-8"))
+    conf["version"] = "0.1.0"
+    for key in ("", _minisign(b"k" * 8, b"p" * 32)):
+        conf["plugins"]["updater"]["pubkey"] = key
+        conf_path.write_text(json.dumps(conf, indent=2), "utf-8")
+        release.set_version(root, "0.1.0")
+        if key:
+            release.check_tag(root, "v0.1.0")
+        else:
+            with pytest.raises(release.ReleaseError, match="Put the update public key"):
+                release.check_tag(root, "v0.1.0")
+
+
+def _artifact(folder: Path, name: str, signature: str | None) -> Path:
+    path = folder / name
+    path.write_bytes(b"bundle")
+    if signature is not None:
+        path.with_name(name + ".sig").write_text(signature + "\n", "utf-8")
+    return path
+
+
+def test_feed_lists_each_platform_with_its_url_and_signature(tmp_path: Path) -> None:
+    artifacts = {
+        "linux-x86_64": _artifact(tmp_path, "SpoolHQ_0.1.0_amd64.AppImage", "sig-linux"),
+        "windows-x86_64": _artifact(tmp_path, "SpoolHQ_0.1.0_x64-setup.exe", "sig-win"),
+    }
+    data = release.feed("0.1.0", "Notes", "2026-11-23T10:00:00Z", artifacts)
+    download = "https://github.com/ATOM43/Spoolhq/releases/download/v0.1.0/"
+    assert data == {
+        "version": "0.1.0",
+        "notes": "Notes",
+        "pub_date": "2026-11-23T10:00:00Z",
+        "minimum_version": "",
+        "platforms": {
+            "linux-x86_64": {
+                "signature": "sig-linux",
+                "url": download + "SpoolHQ_0.1.0_amd64.AppImage",
+            },
+            "windows-x86_64": {
+                "signature": "sig-win",
+                "url": download + "SpoolHQ_0.1.0_x64-setup.exe",
+            },
+        },
+    }
+
+
+def test_feed_without_a_signature_fails(tmp_path: Path) -> None:
+    artifact = _artifact(tmp_path, "SpoolHQ_0.1.0_x64-setup.exe", None)
+    with pytest.raises(release.ReleaseError, match="No signature for SpoolHQ_0.1.0_x64-setup"):
+        release.feed("0.1.0", "", "2026-11-23T10:00:00Z", {"windows-x86_64": artifact})
+
+
+def test_collect_names_the_mac_update_by_architecture(root: Path) -> None:
+    bundle = root / "desktop/src-tauri/target/release/bundle"
+    (bundle / "macos").mkdir(parents=True)
+    (bundle / "dmg").mkdir()
+    _artifact(bundle / "macos", "SpoolHQ.app.tar.gz", "sig-mac")
+    _artifact(bundle / "dmg", "SpoolHQ_0.0.0_aarch64.dmg", None)
+    feed_path = release.collect(root, "aarch64-apple-darwin", root / "dist")
+    assert sorted(path.name for path in (root / "dist").iterdir()) == [
+        "SpoolHQ_0.0.0_aarch64.app.tar.gz",
+        "SpoolHQ_0.0.0_aarch64.app.tar.gz.sig",
+        "SpoolHQ_0.0.0_aarch64.dmg",
+        "latest-darwin-aarch64.json",
+    ]
+    entry = json.loads(feed_path.read_text("utf-8"))["platforms"]["darwin-aarch64"]
+    assert entry["url"].endswith("/v0.0.0/SpoolHQ_0.0.0_aarch64.app.tar.gz")
+    assert entry["signature"] == "sig-mac"
+
+
+def test_collect_fails_when_an_installer_is_missing(root: Path) -> None:
+    (root / "desktop/src-tauri/target/release/bundle/nsis").mkdir(parents=True)
+    with pytest.raises(release.ReleaseError, match="Expected one nsis/\\*-setup.exe"):
+        release.collect(root, "x86_64-pc-windows-msvc", root / "dist")
+
+
+def _part(key: str, version: str = "0.1.0") -> dict[str, Any]:
+    return {
+        "version": version,
+        "notes": "",
+        "pub_date": "x",
+        "minimum_version": "",
+        "platforms": {key: {"url": f"https://x/{key}", "signature": "s"}},
+    }
+
+
+def test_merge_combines_platforms_and_sets_the_notes() -> None:
+    data = release.merge([_part("linux-x86_64"), _part("darwin-aarch64")], "Notes", "now")
+    assert set(data["platforms"]) == {"linux-x86_64", "darwin-aarch64"}
+    assert data["notes"] == "Notes"
+    assert data["pub_date"] == "now"
+    with pytest.raises(release.ReleaseError, match="Feeds for versions"):
+        release.merge([_part("linux-x86_64"), _part("darwin-aarch64", "0.2.0")], "", "now")
+
+
+def test_check_feed_needs_each_platform_signed_by_the_configured_key() -> None:
+    key = _minisign(b"A" * 8, b"p" * 32)
+    data = _part("linux-x86_64")
+    data["platforms"]["linux-x86_64"]["signature"] = _minisign(b"A" * 8, b"s" * 64)
+    release.check_feed(data, ["linux-x86_64"], key)
+    release.check_feed(data, ["linux-x86_64"], "")
+    with pytest.raises(release.ReleaseError, match="no URL and signature for windows-x86_64"):
+        release.check_feed(data, ["windows-x86_64"], key)
+    with pytest.raises(release.ReleaseError, match="isn't signed by the key"):
+        release.check_feed(data, ["linux-x86_64"], _minisign(b"B" * 8, b"p" * 32))

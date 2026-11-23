@@ -220,7 +220,7 @@ Spec, ticket and agent text is untrusted. Markdown goes through `shared/ui` `Mar
 
 ## CI
 
-Five GitHub Actions workflows in `.github/workflows/` run side by side on every push and pull request (DECISIONS 395–397):
+Five GitHub Actions workflows in `.github/workflows/` run side by side on every push and pull request (DECISIONS 395–397); a sixth, `release.yml` (below), makes releases:
 
 | Workflow | Runs on | Steps | Runs when these change |
 | --- | --- | --- | --- |
@@ -229,5 +229,7 @@ Five GitHub Actions workflows in `.github/workflows/` run side by side on every 
 | `frontend.yml` | Linux | `just test-desktop` (Vitest) | `desktop/**` except `desktop/src-tauri/**` |
 | `rust.yml` | Linux, macOS, Windows | `just sidecar-placeholder`, `just lint-rust test-rust`, then a debug `cargo build` | `desktop/src-tauri/**`, `rust-toolchain.toml` |
 | `package.yml` | Linux, macOS, Windows | `just build-daemon` (the PyInstaller sidecar), then `scripts/smoke_sidecar.py` on it ([packaging.md](packaging.md)) | `daemon/**`, the two sidecar scripts, the workflow; `v*` tags |
+
+`release.yml` runs only on `v*` tags and by hand (`workflow_dispatch` with `dry_run`), never on normal pushes, which keep the fast debug build above. It checks the signing secrets and, for a tag, that the tag matches the app version (`scripts/release.py check-tag`); then on Linux, Windows, macOS arm64 (`macos-26`) and macOS x86_64 (`macos-26-intel`) it builds the real sidecar, the Tauri bundle and its signed update artifact, and checks the bundle (sidecar inside, smoke test against the bundled copy, the platform in its feed); a last job merges `latest.json` and makes a draft GitHub Release, or uploads workflow artifacts for a dry run. Only that job has `contents: write`. Details in [packaging.md](packaging.md#installers-and-updates).
 
 `justfile`, `.github/workflows/**`, `scripts/**` and the three lockfiles run every workflow except `package.yml`, so a docs-only push runs lint alone. Each workflow has a `concurrency` group per branch: a newer push cancels the older run. Caches: uv through `astral-sh/setup-uv`, the pnpm store through `actions/setup-node` (`cache: pnpm`), Rust's `target/` through `Swatinem/rust-cache`. `just` itself is the pinned `rust-just` wheel installed with `uv tool install`. Every action is pinned to a commit SHA with its version in a comment.
