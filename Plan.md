@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **50 tickets in 6 phases, about 110.5 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **51 tickets in 6 phases, about 112.5 hours** for one developer.
 
 **What v1 includes**
 
@@ -87,7 +87,7 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T23 | Bundled daemon | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48, T51 | 2 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
 | T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T40 | 3 |
-| T26 | Documentation and release | 5 Release | T50, T25 | 2.5 |
+| T26 | Documentation and release | 5 Release | T50, T52, T25 | 2.5 |
 | T27 | Agent roles, custom endpoints and contract suite | 3 Planner and Git | T09, T14 | 2 |
 | T30 | Codex CLI backend | 3 Planner and Git | T27 | 2 |
 | T31 | Claude Agent SDK backend | 3 Planner and Git | T27 | 2 |
@@ -110,11 +110,12 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T47 | Project settings: agents | 4 Desktop UI | T32, T27 | 2 |
 | T48 | Quality gates for projects | 3 Planner and Git | T46 | 2 |
 | T49 | Background running and tray | 4 Desktop UI | T23 | 1.5 |
-| T50 | Installers | 4 Desktop UI | T49 | 2 |
+| T50 | Installers and update feed | 4 Desktop UI | T49 | 2.5 |
 | T51 | Tracker sync in the app | 4 Desktop UI | T24, T33 | 1.5 |
-|  | **Total** |  |  | **110.5** |
+| T52 | Update check in the app | 4 Desktop UI | T50 | 1.5 |
+|  | **Total** |  |  | **112.5** |
 
-Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T49 → T50 → T26 (46.5 h).
+Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T49 → T50 → T52 → T26 (48.5 h).
 
 ## Phase 0 — Scaffolding
 
@@ -487,7 +488,7 @@ Done when:
 
 ## Phase 4 — Desktop UI (v0 screens)
 
-Twenty-two tickets put a minimal face on the daemon and package it: two screens (Home and the project panel, with its Settings tab), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
+Twenty-three tickets put a minimal face on the daemon, package it and keep it up to date: two screens (Home and the project panel, with its Settings tab), a ticket drawer and three dialogs, as specified in `screens-prompt-v0.md`. The full 16-screen design in `screens-prompt.md` is the v0.2 target. Everything here already works from the CLI.
 
 ### T19 · Live API
 
@@ -816,17 +817,42 @@ Done when:
 - [ ] Closing the window leaves a run going, and reopening shows it live
 - [ ] Quitting from the tray stops the daemon and any running agent cleanly, with no leftover process
 
-### T50 · Installers
+### T50 · Installers and update feed
 
-One installer per OS, built by CI. *Depends on: T49 · 2 h*
+Installers for every OS and a signed update feed, built by CI on release tags. *Depends on: T49 · 2.5 h*
 
-- CI builds installers for macOS, Windows and Linux on release tags only; normal pushes keep the fast check build.
-- Code signing comes later.
+- One version everywhere: the daemon package, `desktop/package.json` and `tauri.conf.json`; `just set-version <x.y.z>` updates all three, and the release fails with "Tag v0.1.0 doesn't match the app version 0.0.9" when they differ.
+- `release.yml` on `v*` tags and on `workflow_dispatch` with a `dry_run` input: Linux AppImage, `.deb` and `.rpm`; the Windows NSIS setup `.exe`; a macOS `.dmg` for arm64 (x86_64 only if a GitHub runner for it exists). Each build makes the real sidecar for its OS first, then the Tauri bundle. No code signing yet; `docs/packaging.md` says how to open an unsigned app.
+- Tauri's updater plugin, pinned exactly and used only from Rust (no webview permission); the public key in `tauri.conf.json`; the endpoint `https://github.com/ATOM43/Spoolhq/releases/latest/download/latest.json`.
+- The workflow signs the update artifacts with `TAURI_SIGNING_PRIVATE_KEY` and its password from GitHub secrets ("Set the TAURI_SIGNING_PRIVATE_KEY secret; see docs/packaging.md" when missing) and builds `latest.json` (version, notes, date, each platform's URL and signature, an optional empty `minimum_version`). Linux updates go through the AppImage only.
+- A tag creates a draft GitHub Release with every installer and `latest.json`; a dry run uploads workflow artifacts only.
+- CI checks each bundle: the sidecar is inside, the T23 smoke test passes against it, and `latest.json` lists the platform with a signature.
+- `docs/packaging.md`: installers, the feed, how to generate, store and back up the signing key, unsigned builds.
 
 Done when:
 
-- [ ] A release tag produces installers for all three OSes
+- [ ] Plan.md lists the extended T50 and T52, with consistent table, totals and critical path
+- [ ] A dry run produces installers for Linux, macOS and Windows, each with a working bundled daemon
+- [ ] A tag produces a draft release with the installers and a signed `latest.json`
+- [ ] A tag that doesn't match the app version fails the release
+- [ ] Lint and tests pass, and CI is green on Linux, macOS and Windows
 - [ ] A fresh machine with only the installer and git can create a project and run a ticket
+
+### T52 · Update check in the app
+
+Tell users about a new version and install it safely. *Depends on: T50 · 1.5 h*
+
+- Check the update feed at launch and every 6 h, from Rust.
+- "Update available · v0.2.0" in Home's top bar and Settings → About, with the release notes as plain text.
+- **Install and restart**, disabled with a reason while a run is going.
+- A setting to turn checks off; a failed check shows only a quiet line in About.
+- The feed's `minimum_version` field is read but not enforced in v0.1.0.
+
+Done when:
+
+- [ ] A newer version in the feed shows the notice, and Install and restart updates the app
+- [ ] An update never installs while a run is going
+- [ ] An update with a bad signature is refused
 
 ## Phase 5 — Tracker, dogfood and release
 
@@ -862,7 +888,7 @@ Done when:
 
 ### T26 · Documentation and release
 
-What a stranger needs to install it and trust it. *Depends on: T50, T25 · 2.5 h*
+What a stranger needs to install it and trust it. *Depends on: T50, T52, T25 · 2.5 h*
 
 - README: what it is, install, a first project in five minutes, screenshots.
 - `docs/`: architecture, ticket format, writing a template, writing a tracker adapter, security model.
