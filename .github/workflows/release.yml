@@ -69,6 +69,11 @@ jobs:
           - { os: macos-26-intel, target: x86_64-apple-darwin, platform: darwin-x86_64, bundles: "app,dmg" }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    env:
+      # No x86_64 macOS wheel of cryptography: it builds against Homebrew's OpenSSL, and the
+      # runner's Python brings an older libssl that PyInstaller bundles in its place. uv's
+      # Python links OpenSSL statically, so nothing clashes.
+      UV_PYTHON_PREFERENCE: ${{ matrix.target == 'x86_64-apple-darwin' && 'only-managed' || 'managed' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -131,7 +136,7 @@ jobs:
       - name: Check the Linux bundles
         if: runner.os == 'Linux'
         run: |
-          dpkg-deb -c dist/*.deb | grep -E ' \./usr/bin/spoolhq$'
+          dpkg-deb -c dist/*.deb | grep -E ' (\./)?usr/bin/spoolhq$'
           rpm -qlp dist/*.rpm | grep -x /usr/bin/spoolhq
           chmod +x dist/*.AppImage
           mkdir -p "$RUNNER_TEMP/appimage"
