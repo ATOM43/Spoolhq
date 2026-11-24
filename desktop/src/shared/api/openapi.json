@@ -2832,7 +2832,7 @@
     "/api/settings/desktop": {
       "put": {
         "summary": "Put Desktop",
-        "description": "Save ``[desktop]`` to ``config.toml``; the desktop app reads it from there.",
+        "description": "Save the ``[desktop]`` keys sent to ``config.toml``; the desktop app reads it there.\n\nKeys left out of the body keep their current value.",
         "operationId": "put_desktop_api_settings_desktop_put",
         "requestBody": {
           "content": {
@@ -3591,6 +3591,11 @@
           "keep_running": {
             "type": "boolean",
             "title": "Keep Running",
+            "default": true
+          },
+          "check_updates": {
+            "type": "boolean",
+            "title": "Check Updates",
             "default": true
           }
         },

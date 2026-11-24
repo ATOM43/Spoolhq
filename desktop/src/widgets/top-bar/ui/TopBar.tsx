@@ -8,6 +8,7 @@ import { SettingsDialog } from "@/features/settings";
 import { ReasonButton } from "@/shared/ui";
 
 import { StatusPill } from "./StatusPill";
+import { UpdateNotice } from "./UpdateNotice";
 
 /** Amber "Fake runner" while the daemon replays a dev scenario (SPOOLHQ_DEV_FAKE_RUNNER). */
 function FakeRunnerChip() {
@@ -25,7 +26,7 @@ function FakeRunnerChip() {
   );
 }
 
-/** Home's top bar: app name, daemon status, Settings and + New project. */
+/** Home's top bar: app name, update notice, daemon status, Settings and + New project. */
 export function TopBar() {
   const { status } = useDaemonStatus();
   return (
@@ -35,6 +36,7 @@ export function TopBar() {
       </Link>
       <div className="flex items-center gap-3">
         {status.state === "ok" ? <FakeRunnerChip /> : null}
+        <UpdateNotice />
         <StatusPill status={status} />
         <SettingsDialog firstRun />
         {status.state === "ok" ? (

@@ -22,6 +22,10 @@ dirs = "=6.0.0"
 futures-util = { version = "=0.3.34", default-features = false, features = ["sink"] }
 # Plain HTTP to 127.0.0.1 only: no TLS, no proxy support, HTTP/1.1.
 reqwest = { version = "=0.13.5", default-features = false }
+# The crypto provider reqwest needs once tauri-plugin-updater turns on its
+# `rustls-no-provider` feature (already in the tree through the plugin; pinned to the
+# locked version, the features the plugin already enables).
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 tauri = { version = "=2.12.4", features = ["tray-icon"] }
@@ -43,6 +47,8 @@ toml = "=1.1.8"
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [dev-dependencies]
+# The mock runtime for the update tests (a feature, no new crate).
+tauri = { version = "=2.12.4", features = ["tray-icon", "test"] }
 tempfile = "=3.27.0"
 tokio = { version = "=1.53.3", features = ["net", "rt"] }
 

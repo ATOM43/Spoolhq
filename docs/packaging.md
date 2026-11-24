@@ -1,6 +1,6 @@
 # Packaging the daemon
 
-The desktop app ships its own daemon: the whole `spool` CLI, `serve` included, built with PyInstaller as one file and declared as a Tauri sidecar. Closing the window hides it, a tray icon brings it back or quits ([below](#closing-quitting-and-the-tray)). Release tags build installers for every OS and a signed update feed ([Installers and updates](#installers-and-updates)).
+The desktop app ships its own daemon: the whole `spool` CLI, `serve` included, built with PyInstaller as one file and declared as a Tauri sidecar. Closing the window hides it, a tray icon brings it back or quits ([below](#closing-quitting-and-the-tray)). Release tags build installers for every OS and a signed update feed, which the app checks and installs from ([Installers and updates](#installers-and-updates), [Updating the app](#updating-the-app)).
 
 ## Building the binary
 
@@ -122,7 +122,7 @@ which writes all three (`scripts/release.py set-version`) and relocks the daemon
 ### Making a release
 
 1. `just set-version 0.1.0`, commit and push.
-2. Tag with the release notes as the message and push the tag: `git tag -a v0.1.0 -m "First release" && git push origin v0.1.0`.
+2. Tag with `git tag -a`, the release notes as the message, and push the tag: `git tag -a v0.1.0 -m "First release" && git push origin v0.1.0`. A tag without a message (a plain `git tag v0.1.0`, or an empty `-m`) fails the release with "Use an annotated tag with release notes: git tag -a v0.1.0 -m "…"": the notes are what the app shows under **Install and restart**. Delete it (`git tag -d v0.1.0 && git push origin :refs/tags/v0.1.0`) and tag again.
 3. `.github/workflows/release.yml` builds every installer and `latest.json` and creates a **draft** GitHub Release with them. Check it, then publish it on GitHub. Until then, the feed's `latest/download/latest.json` still points at the previous published release.
 
 A **dry run** (Actions → Release → Run workflow, `dry_run` ticked, the default) builds and checks everything on any branch and uploads the installers and `latest.json` as workflow artifacts only; it makes no release and doesn't check the tag.
@@ -133,18 +133,18 @@ The signing secrets are needed for a dry run too. Before your public key is in `
 
 | OS | Runner | Installers | Update artifact |
 | --- | --- | --- | --- |
-| Linux x86_64 | `ubuntu-latest` | AppImage, `.deb`, `.rpm` | the AppImage |
+| Linux x86_64 | `ubuntu-22.04` | AppImage, `.deb`, `.rpm` | the AppImage |
 | Windows x86_64 | `windows-latest` | NSIS `SpoolHQ_<v>_x64-setup.exe` | the setup `.exe` |
 | macOS arm64 | `macos-26` | `SpoolHQ_<v>_aarch64.dmg` | `SpoolHQ_<v>_aarch64.app.tar.gz` |
 | macOS x86_64 | `macos-26-intel` | `SpoolHQ_<v>_x64.dmg` | `SpoolHQ_<v>_x86_64.app.tar.gz` |
 
-Each job first builds the real sidecar for its OS (`just build-daemon`, with the dev-tools check), then the Tauri bundle (`tauri build --bundles …`), so no installer can hold the placeholder. Then it checks its bundles: the sidecar is in the `.deb` and `.rpm` file lists; the AppImage is extracted, the `.dmg` mounted and the Windows installer run silently (`/S /D=<temp>`), and the T23 smoke test runs against the `spoolhq` binary inside; and its `latest-<platform>.json` lists the platform with a URL and a signature. A last job merges the four into `latest.json`, checks all four platforms again and publishes (or, for a dry run, uploads).
+Each job first builds the real sidecar for its OS (`just build-daemon`, with the dev-tools check), then the Tauri bundle (`tauri build --bundles …`), so no installer can hold the placeholder. Then it checks its bundles: the sidecar is in the `.deb` and `.rpm` file lists; the AppImage is extracted, the `.dmg` mounted and the Windows installer run silently (`/S /D=<temp>`), and the T23 smoke test runs against the `spoolhq` binary inside; and its `latest-<platform>.json` lists the platform with a URL and a signature. On Linux, `scripts/check_glibc.py` reads the `GLIBC_` versions named by every binary in the AppImage, including the libraries bundled inside the sidecar, and fails above 2.35. A last job merges the four into `latest.json`, checks all four platforms again and publishes (or, for a dry run, uploads).
 
-The Linux build runs on Ubuntu 24.04, so the AppImage needs glibc 2.39 or newer.
+**Supported Linux versions.** The Linux build runs on `ubuntu-22.04`, the oldest Ubuntu runner GitHub offers (checked 2026-11-24: 22.04, 24.04 and 26.04, with `ubuntu-latest` on 26.04), so everything needs glibc 2.35 or newer, plus WebKitGTK 4.1: Ubuntu 22.04 and later, Debian 12 and later, Fedora 36 and later, and other x86_64 distributions of that age. The release fails if any binary needs a newer glibc. When GitHub retires 22.04, the next runner raises the floor; the check says by how much.
 
 ### The update feed
 
-The app carries Tauri's updater plugin (`tauri-plugin-updater`, pinned 2.14.1), registered in Rust only: the webview has no updater permission. T52 adds the update check and the Install and restart button. `tauri.conf.json` holds the feed and the public key:
+The app carries Tauri's updater plugin (`tauri-plugin-updater`, pinned 2.14.1), registered in Rust only: the webview has no updater permission ([Updating the app](#updating-the-app)). `tauri.conf.json` holds the feed and the public key:
 
 ```json
 "plugins": {
@@ -172,9 +172,49 @@ The app carries Tauri's updater plugin (`tauri-plugin-updater`, pinned 2.14.1), 
 }
 ```
 
-`minimum_version` is empty for now; T52 reads it but v0.1.0 doesn't enforce it. The notes are the tag's message (`SpoolHQ v0.1.0` for a tag without one). The workflow also checks that each signature was made by the key whose public half is in `tauri.conf.json` (the minisign key ids match), so a release signed with the wrong key fails instead of shipping updates no install accepts.
+`minimum_version` is empty for now; the app reads it and returns it in its update status, but v0.1.0 doesn't enforce it. The notes are the tag's message (a tag without one fails the release). The workflow also checks that each signature was made by the key whose public half is in `tauri.conf.json` (the minisign key ids match), so a release signed with the wrong key fails instead of shipping updates no install accepts.
 
-**Linux updates go through the AppImage only.** The updater replaces the running AppImage. Someone who installed the `.deb` or `.rpm` installs the new package from the release page (or their package manager) instead; T52's notice tells them so.
+**Linux updates go through the AppImage only.** The updater replaces the running AppImage. Someone who installed the `.deb` or `.rpm` installs the new package from the release page (or their package manager) instead; the app's notice tells them so.
+
+### Updating the app
+
+**Checking.** The app reads the feed from Rust (`update_app.rs`) at launch, once the daemon is up, and every 6 hours while it runs. Only Rust talks to the feed and verifies downloads; the webview reads the result through two app commands, `update_status` (with `check: true` for **Check now**) and `update_install`, and has no updater permission. Turn checks off with **Check for updates** in Settings → General, saved through the daemon like Keep running:
+
+```toml
+[desktop]
+check_updates = false
+```
+
+With it off, the app makes no update request at all, at launch, on the timer or from Check now.
+
+**What the app shows:**
+
+| State | Where | Shown |
+| --- | --- | --- |
+| A newer version | Home's top bar | "Update available · v0.2.0" (icon + label), opening Settings → About |
+| A newer version | Settings → About | the current and new version, the release notes as plain text (never HTML or links) and **Install and restart** |
+| Up to date | Settings → About | "SpoolHQ is up to date · checked 5 min ago", with **Check now** |
+| The check failed (no network, an error status, a malformed feed) | Settings → About | one quiet line, "Couldn't check for updates · 5 min ago". No toast, no Needs-you card. |
+| Checks off | Settings → About | "Update checks are off" |
+
+**Installing.** **Install and restart** is disabled with "Wait for the run to finish (T05)" while a run is going or paused in any project. Clicking it:
+
+1. downloads the update and verifies its signature against the public key in `tauri.conf.json` (and that the signature names the version the feed announced). A failed download or a bad signature installs nothing: "The update couldn't be verified; nothing was installed.";
+2. asks the daemon (`GET /api/projects`) whether a run is going, right before installing, and stops if one is, or if the daemon doesn't answer;
+3. for a daemon the app started, shuts it down cleanly through `POST /api/shutdown`, as Quit does;
+4. installs and restarts the app, which starts the new bundled daemon. If installing fails, the old daemon is started again.
+
+With an external daemon (`spool serve`), the app updates and the daemon keeps running; About says "Your own daemon keeps running; restart it to update it."
+
+**Linux.** Only the AppImage updates itself. The app tells an AppImage from a `.deb` or `.rpm` install by how it was started: the AppImage runtime sets `APPIMAGE`. Without it, the notice says "Download the new package from the release page" and shows no install button.
+
+**A local feed for development.** In debug builds only, `SPOOLHQ_DEV_UPDATE_FEED` points the check at a feed on `http://127.0.0.1` (anything else is ignored):
+
+```sh
+SPOOLHQ_DEV_UPDATE_FEED=http://127.0.0.1:9000/latest.json just dev
+```
+
+Release builds ignore the variable, and no build can change the public key: an update from a local feed still has to be signed by the release key.
 
 ### The signing key
 

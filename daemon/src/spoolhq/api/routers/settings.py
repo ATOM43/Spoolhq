@@ -43,14 +43,19 @@ def get_settings(request: Request) -> DaemonSettings:
 
 @router.put("/desktop")
 def put_desktop(request: Request, body: DesktopSettings) -> DesktopSettings:
-    """Save ``[desktop]`` to ``config.toml``; the desktop app reads it from there."""
+    """Save the ``[desktop]`` keys sent to ``config.toml``; the desktop app reads it there.
+
+    Keys left out of the body keep their current value."""
     ensure_home()
+    sent = {key: getattr(body, key) for key in sorted(body.model_fields_set)}
     try:
-        set_bool(config_path(), "desktop", "keep_running", body.keep_running)
+        for key, value in sent.items():
+            set_bool(config_path(), "desktop", key, value)
     except (ConfigError, OSError) as exc:
         raise ApiError(409, "config_not_saved", str(exc)) from None
-    request.app.state.settings = settings(request).model_copy(update={"desktop": body})
-    return body
+    desktop = settings(request).desktop.model_copy(update=sent)
+    request.app.state.settings = settings(request).model_copy(update={"desktop": desktop})
+    return desktop
 
 
 def _keychain_error(exc: Exception) -> ApiError:

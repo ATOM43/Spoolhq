@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from spoolhq.core.config import DesktopSettings
 from tests.conftest import MemoryKeyring
 
 SECRET = "sk-test-0123456789-do-not-leak"  # noqa: S105 - a fake value the test looks for
@@ -140,19 +141,42 @@ def test_keep_running_defaults_on_and_is_saved_to_config_toml(
     client: TestClient, token: str, home: Path
 ) -> None:
     assert client.get("/api/settings", headers=auth(token)).json()["desktop"] == {
-        "keep_running": True
+        "keep_running": True,
+        "check_updates": True,
     }
     (home / "config.toml").write_text('# mine\nlog_level = "info"\n', encoding="utf-8")
 
     put = client.put("/api/settings/desktop", json={"keep_running": False}, headers=auth(token))
 
     assert put.status_code == 200
-    assert put.json() == {"keep_running": False}
+    assert put.json() == {"keep_running": False, "check_updates": True}
     assert (home / "config.toml").read_text(encoding="utf-8") == (
         '# mine\nlog_level = "info"\n\n[desktop]\nkeep_running = false\n'
     )
     body = client.get("/api/settings", headers=auth(token)).json()
-    assert body["desktop"] == {"keep_running": False}
+    assert body["desktop"] == {"keep_running": False, "check_updates": True}
+
+
+def test_check_updates_is_saved_alone_and_keeps_keep_running(
+    client: TestClient, token: str, home: Path
+) -> None:
+    (home / "config.toml").write_text("[desktop]\nkeep_running = false\n", encoding="utf-8")
+    client.app.state.settings = client.app.state.settings.model_copy(
+        update={"desktop": DesktopSettings(keep_running=False)}
+    )
+
+    put = client.put("/api/settings/desktop", json={"check_updates": False}, headers=auth(token))
+
+    assert put.json() == {"keep_running": False, "check_updates": False}
+    assert (home / "config.toml").read_text(encoding="utf-8") == (
+        "[desktop]\ncheck_updates = false\nkeep_running = false\n"
+    )
+    assert (
+        client.put(
+            "/api/settings/desktop", json={"check_updates": "maybe"}, headers=auth(token)
+        ).status_code
+        == 422
+    )
 
 
 def test_keep_running_needs_the_token_and_a_bool(client: TestClient, token: str) -> None:

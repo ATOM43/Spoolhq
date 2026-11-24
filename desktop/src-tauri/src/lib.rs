@@ -3,7 +3,8 @@
 //! The webview talks to the daemon only through the commands in [`daemon`], which add
 //! the bearer token on the Rust side, and [`events`], which holds the event WebSocket,
 //! so the token never reaches JavaScript. Closing the window hides it and the tray
-//! icon brings it back or quits ([`tray`], [`quit`]).
+//! icon brings it back or quits ([`tray`], [`quit`]). Updates are checked and installed
+//! from Rust ([`update`], [`update_app`]).
 
 mod daemon;
 mod events;
@@ -11,11 +12,20 @@ mod process;
 mod quit;
 mod sidecar;
 mod tray;
+mod update;
+mod update_app;
 
 use tauri::Manager;
 
+/// tauri-plugin-updater builds reqwest with `rustls-no-provider`, which reaches our own
+/// client too: without a provider `daemon::Http::default()` panics at launch.
+fn install_crypto_provider() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    install_crypto_provider();
     tauri::Builder::default()
         // First, so a second launch exits before setting anything up.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -27,12 +37,14 @@ pub fn run() {
         .manage(events::Streams::default())
         .manage(sidecar::Launcher::default())
         .manage(tray::Quitting::default())
+        .manage(update_app::Updates::default())
         .setup(|app| {
             tray::setup(app)?;
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let http = handle.state::<daemon::Http>();
                 handle.state::<sidecar::Launcher>().start(&http).await;
+                update_app::spawn_checks(handle.clone());
             });
             Ok(())
         })
@@ -42,7 +54,9 @@ pub fn run() {
             daemon::daemon_request,
             events::events_subscribe,
             events::events_unsubscribe,
-            tray::app_quit
+            tray::app_quit,
+            update_app::update_status,
+            update_app::update_install
         ])
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -68,4 +82,14 @@ pub fn run() {
             tauri::RunEvent::Exit => app.state::<sidecar::Launcher>().stop(),
             _ => {}
         });
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_daemon_client_builds_once_the_crypto_provider_is_installed() {
+        super::install_crypto_provider();
+        assert!(rustls::crypto::CryptoProvider::get_default().is_some());
+        let _ = crate::daemon::Http::default();
+    }
 }

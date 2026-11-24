@@ -6,9 +6,10 @@ import { Button, CopyCommand } from "@/shared/ui";
 
 import {
   useDaemonSettings,
-  useSaveKeepRunning,
+  useSaveDesktop,
   useVersion,
 } from "../model/queries";
+import { UpdateSection } from "./UpdateSection";
 
 const REPOSITORY = "https://github.com/ATOM43/Spoolhq";
 
@@ -21,14 +22,46 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+/** A checkbox saved through the daemon; `pending` is the value being saved, if any. */
+function Switch({
+  label,
+  hint,
+  checked,
+  pending,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  pending: boolean | undefined;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      <label className="flex items-center gap-2 font-medium">
+        <input
+          type="checkbox"
+          checked={pending ?? checked}
+          disabled={pending !== undefined}
+          onChange={(event) => {
+            onChange(event.target.checked);
+          }}
+        />
+        {label}
+      </label>
+      <span className="text-xs text-ink-muted">{hint}</span>
+    </div>
+  );
+}
+
 /**
- * D2 · General: "keep running", saved through the daemon to `~/.spoolhq/config.toml`,
+ * D2 · General: "keep running" and "check for updates", saved through the daemon to `~/.spoolhq/config.toml`,
  * and the folders, read-only (set in that file or `SPOOLHQ_*` variables). Theme and
  * notifications have nowhere to live yet, so they are not shown.
  */
 export function GeneralTab() {
   const settings = useDaemonSettings();
-  const save = useSaveKeepRunning();
+  const save = useSaveDesktop();
   if (settings.isPending) {
     return (
       <p className="flex items-center gap-2 text-sm text-ink-muted">
@@ -46,32 +79,29 @@ export function GeneralTab() {
   }
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1 text-sm">
-        <label className="flex items-center gap-2 font-medium">
-          <input
-            type="checkbox"
-            checked={
-              save.isPending
-                ? save.variables
-                : settings.data.desktop.keep_running
-            }
-            disabled={save.isPending}
-            onChange={(event) => {
-              save.mutate(event.target.checked);
-            }}
-          />
-          Keep running when the window is closed
-        </label>
-        <span className="text-xs text-ink-muted">
-          Runs go on in the background; open SpoolHQ again from the tray icon,
-          or by starting it again.
-        </span>
-        {save.isError ? (
-          <p role="alert" className="text-danger">
-            Couldn't save: {save.error.message}
-          </p>
-        ) : null}
-      </div>
+      <Switch
+        label="Keep running when the window is closed"
+        hint="Runs go on in the background; open SpoolHQ again from the tray icon, or by starting it again."
+        checked={settings.data.desktop.keep_running}
+        pending={save.isPending ? save.variables.keep_running : undefined}
+        onChange={(keep_running) => {
+          save.mutate({ keep_running });
+        }}
+      />
+      <Switch
+        label="Check for updates"
+        hint="At launch and every 6 hours. When off, SpoolHQ makes no update request."
+        checked={settings.data.desktop.check_updates}
+        pending={save.isPending ? save.variables.check_updates : undefined}
+        onChange={(check_updates) => {
+          save.mutate({ check_updates });
+        }}
+      />
+      {save.isError ? (
+        <p role="alert" className="text-sm text-danger">
+          Couldn't save: {save.error.message}
+        </p>
+      ) : null}
       <Row label="Projects folder">
         <CopyCommand command={settings.data.projects_dir} />
       </Row>
@@ -100,7 +130,7 @@ export function GeneralTab() {
   );
 }
 
-/** D2 · About: version, daemon status and where the code lives. */
+/** D2 · About: version, updates, daemon status and where the code lives. */
 export function AboutTab() {
   const version = useVersion();
   const settings = useDaemonSettings();
@@ -110,6 +140,9 @@ export function AboutTab() {
         <span className="font-mono">
           {version.data?.version ?? (version.isPending ? "…" : "unknown")}
         </span>
+      </Row>
+      <Row label="Updates">
+        <UpdateSection />
       </Row>
       <Row label="Daemon">
         {version.isSuccess ? (

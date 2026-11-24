@@ -8,6 +8,8 @@ fn main() {
         "events_subscribe",
         "events_unsubscribe",
         "app_quit",
+        "update_status",
+        "update_install",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))
         .expect("failed to run the Tauri build script");

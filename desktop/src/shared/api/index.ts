@@ -16,6 +16,12 @@ export {
 } from "./errors";
 export { api, body, daemonFetch, type Schemas } from "./http";
 export { pickFolder } from "./dialog";
+export {
+  getUpdateStatus,
+  installUpdate,
+  type UpdateCheck,
+  type UpdateStatus,
+} from "./update";
 export { queryKeys } from "./keys";
 export {
   subscribeEvents,

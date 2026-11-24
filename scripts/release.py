@@ -2,8 +2,8 @@
 
 - `set-version <x.y.z>`: writes the version to the daemon package, `desktop/package.json`
   and `tauri.conf.json` (the recipe then runs `uv lock` for `daemon/uv.lock`).
-- `check-tag <tag>`: fails unless the three agree, the tag is `v<version>` and the
-  update public key is set.
+- `check-tag <tag>`: fails unless the three agree, the tag is `v<version>`, the update
+  public key is set and the tag is annotated with a message (the release notes).
 - `collect <target triple> <out>`: copies this OS's installers out of Tauri's bundle
   folder with unique names and writes `latest-<platform>.json` for its update artifact.
 - `merge <out> <notes file> <feed>...`: one `latest.json` from the per-platform feeds.
@@ -16,6 +16,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -89,6 +90,26 @@ def check_tag(root: Path, tag: str) -> None:
         raise ReleaseError(f"Tag {tag} doesn't match the app version {version}")
     if not pubkey(root):
         raise ReleaseError("Put the update public key in tauri.conf.json; see docs/packaging.md")
+    check_annotated(tag, *tag_message(root, tag))
+
+
+def tag_message(root: Path, tag: str) -> tuple[str, str]:
+    """The tag's object type (`tag` when annotated, `commit` when not) and its message;
+    empty when git can't read it."""
+    out = subprocess.run(  # noqa: S603 - fixed argument list, no shell
+        ["git", "for-each-ref", "--format=%(objecttype)%00%(contents)", f"refs/tags/{tag}"],  # noqa: S607
+        cwd=root,
+        capture_output=True,
+        encoding="utf-8",
+        check=False,
+    ).stdout
+    kind, _, message = out.partition("\0")
+    return kind.strip(), message
+
+
+def check_annotated(tag: str, kind: str, message: str) -> None:
+    if kind != "tag" or not message.strip():
+        raise ReleaseError(f'Use an annotated tag with release notes: git tag -a {tag} -m "…"')
 
 
 def feed_entry(version: str, artifact: Path) -> dict[str, str]:

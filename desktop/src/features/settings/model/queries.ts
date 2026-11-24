@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAgents } from "@/entities/agent";
+import { useCheckNow } from "@/entities/update";
 
 import { api, body, getVersion, queryKeys, type Schemas } from "@/shared/api";
 
@@ -16,20 +17,36 @@ export function useDaemonSettings() {
   });
 }
 
-/** Save `desktop.keep_running` to `~/.spoolhq/config.toml`, where the app reads it on close. */
-export function useSaveKeepRunning() {
+type Desktop = DaemonSettings["desktop"];
+
+/**
+ * Save `[desktop]` keys to `~/.spoolhq/config.toml`, where the app reads them (keys left
+ * out keep their value). After `check_updates` changes, Rust checks again: with checks
+ * off that makes no request.
+ */
+export function useSaveDesktop() {
   const queryClient = useQueryClient();
+  const checkNow = useCheckNow();
   return useMutation({
-    mutationFn: (keepRunning: boolean) =>
-      body(
-        api.PUT("/api/settings/desktop", {
-          body: { keep_running: keepRunning },
-        }),
-      ),
-    onSuccess: (desktop) => {
+    mutationFn: (change: Partial<Desktop>) => {
+      const current = queryClient.getQueryData<DaemonSettings>(
+        queryKeys.settings,
+      )?.desktop;
+      const desktop = {
+        keep_running: true,
+        check_updates: true,
+        ...current,
+        ...change,
+      };
+      return body(api.PUT("/api/settings/desktop", { body: desktop }));
+    },
+    onSuccess: (desktop, change) => {
       queryClient.setQueryData<DaemonSettings>(queryKeys.settings, (old) =>
         old ? { ...old, desktop } : old,
       );
+      if (change.check_updates !== undefined) {
+        checkNow.mutate();
+      }
     },
   });
 }

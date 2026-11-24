@@ -28,9 +28,9 @@ pub fn on_close(keep_running: bool) -> CloseAction {
     }
 }
 
-/// `[desktop] keep_running` in `config.toml`; on when missing or unreadable, so a broken
-/// file never makes closing the window stop a run.
-pub fn read_keep_running(home: &Path) -> bool {
+/// A `[desktop]` switch in `config.toml` (`keep_running`, `check_updates`); on when missing
+/// or unreadable, so a broken file never makes closing the window stop a run.
+pub fn read_desktop_flag(home: &Path, key: &str) -> bool {
     let Ok(text) = std::fs::read_to_string(home.join("config.toml")) else {
         return true;
     };
@@ -38,9 +38,7 @@ pub fn read_keep_running(home: &Path) -> bool {
         return true;
     };
     !matches!(
-        table
-            .get("desktop")
-            .and_then(|desktop| desktop.get("keep_running")),
+        table.get("desktop").and_then(|desktop| desktop.get(key)),
         Some(toml::Value::Boolean(false))
     )
 }
@@ -202,14 +200,17 @@ mod tests {
     #[test]
     fn keep_running_is_read_from_config_toml_and_defaults_on() {
         let home = tempfile::tempdir().unwrap();
-        assert!(read_keep_running(home.path()));
+        assert!(read_desktop_flag(home.path(), "keep_running"));
         let config = home.path().join("config.toml");
         std::fs::write(&config, "port = 1\n[desktop]\nkeep_running = false\n").unwrap();
-        assert!(!read_keep_running(home.path()));
+        assert!(!read_desktop_flag(home.path(), "keep_running"));
         std::fs::write(&config, "[desktop]\nkeep_running = true\n").unwrap();
-        assert!(read_keep_running(home.path()));
+        assert!(read_desktop_flag(home.path(), "keep_running"));
+        assert!(read_desktop_flag(home.path(), "check_updates"));
+        std::fs::write(&config, "[desktop]\ncheck_updates = false\n").unwrap();
+        assert!(!read_desktop_flag(home.path(), "check_updates"));
         std::fs::write(&config, "not toml [").unwrap();
-        assert!(read_keep_running(home.path()));
+        assert!(read_desktop_flag(home.path(), "keep_running"));
     }
 
     #[derive(Default)]

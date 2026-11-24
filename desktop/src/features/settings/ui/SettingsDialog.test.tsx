@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   api,
   DaemonError,
+  getUpdateStatus,
   getVersion,
   quitApp,
   type Schemas,
@@ -20,6 +21,7 @@ vi.mock("@/shared/api", async (importOriginal) => {
     api: { GET: vi.fn(), PUT: vi.fn(), POST: vi.fn(), DELETE: vi.fn() },
     getVersion: vi.fn(),
     quitApp: vi.fn(),
+    getUpdateStatus: vi.fn(),
   };
 });
 
@@ -65,7 +67,7 @@ function settings() {
     worktrees_dir: "/home/me/.spoolhq/worktrees",
     allowed_origins: [],
     secrets,
-    desktop: { keep_running: true },
+    desktop: { keep_running: true, check_updates: true },
   };
 }
 
@@ -103,10 +105,21 @@ describe("Settings", () => {
       if (path === "/api/settings") {
         return ok(settings());
       }
+      if (path === "/api/projects") {
+        return ok([]);
+      }
       throw new Error(`unexpected GET ${path}`);
     });
     PUT.mockImplementation(() => ok(undefined));
     vi.mocked(getVersion).mockResolvedValue({ version: "0.3.0" });
+    vi.mocked(getUpdateStatus).mockResolvedValue({
+      current_version: "0.3.0",
+      check: { state: "up_to_date", checked_at: Date.now() },
+      install: "in_place",
+      external_daemon: false,
+      installing: false,
+      install_error: null,
+    });
   });
 
   it("stays app-wide: nothing per project, and a pointer to the project's tab", async () => {
@@ -277,10 +290,15 @@ describe("Settings", () => {
     expect(
       within(dialog).getByText(/Running on 127.0.0.1:8765/),
     ).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText(/SpoolHQ is up to date · checked/),
+    ).toBeInTheDocument();
   });
 
   it("saves Keep running when the window is closed through the daemon", async () => {
-    PUT.mockImplementation(() => ok({ keep_running: false }));
+    PUT.mockImplementation(() =>
+      ok({ keep_running: false, check_updates: true }),
+    );
     renderDialog();
     const dialog = await openSettings();
     await userEvent.click(within(dialog).getByRole("tab", { name: "General" }));
@@ -290,12 +308,36 @@ describe("Settings", () => {
     expect(toggle).toBeChecked();
     await userEvent.click(toggle);
     expect(PUT).toHaveBeenCalledWith("/api/settings/desktop", {
-      body: { keep_running: false },
+      body: { keep_running: false, check_updates: true },
     });
     await waitFor(() => {
       expect(toggle).not.toBeChecked();
     });
     expect(toggle).toBeEnabled();
+    // Keep running doesn't touch the update check.
+    expect(getUpdateStatus).not.toHaveBeenCalledWith(true);
+  });
+
+  it("saves Check for updates and asks Rust to check again", async () => {
+    PUT.mockImplementation(() =>
+      ok({ keep_running: true, check_updates: false }),
+    );
+    renderDialog();
+    const dialog = await openSettings();
+    await userEvent.click(within(dialog).getByRole("tab", { name: "General" }));
+    const toggle = await within(dialog).findByRole("checkbox", {
+      name: "Check for updates",
+    });
+    expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+    expect(PUT).toHaveBeenCalledWith("/api/settings/desktop", {
+      body: { keep_running: true, check_updates: false },
+    });
+    await waitFor(() => {
+      expect(toggle).not.toBeChecked();
+    });
+    // With checks off, Rust answers "off" without a request.
+    expect(getUpdateStatus).toHaveBeenCalledWith(true);
   });
 
   it("shows why Keep running wasn't saved, and keeps the old value", async () => {

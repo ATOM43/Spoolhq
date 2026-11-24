@@ -43,7 +43,8 @@ pub fn show_main(app: &AppHandle) {
 
 /// The window's close button: hide while `desktop.keep_running` is on, else quit.
 pub fn close_requested(window: &tauri::Window) {
-    let keep_running = daemon::current_home().map_or(true, |home| quit::read_keep_running(&home));
+    let keep_running =
+        daemon::current_home().map_or(true, |home| quit::read_desktop_flag(&home, "keep_running"));
     match quit::on_close(keep_running) {
         CloseAction::Hide => {
             let _ = window.hide();
@@ -100,7 +101,7 @@ async fn refresh_status(app: &AppHandle, status: &MenuItem<Wry>) {
     let _ = status.set_text(quit::status_line(projects.as_ref(), external));
 }
 
-async fn fetch_projects(http: &Http) -> Option<serde_json::Value> {
+pub(crate) async fn fetch_projects(http: &Http) -> Option<serde_json::Value> {
     let reply = daemon::send(http, "GET", "/api/projects", None, None, true)
         .await
         .ok()?;
@@ -164,12 +165,15 @@ fn confirm(app: &AppHandle, text: String) {
 async fn finish(app: AppHandle) {
     let http = app.state::<Http>();
     app.state::<Launcher>()
-        .shut_down(|| async {
-            daemon::send(&http, "POST", "/api/shutdown", None, None, true)
-                .await
-                .is_ok_and(|reply| reply.status == 200)
-        })
+        .shut_down(|| ask_shutdown(&http))
         .await;
     app.state::<Streams>().stop_all();
     app.exit(0);
+}
+
+/// `POST /api/shutdown`; whether the daemon accepted.
+pub(crate) async fn ask_shutdown(http: &Http) -> bool {
+    daemon::send(http, "POST", "/api/shutdown", None, None, true)
+        .await
+        .is_ok_and(|reply| reply.status == 200)
 }

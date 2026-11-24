@@ -83,6 +83,8 @@ class DesktopSettings(BaseModel):
 
     keep_running: bool = True
     """Closing the window hides it; the app, the daemon and any run keep going."""
+    check_updates: bool = True
+    """The app checks the update feed at launch and every 6 h; off means no request."""
 
 
 class Settings(BaseSettings):

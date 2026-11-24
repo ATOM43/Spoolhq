@@ -23,6 +23,8 @@ export const queryKeys = {
   // Polled on its own (sync runs outside ticket runs), so not under ["projects"].
   tracker: (project: string) => ["tracker", project] as const,
   templates: ["templates"] as const,
+  // Rust's update state, not the daemon's.
+  update: ["update"] as const,
   job: (id: string) => ["jobs", id] as const,
   draftJob: (project: string, id: string) =>
     ["draft-jobs", project, id] as const,

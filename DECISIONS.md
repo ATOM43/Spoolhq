@@ -472,3 +472,11 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 466 · Linux updates go through the AppImage only · docs/decisions/desktop.md
 467 · One app version in three files, set by `just set-version` · docs/decisions/core.md
 468 · `latest.json` is built by `scripts/release.py`, not `tauri-action` · docs/decisions/core.md
+469 · The update check runs in Rust; the webview gets two app commands, no updater permission · docs/decisions/desktop.md
+470 · Install and restart: verify, ask the daemon, shut down, install · docs/decisions/desktop.md
+471 · `.deb` and `.rpm` installs are told apart by `APPIMAGE` · docs/decisions/desktop.md
+472 · The dev feed override is debug-only and local-only; the key never changes · docs/decisions/desktop.md
+473 · Linux builds on `ubuntu-22.04`, checked for glibc 2.35 · docs/decisions/desktop.md
+474 · A release tag must be annotated with a message · docs/decisions/desktop.md
+475 · `PUT /api/settings/desktop` writes only the keys sent · docs/decisions/desktop.md
+476 · The app installs rustls's ring provider at launch · docs/decisions/desktop.md

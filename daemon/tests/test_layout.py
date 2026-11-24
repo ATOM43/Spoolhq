@@ -5,6 +5,7 @@ import base64
 import importlib.util
 import json
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -263,10 +264,49 @@ def test_a_matching_tag_needs_the_public_key(root: Path) -> None:
         conf_path.write_text(json.dumps(conf, indent=2), "utf-8")
         release.set_version(root, "0.1.0")
         if key:
-            release.check_tag(root, "v0.1.0")
+            with pytest.raises(release.ReleaseError, match="Use an annotated tag"):
+                release.check_tag(root, "v0.1.0")
         else:
             with pytest.raises(release.ReleaseError, match="Put the update public key"):
                 release.check_tag(root, "v0.1.0")
+
+
+ANNOTATE = 'Use an annotated tag with release notes: git tag -a v0.1.0 -m "…"'
+
+
+def test_a_tag_without_a_message_fails_with_how_to_annotate() -> None:
+    for kind, message in [("commit", "the commit's message\n"), ("tag", " \n"), ("", "")]:
+        with pytest.raises(release.ReleaseError) as raised:
+            release.check_annotated("v0.1.0", kind, message)
+        assert str(raised.value) == ANNOTATE
+    release.check_annotated("v0.1.0", "tag", "First release\n")
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)  # noqa: S603, S607
+
+
+def test_the_tag_message_is_read_from_git(tmp_path: Path) -> None:
+    _git(tmp_path, "init", "-q")
+    _git(
+        tmp_path,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "c",
+    )
+    _git(tmp_path, "tag", "v0.1.0")
+    _git(
+        tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "tag", "-a", "v0.2.0", "-m", "Notes"
+    )
+    assert release.tag_message(tmp_path, "v0.1.0")[0] == "commit"
+    kind, message = release.tag_message(tmp_path, "v0.2.0")
+    assert (kind, message.strip()) == ("tag", "Notes")
 
 
 def _artifact(folder: Path, name: str, signature: str | None) -> Path:
@@ -361,3 +401,35 @@ def test_check_feed_needs_each_platform_signed_by_the_configured_key() -> None:
         release.check_feed(data, ["windows-x86_64"], key)
     with pytest.raises(release.ReleaseError, match="isn't signed by the key"):
         release.check_feed(data, ["linux-x86_64"], _minisign(b"B" * 8, b"p" * 32))
+
+
+# The glibc check for the Linux build (scripts/check_glibc.py, docs/packaging.md).
+
+check_glibc = _script("check_glibc")
+
+
+def _elf(path: Path, *versions: str) -> Path:
+    """A stand-in binary: the ELF magic and the version names a linker would leave."""
+    names = b"\0".join(f"GLIBC_{v}".encode() for v in versions)
+    path.write_bytes(b"\x7fELF\x02\x01\x01" + b"\0" * 32 + b"libc.so.6\0" + names + b"\0")
+    return path
+
+
+def test_the_glibc_check_passes_a_binary_needing_2_31(tmp_path: Path, capsys: Any) -> None:
+    _elf(tmp_path / "spoolhq", "2.2.5", "2.17", "2.31")
+    (tmp_path / "notes.txt").write_text("GLIBC_2.99 in a text file is ignored", "utf-8")
+    assert check_glibc.main(["2.35", str(tmp_path)]) == 0
+    assert "highest glibc needed: 2.31 (limit 2.35)" in capsys.readouterr().out
+
+
+def test_the_glibc_check_fails_a_binary_needing_2_39(tmp_path: Path, capsys: Any) -> None:
+    _elf(tmp_path / "old", "2.31")
+    _elf(tmp_path / "new", "2.34", "2.39")
+    assert check_glibc.main(["2.35", str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert "new needs glibc 2.39" in err
+    assert "old" not in err.replace(str(tmp_path), "")
+
+
+def test_the_glibc_check_fails_when_it_finds_no_binary(tmp_path: Path) -> None:
+    assert check_glibc.main(["2.35", str(tmp_path)]) == 1

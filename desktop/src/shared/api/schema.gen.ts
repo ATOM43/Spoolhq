@@ -859,7 +859,9 @@ export interface paths {
         get?: never;
         /**
          * Put Desktop
-         * @description Save ``[desktop]`` to ``config.toml``; the desktop app reads it from there.
+         * @description Save the ``[desktop]`` keys sent to ``config.toml``; the desktop app reads it there.
+         *
+         *     Keys left out of the body keep their current value.
          */
         put: operations["put_desktop_api_settings_desktop_put"];
         post?: never;
@@ -1122,6 +1124,11 @@ export interface components {
              * @default true
              */
             keep_running: boolean;
+            /**
+             * Check Updates
+             * @default true
+             */
+            check_updates: boolean;
         };
         /** DetectedCommandsView */
         DetectedCommandsView: {

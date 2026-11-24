@@ -51,10 +51,13 @@ jobs:
             echo "::error::Set the TAURI_SIGNING_PRIVATE_KEY_PASSWORD secret; see docs/packaging.md"
             exit 1
           fi
-      # Versions agree, the tag is v<version>, the update public key is set.
+      # Versions agree, the tag is v<version>, the update public key is set, and the tag is
+      # annotated with the release notes (checkout drops a tag's annotation, so fetch it).
       - name: Tag and version
         if: env.DRY_RUN != 'true'
-        run: python3 scripts/release.py check-tag "$GITHUB_REF_NAME"
+        run: |
+          git fetch --force --depth=1 origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          python3 scripts/release.py check-tag "$GITHUB_REF_NAME"
 
   build:
     needs: check
@@ -63,7 +66,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, platform: linux-x86_64, bundles: "appimage,deb,rpm" }
+          # The oldest Ubuntu runner GitHub offers, so the AppImage runs on glibc 2.35+.
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, platform: linux-x86_64, bundles: "appimage,deb,rpm" }
           - { os: windows-latest, target: x86_64-pc-windows-msvc, platform: windows-x86_64, bundles: nsis }
           - { os: macos-26, target: aarch64-apple-darwin, platform: darwin-aarch64, bundles: "app,dmg" }
           - { os: macos-26-intel, target: x86_64-apple-darwin, platform: darwin-x86_64, bundles: "app,dmg" }
@@ -143,6 +147,13 @@ jobs:
           cp dist/*.AppImage "$RUNNER_TEMP/appimage/app.AppImage"
           (cd "$RUNNER_TEMP/appimage" && ./app.AppImage --appimage-extract > /dev/null)
           echo "SIDECAR=$RUNNER_TEMP/appimage/squashfs-root/usr/bin/spoolhq" >> "$GITHUB_ENV"
+      # Every binary in the AppImage, the sidecar's bundled libraries included, runs on
+      # glibc 2.35 (Ubuntu 22.04, Debian 12+, Fedora 36+).
+      - name: Check the glibc version
+        if: runner.os == 'Linux'
+        run: |
+          uv run --directory daemon --locked --group build python ../scripts/check_glibc.py 2.35 \
+            "$GITHUB_WORKSPACE"/dist/*.AppImage "$RUNNER_TEMP/appimage/squashfs-root"
       - name: Check the macOS bundle
         if: runner.os == 'macOS'
         run: |
@@ -186,7 +197,7 @@ jobs:
           pattern: installers-*
           path: dist
           merge-multiple: true
-      # The release notes are the tag's message (checkout drops a tag's annotation).
+      # The release notes are the tag's message (the check job refused a tag without one).
       - name: Notes
         run: |
           if [ "$DRY_RUN" = "true" ]; then
@@ -194,7 +205,6 @@ jobs:
           else
             git fetch --force --depth=1 origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
             git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$GITHUB_REF_NAME" > notes.txt
-            if [ -z "$(tr -d '[:space:]' < notes.txt)" ]; then echo "SpoolHQ $GITHUB_REF_NAME" > notes.txt; fi
           fi
       - name: latest.json
         run: |
