@@ -2,9 +2,12 @@ name: Release
 
 # Installers for Linux, Windows and macOS with a signed update feed (docs/packaging.md).
 # A v* tag makes a draft GitHub Release; a dry run uploads workflow artifacts only.
+# A weekly dry run catches a build or launch that broke between releases.
 on:
   push:
     tags: ["v*"]
+  schedule:
+    - cron: "0 6 * * 1"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -24,8 +27,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # true for a dry run; a tag push has no inputs.
-  DRY_RUN: ${{ inputs.dry_run == true }}
+  # true for a dry run; a tag push and the weekly run have no inputs.
+  DRY_RUN: ${{ github.event_name == 'schedule' || inputs.dry_run == true }}
   # tauri build refuses to sign without a public key; before yours is in tauri.conf.json
   # a dry run can pass a throwaway one (docs/packaging.md). Read by release.py check-feed.
   UPDATER_PUBKEY: ${{ inputs.dry_run == true && inputs.pubkey || '' }}
@@ -82,14 +85,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The Rust job's packages plus patchelf for the AppImage and rpm to list the package.
+      # The Rust job's packages plus patchelf for the AppImage, rpm to list the package
+      # and xvfb for the launch test.
       - name: Install Tauri system packages
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
-            libayatana-appindicator3-dev librsvg2-dev patchelf rpm
+            libayatana-appindicator3-dev librsvg2-dev patchelf rpm xvfb
       - name: Install Rust
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -175,6 +179,26 @@ jobs:
         run: |
           test -f "$SIDECAR"
           uv run --directory daemon --locked python ../scripts/smoke_sidecar.py "$SIDECAR"
+      # Starts the real app from its bundle and checks its daemon answers, then quits it.
+      - name: Launch test of the app
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux) app=$(ls dist/*.AppImage) ;;
+            Windows)
+              # The silent setup's install folder, from the installer check above.
+              app=$(ls "$(cygpath -u "$RUNNER_TEMP")"/SpoolHQ/*.exe | grep -viE '/(spoolhq|uninstall)\.exe$')
+              app=$(cygpath -w "$app")
+              ;;
+            macOS)
+              hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" dist/*.dmg
+              trap 'hdiutil detach "$RUNNER_TEMP/dmg"' EXIT
+              bundle="$RUNNER_TEMP/dmg/SpoolHQ.app"
+              app="$bundle/Contents/MacOS/$(plutil -extract CFBundleExecutable raw "$bundle/Contents/Info.plist")"
+              ;;
+          esac
+          echo "app: $app"
+          uv run --no-project --python 3.12 python scripts/smoke_app.py "$app"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

@@ -433,3 +433,81 @@ def test_the_glibc_check_fails_a_binary_needing_2_39(tmp_path: Path, capsys: Any
 
 def test_the_glibc_check_fails_when_it_finds_no_binary(tmp_path: Path) -> None:
     assert check_glibc.main(["2.35", str(tmp_path)]) == 1
+
+
+# The launch test of the built app (scripts/smoke_app.py, docs/packaging.md).
+
+smoke_app = _script("smoke_app")
+
+
+class _App:
+    def __init__(self, code: int | None = None) -> None:
+        self.code = code
+
+    def poll(self) -> int | None:
+        return self.code
+
+
+def _healthy() -> object:
+    return {"status": "ok", "service": "spoolhq"}
+
+
+def _silent() -> object:
+    raise ConnectionRefusedError
+
+
+@pytest.fixture
+def fast(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(smoke_app, "POLL_S", 0.01)
+
+
+def test_the_launch_test_passes_a_clean_run(fast: None, capsys: Any) -> None:
+    app = _App()
+    smoke_app.wait_for_health(app, lambda: "log line", _healthy, timeout=1)
+    smoke_app.stay_alive(app, lambda: "log line", seconds=0.05)
+    gone = iter([{7: "spoolhq"}, {}])
+    smoke_app.wait_for_cleanup({1}, lambda: next(gone), timeout=1)
+    out = capsys.readouterr().out
+    assert "ok   GET /api/health" in out
+    assert "ok   no SpoolHQ process left" in out
+
+
+def test_the_launch_test_fails_an_early_exit(fast: None) -> None:
+    with pytest.raises(smoke_app.SmokeError, match="^the app exited early with code 101$"):
+        smoke_app.wait_for_health(_App(101), lambda: "", _silent, timeout=1)
+
+
+def test_the_launch_test_fails_a_panic(fast: None) -> None:
+    output = "thread 'main' panicked at src/lib.rs:1:1:\nNo rustls crypto provider"
+    with pytest.raises(smoke_app.SmokeError, match="^the app panicked$"):
+        smoke_app.wait_for_health(_App(), lambda: output, _healthy, timeout=1)
+    with pytest.raises(smoke_app.SmokeError, match="^the app panicked$"):
+        smoke_app.stay_alive(_App(), lambda: output, seconds=0.05)
+
+
+def test_the_launch_test_fails_without_health(fast: None) -> None:
+    with pytest.raises(
+        smoke_app.SmokeError, match=r"^no answer from GET /api/health within 0\.05 s$"
+    ):
+        smoke_app.wait_for_health(_App(), lambda: "", _silent, timeout=0.05)
+
+
+def test_the_launch_test_fails_another_service(fast: None) -> None:
+    with pytest.raises(
+        smoke_app.SmokeError, match="^GET /api/health answered service 'other', not \"spoolhq\"$"
+    ):
+        smoke_app.wait_for_health(_App(), lambda: "", lambda: {"service": "other"}, timeout=1)
+
+
+def test_the_launch_test_fails_leftover_processes(fast: None) -> None:
+    left = {1: "spoolhq", 42: "spoolhq-desktop"}
+    with pytest.raises(
+        smoke_app.SmokeError,
+        match=r"^SpoolHQ processes still running after 0\.05 s: spoolhq-desktop \(42\)$",
+    ):
+        smoke_app.wait_for_cleanup({1}, lambda: left, timeout=0.05)
+
+
+def test_the_launch_test_lists_spoolhq_processes() -> None:
+    # This test runs in Python, so none of the listed processes is this one.
+    assert all("spoolhq" in name.lower() for name in smoke_app.spoolhq_processes().values())

@@ -127,6 +127,8 @@ which writes all three (`scripts/release.py set-version`) and relocks the daemon
 
 A **dry run** (Actions → Release → Run workflow, `dry_run` ticked, the default) builds and checks everything on any branch and uploads the installers and `latest.json` as workflow artifacts only; it makes no release and doesn't check the tag.
 
+A dry run of `main` also runs **every Monday at 06:00 UTC** (a `schedule` trigger, always a dry run), so a build or launch that broke between releases shows up as a failed run.
+
 The signing secrets are needed for a dry run too. Before your public key is in `tauri.conf.json`, `tauri build` refuses to sign, so give the dry run the public key that matches the secrets in its `pubkey` input (`gh workflow run release.yml -f dry_run=true -f pubkey="$(cat key.pub)"`); the input is ignored outside dry runs.
 
 ### What gets built
@@ -139,6 +141,8 @@ The signing secrets are needed for a dry run too. Before your public key is in `
 | macOS x86_64 | `macos-26-intel` | `SpoolHQ_<v>_x64.dmg` | `SpoolHQ_<v>_x86_64.app.tar.gz` |
 
 Each job first builds the real sidecar for its OS (`just build-daemon`, with the dev-tools check), then the Tauri bundle (`tauri build --bundles …`), so no installer can hold the placeholder. Then it checks its bundles: the sidecar is in the `.deb` and `.rpm` file lists; the AppImage is extracted, the `.dmg` mounted and the Windows installer run silently (`/S /D=<temp>`), and the T23 smoke test runs against the `spoolhq` binary inside; and its `latest-<platform>.json` lists the platform with a URL and a signature. On Linux, `scripts/check_glibc.py` reads the `GLIBC_` versions named by every binary in the AppImage, including the libraries bundled inside the sidecar, and fails above 2.35. A last job merges the four into `latest.json`, checks all four platforms again and publishes (or, for a dry run, uploads).
+
+**Launch test.** Each job then starts the real app from its bundle with `scripts/smoke_app.py`: the AppImage (with `APPIMAGE_EXTRACT_AND_RUN=1`, under `xvfb-run` and `dbus-run-session`), the app the silent Windows setup installed, and the app inside the mounted `.dmg`. It runs on a temp `SPOOLHQ_HOME` and projects folder and a free `SPOOLHQ_PORT`. It passes when, within 60 s, the daemon the app started answers `GET /api/health` (with the token from the temp home) with `service: "spoolhq"` and the app is still running 10 s later. It fails when the app exits early, its output contains `panicked`, health never answers or answers as another service, and prints the app's output and the daemon log. Then it calls `POST /api/shutdown`, stops the app (its process group on Linux and macOS, `taskkill` on Windows; the daemon has its own group or Job Object, so it isn't killed with it) and fails if any process with `spoolhq` in its name that wasn't running before is left after 15 s. The T50 crash ("No rustls crypto provider is configured") is the failure this catches: nothing in CI had opened the built app.
 
 **Supported Linux versions.** The Linux build runs on `ubuntu-22.04`, the oldest Ubuntu runner GitHub offers (checked 2026-11-24: 22.04, 24.04 and 26.04, with `ubuntu-latest` on 26.04), so everything needs glibc 2.35 or newer, plus WebKitGTK 4.1: Ubuntu 22.04 and later, Debian 12 and later, Fedora 36 and later, and other x86_64 distributions of that age. The release fails if any binary needs a newer glibc. When GitHub retires 22.04, the next runner raises the floor; the check says by how much.
 

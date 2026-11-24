@@ -480,3 +480,4 @@ Adding a decision: append it to the bottom of its area file, numbered after the 
 474 · A release tag must be annotated with a message · docs/decisions/desktop.md
 475 · `PUT /api/settings/desktop` writes only the keys sent · docs/decisions/desktop.md
 476 · The app installs rustls's ring provider at launch · docs/decisions/desktop.md
+477 · The release builds start the real app and check its daemon · docs/decisions/core.md
