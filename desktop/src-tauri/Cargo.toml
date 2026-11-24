@@ -47,10 +47,14 @@ toml = "=1.1.8"
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [dev-dependencies]
-# The mock runtime for the update tests (a feature, no new crate).
-tauri = { version = "=2.12.4", features = ["tray-icon", "test"] }
 tempfile = "=3.27.0"
 tokio = { version = "=1.53.3", features = ["net", "rt"] }
+
+# The mock runtime for the update tests (a feature, no new crate). shortcut: not on
+# Windows, where the test binary then fails to load (STATUS_ENTRYPOINT_NOT_FOUND); the
+# pure update tests still run there. Upgrade once the test exe gets a manifest.
+[target.'cfg(not(windows))'.dev-dependencies]
+tauri = { version = "=2.12.4", features = ["tray-icon", "test"] }
 
 [lints.clippy]
 # Pedantic, enabled alone at its default threshold (100 lines); `just lint` denies warnings.

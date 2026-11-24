@@ -182,7 +182,8 @@ impl InstallSteps for AppSteps<'_> {
     }
 }
 
-#[cfg(test)]
+// The mock runtime isn't built on Windows (Cargo.toml).
+#[cfg(all(test, not(windows)))]
 mod tests {
     use super::*;
     use std::future::Future;
