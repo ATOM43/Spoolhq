@@ -6,6 +6,7 @@ import importlib.util
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -511,3 +512,163 @@ def test_the_launch_test_fails_leftover_processes(fast: None) -> None:
 def test_the_launch_test_lists_spoolhq_processes() -> None:
     # This test runs in Python, so none of the listed processes is this one.
     assert all("spoolhq" in name.lower() for name in smoke_app.spoolhq_processes().values())
+
+
+# The benchmark score (scripts/bench_score.py, docs/benchmarks/README.md).
+
+JUNIT = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" tests="4">
+<testcase classname="suite.test_a" name="test_one"><properties>
+<property name="req" value="R01,R02" /><property name="import_s" value="0.5" />
+</properties></testcase>
+<testcase classname="suite.test_a" name="test_two"><properties>
+<property name="req" value="R02" /></properties>
+<failure message="boom">assert 1 == 2</failure></testcase>
+<testcase classname="suite.test_b" name="test_three"><properties>
+<property name="req" value="R10" /></properties>
+<error message="setup">NotImplementedError</error></testcase>
+<testcase classname="suite.test_b" name="test_four"><properties>
+<property name="req" value="R10" /></properties><skipped message="no" /></testcase>
+</testsuite></testsuites>
+"""
+
+
+def _bench_score() -> Any:
+    return _script("bench_score")
+
+
+def test_bench_score_reads_the_suite_report_by_requirement(tmp_path: Path) -> None:
+    score = _bench_score()
+    (tmp_path / "suite.xml").write_text(JUNIT, encoding="utf-8")
+    cases = score.read_junit(tmp_path / "suite.xml")
+    assert [c.outcome for c in cases] == ["passed", "failed", "error", "skipped"]
+    assert cases[0].reqs == ("R01", "R02") and cases[0].props == {"import_s": "0.5"}
+    assert score.by_requirement(cases) == {"R01": (1, 1), "R02": (1, 2), "R10": (0, 2)}
+
+
+def _fake_run_log(workspace: Path) -> None:
+    from spoolhq.services.runs.db import connect
+
+    conn = connect(workspace)
+    t = "2026-11-28T10:{:02d}:00.000Z".format
+    runs = [  # id, ticket, kind, status, start, end
+        (1, "plan", "plan", "done", t(0), t(2)),
+        (2, "T01", "ticket", "done", t(2), t(5)),
+        (3, "T02", "ticket", "done", t(5), t(15)),
+        (4, "T03", "ticket", "blocked", t(15), t(20)),
+    ]
+    attempts = [  # run, ticket, number, status, input, output, cost (micro-USD)
+        (1, "plan", 1, "approved", 1000, 100, 500_000),
+        (2, "T01", 1, "approved", 2000, 200, 250_000),
+        (3, "T02", 1, "gates_failed", 3000, 300, 250_000),
+        (3, "T02", 2, "changes_requested", 100, 10, None),
+        (3, "T02", 3, "approved", 100, 10, None),
+        (4, "T03", 1, "needs_human", 10, 1, None),
+    ]
+    events = [
+        (3, "log", {"message": "approved by the user", "approved_attempt": 5}),
+        (4, "run.status", {"from": "running", "to": "blocked", "reason": "needs a person"}),
+        (4, "log", {"message": "unblocked by the user", "user_note": "go"}),
+        (1, "run.status", {"from": "running", "to": "blocked", "reason": "plan runs don't count"}),
+    ]
+    for run_id, ticket, kind, status, start, end in runs:
+        conn.execute(
+            "INSERT INTO runs (id, ticket_id, kind, status, daemon_instance, started_at, ended_at)"
+            " VALUES (?, ?, ?, ?, 'x', ?, ?)",
+            (run_id, ticket, kind, status, start, end),
+        )
+    for run_id, ticket, number, status, tokens_in, tokens_out, cost in attempts:
+        conn.execute(
+            "INSERT INTO attempts (run_id, ticket_id, number, kind, status, dir, input_tokens,"
+            " output_tokens, cost_micro_usd, started_at)"
+            " VALUES (?, ?, ?, 'initial', ?, 'd', ?, ?, ?, ?)",
+            (run_id, ticket, number, status, tokens_in, tokens_out, cost, t(0)),
+        )
+    for run_id, kind, payload in events:
+        conn.execute(
+            "INSERT INTO events (run_id, ts, kind, payload) VALUES (?, ?, ?, ?)",
+            (run_id, t(0), kind, json.dumps(payload)),
+        )
+    conn.close()
+
+
+def test_bench_score_reads_the_process_numbers_from_the_run_log(tmp_path: Path) -> None:
+    score = _bench_score()
+    _fake_run_log(tmp_path)
+    p = score.process_numbers(tmp_path)
+    assert (p.tickets, p.done, p.first_try) == (3, 2, 1)
+    assert p.retries == {"T01": 0, "T02": 2, "T03": 0}
+    assert p.verdicts == {"approved": 2, "changes_requested": 1, "needs_human": 1}
+    assert p.blocked == ["T03"]
+    assert (p.approvals, p.unblocks, p.rejections) == (1, 1, 0)
+    assert (p.input_tokens, p.output_tokens) == (6210, 621)
+    assert p.cost_usd == pytest.approx(1.0)
+    assert (p.run_seconds, p.wall_seconds) == (1200.0, 1200.0)
+
+
+def test_bench_score_summary_has_the_totals(tmp_path: Path) -> None:
+    score = _bench_score()
+    (tmp_path / "suite.xml").write_text(JUNIT, encoding="utf-8")
+    _fake_run_log(tmp_path)
+    checks = [
+        score.Check("hidden suite", "pytest", False, 1.0, "suite output"),
+        score.Check("lint", "make lint", True, 2.0, ""),
+        score.Check("tests", "make test", False, 3.0, "1 failed"),
+    ]
+    sizes = (12, ["big.py: 600 lines, over the 500-line limit"])
+    cases = score.read_junit(tmp_path / "suite.xml")
+    text = score.render("app", cases, checks, 91.5, sizes, score.process_numbers(tmp_path))
+    for line in (
+        "**Hidden suite: 1 of 4 tests passed (25.0%)**; 1 failed, 1 error, 1 skipped",
+        "| R02 | 1 | 2 |",
+        "| import_s | 0.5 |",
+        "| lint | pass | 2.0 s | `make lint` |",
+        "| tests | FAIL | 3.0 s | `make test` |",
+        "- Coverage: 91.5%",
+        "- Files over 500 lines: 1 of 12",
+        "- Tickets: 3 run, 2 done, 1 passed first try",
+        "- Retries: 2 (T02 2)",
+        "- Blocked tickets: 1 (T03)",
+        "- User approvals: 1; unblocks: 1; rejections: 0",
+        "- Tokens: 6210 in (0 from cache), 621 out; cost $1.00",
+        "- Time: 20.0 min in runs, 20.0 min first to last",
+        "- failed: `suite.test_a::test_two` (R02)",
+    ):
+        assert line in text, line
+    assert "hidden suite |" not in text  # the suite is scored above, not as a health check
+    assert "suite output" not in text  # its report was read, so its output isn't needed
+
+
+def test_bench_score_reads_a_coverage_total() -> None:
+    score = _bench_score()
+    output = "Name  Stmts  Miss  Cover\napp/x.py  10  1  90%\nTOTAL  120  6  95%\n"
+    assert score.coverage_percent(output) == 95.0
+    assert score.coverage_percent("3 passed") is None
+
+
+@pytest.mark.integration
+def test_bench_score_runs_a_suite_and_the_apps_commands(tmp_path: Path) -> None:
+    score = _bench_score()
+    app, suite = tmp_path / "app", tmp_path / "suite"
+    app.mkdir()
+    suite.mkdir()
+    (app / "big.py").write_text("x = 1\n" * 501, encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=app, check=True)  # noqa: S607
+    subprocess.run(["git", "add", "big.py"], cwd=app, check=True)  # noqa: S607
+    (suite / "test_s.py").write_text(
+        "import os\n"
+        "def test_app(record_property):\n"
+        "    record_property('req', 'R01')\n"
+        "    assert os.path.isdir(os.environ['BENCH_APP'])\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "score.md"
+    py = Path(sys.executable).as_posix()
+    argv = [str(app), str(tmp_path / "adapter.py"), str(suite), "--out", str(out)]
+    argv += ["--lint", f"{py} -c pass", "--test", f"{py} -c 'print(\"TOTAL 9 1 88%\")'"]
+    assert score.main(argv) == 0
+    text = out.read_text(encoding="utf-8")
+    assert "**Hidden suite: 1 of 1 tests passed (100.0%)**" in text
+    assert "| R01 | 1 | 1 |" in text
+    assert "- Coverage: 88%" in text
+    assert "- Files over 500 lines: 1 of 1" in text

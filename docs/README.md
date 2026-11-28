@@ -20,4 +20,5 @@ User and developer documentation will live here: architecture, the daemon API, t
 - [merge-policy.md](merge-policy.md): when an approved ticket needs a person: the rules, pull requests and local approval
 - [api.md](api.md): the daemon's REST API, ETags, paging and the event WebSocket
 - [testing.md](testing.md): running and writing tests
+- [benchmarks/README.md](benchmarks/README.md): benchmark rules and the scoring script
 - [packaging.md](packaging.md): the bundled daemon: building it, what's left out, how the app finds or starts it, agent CLIs on `PATH`

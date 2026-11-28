@@ -98,3 +98,8 @@ sidecar-placeholder:
 set-version version:
     uv run --no-project python scripts/release.py set-version {{ version }}
     uv lock --directory daemon
+
+# Score an app against a benchmark (docs/benchmarks/README.md); more options with `--help`:
+# `just bench-score <app> <adapter> <suite> --out score.md`.
+bench-score app adapter suite *args:
+    uv run --project daemon python scripts/bench_score.py {{ app }} {{ adapter }} {{ suite }} {{ args }}
