@@ -4,7 +4,7 @@ Oct 17, 2026 · @Atom
 
 ## Overview
 
-The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **51 tickets in 6 phases, about 112.5 hours** for one developer.
+The app turns a written task spec into an approved ticket plan, then has one coding agent implement the tickets in dependency order. Each ticket reaches main only after tests and an independent review pass. v1 is **52 tickets in 6 phases, about 115 hours** for one developer.
 
 **What v1 includes**
 
@@ -86,8 +86,8 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T22 | Live run | 4 Desktop UI | T37 | 2 |
 | T23 | Bundled daemon | 4 Desktop UI | T21, T40, T36, T37, T41, T42, T43, T44, T45, T46, T47, T48, T51 | 2 |
 | T24 | Tracker adapter and ClickUp | 5 Release | T05, T14 | 3 |
-| T25 | Dogfood on the dashboard task | 5 Release | T16, T18, T21, T40 | 3 |
-| T26 | Documentation and release | 5 Release | T50, T52, T25 | 2.5 |
+| T25 | Dogfood benchmark setup | 5 Release | T16, T18, T21, T40 | 2.5 |
+| T26 | Documentation and release | 5 Release | T50, T52, T53 | 2.5 |
 | T27 | Agent roles, custom endpoints and contract suite | 3 Planner and Git | T09, T14 | 2 |
 | T30 | Codex CLI backend | 3 Planner and Git | T27 | 2 |
 | T31 | Claude Agent SDK backend | 3 Planner and Git | T27 | 2 |
@@ -113,7 +113,8 @@ The CLI and run loop come first, so from Phase 3 on the orchestrator writes its 
 | T50 | Installers and update feed | 4 Desktop UI | T49 | 2.5 |
 | T51 | Tracker sync in the app | 4 Desktop UI | T24, T33 | 1.5 |
 | T52 | Update check in the app | 4 Desktop UI | T50 | 1.5 |
-|  | **Total** |  |  | **112.5** |
+| T53 | Dogfood run | 5 Release | T25 | 3 |
+|  | **Total** |  |  | **115** |
 
 Critical path, if tickets ran in parallel: T01 → T02 → T04 → T05 → T06 → T13 → T19 → T20 → T32 → T33 → T34 → T35 → T36 → T21 → T37 → T22 → T39 → T40 → T23 → T49 → T50 → T52 → T26 (48.5 h).
 
@@ -856,7 +857,7 @@ Done when:
 
 ## Phase 5 — Tracker, dogfood and release
 
-Three tickets connect ClickUp, prove the tool on a real project, and publish v0.1.0 (milestone M2).
+Four tickets connect ClickUp, build a benchmark from the hand-built dashboard, prove the tool on it, and publish v0.1.0 (milestone M2).
 
 ### T24 · Tracker adapter and ClickUp
 
@@ -872,23 +873,44 @@ Done when:
 - [ ] Pushing the same plan twice creates no duplicate tasks
 - [ ] A ClickUp outage marks sync as failed without stopping the run loop
 
-### T25 · Dogfood on the dashboard task
+### T25 · Dogfood benchmark setup
 
-The first real test, against a plan you already wrote by hand. *Depends on: T16, T18, T21, T40 · 3 h*
+A frozen, hidden benchmark built from the hand-built dashboard, so the dogfood run (T53) is scored by tests SpoolHQ never sees. *Depends on: T16, T18, T21, T40 · 2.5 h*
 
-- Run the simulation-dashboard spec end to end with the fastapi-react template.
-- Compare the planner's tickets with the hand-written 18-ticket plan.
-- Record per ticket: passed first try, retries, review verdicts, human interventions, cost, time.
-- Turn every failure into an issue; fix the blocking ones before release.
+- A benchmark folder outside SpoolHQ's repo, `~/spoolhq-bench/dashboard/`, its own local git repo with no remote: `spec/` (the task and its inputs, exactly what T53 gives SpoolHQ), `requirements.md` (every requirement with an id, API-checkable or UI-only), `suite/` (hidden behaviour tests), `adapters/reference.py`, its own `pyproject.toml`.
+- Hidden pytest behaviour tests that talk to a running app over HTTP through an adapter (start/stop, import, components, results, comparison, import report, demands), never importing app code; a missing operation fails, never skips; each test tagged with its requirement id; the p100 import and comparison timed. UI-only requirements get `suite/ui-checklist.md`.
+- The reference adapter maps the operations onto the hand-built app; every test passes on it, or each failure is explained.
+- Frozen: committed, with the SHA-256 of `suite/` and `spec/` in `FROZEN.txt` and `check_frozen.py` to prove nothing changed.
+- In SpoolHQ's repo only the generic `scripts/bench_score.py` (`just bench-score <app> <adapter> <suite>`: suite pass rate per requirement, the app's lint, tests and coverage, file sizes, and for a SpoolHQ project the run log's process numbers) and the rules in `docs/benchmarks/README.md`.
 
 Done when:
 
-- [ ] The dashboard app is built and its own tests pass
+- [ ] Plan.md lists T25 and T53, with consistent table, totals and critical path
+- [ ] Every requirement has an id, and every API-checkable one has at least one hidden test
+- [ ] The hidden suite passes 100% against the reference, or each failure is explained
+- [ ] The scoring script produces a summary for the reference
+- [ ] The benchmark is committed in its own repo, frozen with recorded hashes
+- [ ] Lint and tests pass, and CI is green on Linux, macOS and Windows
+
+### T53 · Dogfood run
+
+SpoolHQ builds the dashboard from its spec; the hidden tests decide. *Depends on: T25 · 3 h*
+
+- A fresh project from the fastapi-react template, in its own repo, with only the benchmark's spec and inputs copied in.
+- The planner drafts the plan; the user reviews and approves it.
+- Run all with the user's chosen backends; the user steps in only for blocked tickets and approvals, each counted.
+- Afterwards: an adapter for the new app in the benchmark folder (mapping only, no assertion changes), the scoring script against both apps, and the results numbers in `docs/benchmarks/dashboard.md`.
+- Every failure turned into an issue.
+
+Done when:
+
+- [ ] The dashboard is built by SpoolHQ and its own tests pass
+- [ ] The hidden suite and the scoring script ran against both apps
 - [ ] Results are published in `docs/benchmarks/dashboard.md`
 
 ### T26 · Documentation and release
 
-What a stranger needs to install it and trust it. *Depends on: T50, T52, T25 · 2.5 h*
+What a stranger needs to install it and trust it. *Depends on: T50, T52, T53 · 2.5 h*
 
 - README: what it is, install, a first project in five minutes, screenshots.
 - `docs/`: architecture, ticket format, writing a template, writing a tracker adapter, security model.
